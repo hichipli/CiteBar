@@ -158,8 +158,4 @@ If you encounter issues or have suggestions:
 
 ## Acknowledgments
 
-Built with ❤️ for the academic community. Special thanks to early-career researchers who inspired this tool.
-
----
-
-*"May your academic impact continue to grow!" 💪*
+Built with ❤️ for the academic community.
