@@ -1,0 +1,29 @@
+// swift-tools-version: 6.0
+import PackageDescription
+
+let package = Package(
+    name: "CiteBar",
+    platforms: [
+        .macOS(.v13)
+    ],
+    products: [
+        .executable(
+            name: "CiteBar",
+            targets: ["CiteBar"])
+    ],
+    dependencies: [
+        .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.6.0")
+    ],
+    targets: [
+        .executableTarget(
+            name: "CiteBar",
+            dependencies: ["SwiftSoup"],
+            path: "Sources"
+        ),
+        .testTarget(
+            name: "CiteBarTests",
+            dependencies: ["CiteBar"],
+            path: "Tests"
+        )
+    ]
+)
