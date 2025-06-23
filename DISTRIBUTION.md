@@ -22,7 +22,7 @@ xattr -cr /Applications/CiteBar.app
 
 **Method B: Allow through System Preferences**
 1. Try to run the app, it will show a security warning
-2. Open `System Preferences` > `Security & Privacy` > `General`
+2. Open `System Preferences` > `Privacy & Security` > `Security`
 3. You'll see a message about CiteBar being blocked
 4. Click "Open Anyway" button next to the message
 
