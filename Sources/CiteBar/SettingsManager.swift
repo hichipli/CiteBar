@@ -1,11 +1,13 @@
 import Foundation
 
-class SettingsManager: ObservableObject {
+@MainActor class SettingsManager: ObservableObject {
+    static let shared = SettingsManager()
+    
     @Published var settings: AppSettings
     
     private let settingsURL: URL
     
-    init() {
+    private init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let appFolder = appSupport.appendingPathComponent("CiteBar")
         
@@ -33,7 +35,9 @@ class SettingsManager: ObservableObject {
     
     func addProfile(_ profile: ScholarProfile) {
         if !settings.profiles.contains(profile) {
-            settings.profiles.append(profile)
+            var newProfile = profile
+            newProfile.sortOrder = settings.profiles.count
+            settings.profiles.append(newProfile)
             save()
         }
     }
@@ -69,6 +73,16 @@ class SettingsManager: ObservableObject {
         } else {
             disableAutoLaunch()
         }
+    }
+    
+    func setLastUpdateTime(_ time: Date) {
+        settings.lastUpdateTime = time
+        save()
+    }
+    
+    func setRefreshing(_ refreshing: Bool) {
+        settings.isRefreshing = refreshing
+        save()
     }
     
     private func enableAutoLaunch() {

@@ -1,9 +1,9 @@
 import Foundation
 import SwiftSoup
 
-class CitationManager: @unchecked Sendable {
+@MainActor class CitationManager {
     weak var delegate: CitationManagerDelegate?
-    private let settingsManager = SettingsManager()
+    private let settingsManager = SettingsManager.shared
     private let storageManager = StorageManager()
     private var refreshTimer: Timer?
     
@@ -12,13 +12,26 @@ class CitationManager: @unchecked Sendable {
     }
     
     deinit {
-        refreshTimer?.invalidate()
+        // Timer cleanup will happen automatically when the object is deallocated
+        // We can't call MainActor methods from deinit
     }
     
     private func setupTimer() {
+        // Invalidate existing timer first
+        refreshTimer?.invalidate()
+        refreshTimer = nil
+        
         let interval = settingsManager.settings.refreshInterval.seconds
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
-            self.checkCitations()
+        
+        // Ensure timer is created on main queue
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.refreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+                guard let self = self else { return }
+                Task { @MainActor in
+                    self.checkCitations()
+                }
+            }
         }
     }
     
@@ -26,48 +39,65 @@ class CitationManager: @unchecked Sendable {
         let profiles = settingsManager.settings.profiles.filter { $0.isEnabled }
         
         guard !profiles.isEmpty else {
-            Task {
-                await delegate?.citationsUpdated([:])
-            }
+            delegate?.citationsUpdated([:])
             return
         }
         
+        // Set refreshing state
+        settingsManager.setRefreshing(true)
+        
+        // Notify delegate to update UI with refreshing state
+        delegate?.refreshingStateChanged(true)
+        
         Task {
-            var results: [ScholarProfile: Int] = [:]
-            
-            for profile in profiles {
-                do {
-                    let count = try await fetchCitationCount(for: profile)
-                    results[profile] = count
-                    
-                    // Store the record
-                    let record = CitationRecord(profileId: profile.id, citationCount: count)
-                    await storageManager.saveCitationRecord(record)
-                    
-                    // Calculate recent growth
-                    let growth = await storageManager.calculateRecentGrowth(for: profile.id)
-                    var updatedProfile = profile
-                    updatedProfile.recentGrowth = growth
-                    results[updatedProfile] = count
-                    
-                    print("Successfully fetched \(count) citations for \(profile.name)")
-                    
-                    // Add delay to be respectful to Google's servers
-                    try await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
-                    
-                } catch {
-                    print("Failed to fetch citations for \(profile.name): \(error)")
-                    print("Error details: \(error.localizedDescription)")
-                    
-                    // Don't let one profile failure stop the whole process
-                    // Continue with other profiles
-                }
+            await performCitationCheck(for: profiles)
+        }
+    }
+    
+    private func performCitationCheck(for profiles: [ScholarProfile]) async {
+        var results: [ScholarProfile: Int] = [:]
+        
+        for profile in profiles {
+            do {
+                let count = try await fetchCitationCount(for: profile)
+                results[profile] = count
+                
+                // Store the record
+                let record = CitationRecord(profileId: profile.id, citationCount: count)
+                await storageManager.saveCitationRecord(record)
+                
+                // Calculate recent growth
+                let growth = await storageManager.calculateRecentGrowth(for: profile.id)
+                var updatedProfile = profile
+                updatedProfile.recentGrowth = growth
+                results[updatedProfile] = count
+                
+                print("Successfully fetched \(count) citations for \(profile.name)")
+                
+                // Add delay to be respectful to Google's servers
+                try await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+                
+            } catch {
+                print("Failed to fetch citations for \(profile.name): \(error)")
+                print("Error details: \(error.localizedDescription)")
+                
+                // Don't let one profile failure stop the whole process
+                // Continue with other profiles
             }
+        }
+        
+        // Update last refresh time and clear refreshing state on main actor
+        await MainActor.run {
+            settingsManager.setLastUpdateTime(Date())
+            settingsManager.setRefreshing(false)
+            
+            // Notify delegate that refreshing is complete
+            delegate?.refreshingStateChanged(false)
             
             if !results.isEmpty {
-                await delegate?.citationsUpdated(results)
+                delegate?.citationsUpdated(results)
             } else {
-                await delegate?.citationCheckFailed(CitationError.noDataAvailable)
+                delegate?.citationCheckFailed(CitationError.noDataAvailable)
             }
         }
     }
@@ -174,8 +204,13 @@ class CitationManager: @unchecked Sendable {
     }
     
     func refreshSettings() {
-        refreshTimer?.invalidate()
-        setupTimer()
+        // Safely refresh timer settings
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.refreshTimer?.invalidate()
+            self.refreshTimer = nil
+            self.setupTimer()
+        }
     }
 }
 

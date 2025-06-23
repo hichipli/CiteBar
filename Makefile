@@ -1,11 +1,27 @@
-.PHONY: build run test clean install package install-sudo xcode dmg help
+.PHONY: build run test clean install package install-sudo dmg help
 
 # Configuration variables - easy to change for different projects
 PRODUCT_NAME = CiteBar
 SCHEME = CiteBar
 BUILD_DIR = .build
-VERSION = $(shell date +%Y%m%d)
-DMG_NAME = $(PRODUCT_NAME)-$(VERSION)
+
+# Extract version from Info.plist
+VERSION = $(shell /usr/bin/plutil -extract CFBundleShortVersionString raw Info.plist)
+BUILD_VERSION = $(shell /usr/bin/plutil -extract CFBundleVersion raw Info.plist)
+
+# Detect architecture
+ARCH = $(shell uname -m)
+ifeq ($(ARCH),x86_64)
+    ARCH_NAME = intel
+else ifeq ($(ARCH),arm64)
+    ARCH_NAME = arm64
+else
+    ARCH_NAME = $(ARCH)
+endif
+
+# Date for unique builds
+BUILD_DATE = $(shell date +%Y%m%d)
+DMG_NAME = $(PRODUCT_NAME)-$(VERSION)-$(ARCH_NAME)-$(BUILD_DATE)
 
 # Paths
 DIST_DIR = dist
@@ -18,7 +34,7 @@ ICON_1024 = $(RESOURCES_DIR)/1024.png
 ICON_512 = $(RESOURCES_DIR)/512.png
 
 build:
-	@echo "Building $(PRODUCT_NAME)..."
+	@echo "Building $(PRODUCT_NAME) v$(VERSION) ($(ARCH_NAME))..."
 	swift build -c release
 
 debug:
@@ -124,9 +140,6 @@ dmg: package
 	@echo "  2. Dragging $(PRODUCT_NAME).app to the Applications folder"
 	@echo ""
 
-xcode:
-	@echo "Opening Xcode project..."
-	open $(PRODUCT_NAME).xcodeproj
 
 help:
 	@echo "Available commands:"
@@ -140,10 +153,10 @@ help:
 	@echo "  install-sudo - Create app bundle and install to /Applications with sudo"
 	@echo "  package      - Create distribution package in '$(DIST_DIR)/' folder"
 	@echo "  dmg          - Create DMG distribution file (includes package step)"
-	@echo "  xcode        - Open Xcode project"
 	@echo "  help         - Show this help message"
 	@echo ""
 	@echo "Configuration:"
 	@echo "  PRODUCT_NAME: $(PRODUCT_NAME)"
-	@echo "  VERSION:      $(VERSION)"
+	@echo "  VERSION:      $(VERSION) (build $(BUILD_VERSION))"
+	@echo "  ARCHITECTURE: $(ARCH_NAME)"
 	@echo "  DMG_NAME:     $(DMG_NAME)"

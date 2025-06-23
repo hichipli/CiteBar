@@ -8,7 +8,7 @@ import SwiftUI
     var settingsWindow: NSWindow?
     
     // Shared settings manager for checking first launch
-    private let settingsManager = SettingsManager()
+    private let settingsManager = SettingsManager.shared
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         setupMenuBar()
@@ -27,16 +27,23 @@ import SwiftUI
     }
     
     private func setupMenuBar() {
+        guard statusItem == nil else { return } // Prevent duplicate setup
+        
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         
-        if let button = statusItem?.button {
+        guard let statusItem = statusItem else {
+            print("Failed to create status item")
+            return
+        }
+        
+        if let button = statusItem.button {
             button.image = NSImage(systemSymbolName: "book.circle.fill", accessibilityDescription: "CiteBar")
             button.action = #selector(menuBarClicked)
             button.target = self
         }
         
-        menuBarManager = MenuBarManager(statusItem: statusItem!)
-        statusItem?.menu = menuBarManager?.createMenu()
+        menuBarManager = MenuBarManager(statusItem: statusItem)
+        statusItem.menu = menuBarManager?.createMenu()
     }
     
     private func setupManagers() {
@@ -49,18 +56,26 @@ import SwiftUI
     }
     
     @objc func showSettings() {
-        if settingsWindow == nil {
-            let settingsView = SettingsView()
-            settingsWindow = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 500, height: 400),
-                styleMask: [.titled, .closable, .resizable],
-                backing: .buffered,
-                defer: false
-            )
-            settingsWindow?.title = "CiteBar Settings"
-            settingsWindow?.contentView = NSHostingView(rootView: settingsView)
-            settingsWindow?.center()
+        // Always create a fresh settings window to avoid state issues
+        if settingsWindow != nil {
+            settingsWindow?.close()
+            settingsWindow = nil
         }
+        
+        let settingsView = SettingsView()
+        settingsWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 400),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        settingsWindow?.title = "CiteBar Settings"
+        settingsWindow?.contentView = NSHostingView(rootView: settingsView)
+        settingsWindow?.center()
+        settingsWindow?.delegate = self
+        
+        // Ensure proper window retention
+        settingsWindow?.isReleasedWhenClosed = false
         
         settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -70,18 +85,87 @@ import SwiftUI
         citationManager?.checkCitations()
     }
     
+    @objc func openScholarProfile(_ sender: NSMenuItem) {
+        if let profile = sender.representedObject as? ScholarProfile {
+            if let url = URL(string: profile.url) {
+                NSWorkspace.shared.open(url)
+            }
+        }
+    }
+    
     @objc func quitApp() {
+        // Clean up resources before quitting
+        cleanup()
         NSApplication.shared.terminate(nil)
+    }
+    
+    func applicationWillTerminate(_ aNotification: Notification) {
+        cleanup()
+    }
+    
+    private func cleanup() {
+        // Close settings window if open
+        if let settingsWindow = settingsWindow {
+            settingsWindow.close()
+            self.settingsWindow = nil
+        }
+        
+        // Clean up citation manager (timers will be invalidated)
+        citationManager = nil
+        
+        // Remove status item
+        if let statusItem = statusItem {
+            NSStatusBar.system.removeStatusItem(statusItem)
+            self.statusItem = nil
+        }
     }
 }
 
 extension AppDelegate: CitationManagerDelegate {
     func citationsUpdated(_ citations: [ScholarProfile: Int]) {
-        menuBarManager?.updateDisplayWith(citations)
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.menuBarManager?.updateDisplayWith(citations)
+        }
     }
     
     func citationCheckFailed(_ error: Error) {
-        let errorMessage = error.localizedDescription
-        menuBarManager?.updateError(errorMessage)
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            let errorMessage = error.localizedDescription
+            self.menuBarManager?.updateError(errorMessage)
+        }
+    }
+    
+    func refreshingStateChanged(_ isRefreshing: Bool) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.menuBarManager?.updateRefreshingState()
+        }
+    }
+}
+
+extension AppDelegate: NSWindowDelegate {
+    func windowWillClose(_ notification: Notification) {
+        guard let closingWindow = notification.object as? NSWindow,
+              closingWindow == settingsWindow else { return }
+        
+        // Refresh settings and citations when settings window closes
+        citationManager?.refreshSettings()
+        
+        // Clear the window reference to ensure proper cleanup
+        settingsWindow = nil
+    }
+    
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        // Allow window to close normally
+        return true
+    }
+    
+    func windowDidBecomeKey(_ notification: Notification) {
+        // Ensure window is properly shown
+        if let window = notification.object as? NSWindow, window == settingsWindow {
+            window.makeKeyAndOrderFront(nil)
+        }
     }
 }

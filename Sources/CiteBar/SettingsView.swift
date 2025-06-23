@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @StateObject private var settingsManager = SettingsManager()
+    @ObservedObject private var settingsManager = SettingsManager.shared
     @State private var newProfileId = ""
     @State private var newProfileName = ""
     @State private var showingAddProfile = false
@@ -12,9 +12,7 @@ struct SettingsView: View {
         VStack(spacing: 20) {
             // Header
             HStack {
-                Image(systemName: "book.circle.fill")
-                    .font(.title)
-                    .foregroundColor(.blue)
+                AppIconView(size: 40)
                 
                 VStack(alignment: .leading) {
                     Text("CiteBar Settings")
@@ -124,6 +122,13 @@ struct ProfilesTab: View {
                 newProfileId = ""
                 newProfileName = ""
                 showingAddProfile = false
+                
+                // Trigger immediate refresh when adding new profile
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+                        appDelegate.refreshCitations()
+                    }
+                }
             }
         }
     }
@@ -234,9 +239,7 @@ struct GeneralTab: View {
 struct AboutTab: View {
     var body: some View {
         VStack(spacing: 16) {
-            Image(systemName: "book.circle.fill")
-                .font(.system(size: 60))
-                .foregroundColor(.blue)
+            AppIconView(size: 80)
             
             Text("CiteBar")
                 .font(.title)
@@ -246,7 +249,7 @@ struct AboutTab: View {
                 .font(.headline)
                 .foregroundColor(.secondary)
             
-            Text("Version 1.0.0")
+            Text("Version 1.2.0")
                 .font(.caption)
                 .foregroundColor(.secondary)
             
@@ -276,6 +279,7 @@ struct AddProfileSheet: View {
     let onAdd: (String, String) -> Void
     
     @State private var urlInput = ""
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         VStack(spacing: 20) {
@@ -356,6 +360,7 @@ struct AddProfileSheet: View {
                     profileId = ""
                     profileName = ""
                     urlInput = ""
+                    dismiss()
                 }
                 
                 Spacer()
@@ -369,6 +374,7 @@ struct AddProfileSheet: View {
                         showingError = true
                     } else {
                         onAdd(profileId, profileName)
+                        dismiss()
                     }
                 }
                 .disabled(profileId.isEmpty || profileName.isEmpty)
@@ -408,6 +414,50 @@ struct AddProfileSheet: View {
         let regex = try? NSRegularExpression(pattern: pattern)
         let range = NSRange(location: 0, length: id.count)
         return regex?.firstMatch(in: id, options: [], range: range) != nil
+    }
+}
+
+struct AppIconView: View {
+    let size: CGFloat
+    
+    var body: some View {
+        if let appIcon = loadAppIcon() {
+            Image(nsImage: appIcon)
+                .resizable()
+                .frame(width: size, height: size)
+                .cornerRadius(size * 0.176) // iOS/macOS app icon corner radius ratio
+        } else {
+            Image(systemName: "book.circle.fill")
+                .font(.system(size: size * 0.75))
+                .foregroundColor(.blue)
+        }
+    }
+    
+    private func loadAppIcon() -> NSImage? {
+        // Try different methods to load the app icon
+        if let iconFromBundle = NSImage(named: "AppIcon") {
+            return iconFromBundle
+        }
+        
+        // Try loading from resources
+        if let resourcePath = Bundle.main.path(forResource: "1024", ofType: "png"),
+           let iconFromResource = NSImage(contentsOfFile: resourcePath) {
+            return iconFromResource
+        }
+        
+        // Try loading from asset catalog path
+        let assetPath = "Assets.xcassets/AppIcon.appiconset/1024.png"
+        if let iconFromAsset = NSImage(contentsOfFile: assetPath) {
+            return iconFromAsset
+        }
+        
+        // Try loading the app's icon from the app bundle
+        if let bundleIconPath = Bundle.main.path(forResource: "AppIcon", ofType: "icns"),
+           let iconFromICNS = NSImage(contentsOfFile: bundleIconPath) {
+            return iconFromICNS
+        }
+        
+        return nil
     }
 }
 

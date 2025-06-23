@@ -6,11 +6,13 @@ struct ScholarProfile: Hashable, Codable {
     let url: String
     var isEnabled: Bool = true
     var recentGrowth: Int?
+    var sortOrder: Int = 0
     
-    init(id: String, name: String) {
+    init(id: String, name: String, sortOrder: Int = 0) {
         self.id = id
         self.name = name
         self.url = "https://scholar.google.com/citations?user=\(id)&hl=en"
+        self.sortOrder = sortOrder
     }
     
     static func == (lhs: ScholarProfile, rhs: ScholarProfile) -> Bool {
@@ -39,6 +41,8 @@ struct AppSettings: Codable {
     var refreshInterval: RefreshInterval = .hourly
     var showNotifications: Bool = true
     var autoLaunch: Bool = true
+    var lastUpdateTime: Date?
+    var isRefreshing: Bool = false
     
     enum RefreshInterval: String, CaseIterable, Codable {
         case fifteenMinutes = "15min"
@@ -75,4 +79,5 @@ struct AppSettings: Codable {
 @MainActor protocol CitationManagerDelegate: AnyObject {
     func citationsUpdated(_ citations: [ScholarProfile: Int])
     func citationCheckFailed(_ error: Error)
+    func refreshingStateChanged(_ isRefreshing: Bool)
 }
