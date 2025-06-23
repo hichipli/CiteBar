@@ -5,6 +5,58 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2025-06-23
+
+### Added
+- **Centralized Version Management**: Single source of truth for version numbers in `AppVersion.swift`
+- **Profile Drag-and-Drop Reordering**: Reorder profiles in settings using drag-and-drop with visual drag handles
+- **Primary Profile Indicators**: Visual indicators showing which profile is displayed in menu bar
+- **Professional SF Symbols**: Replaced all emoji with professional vector icons throughout UI
+- **Enhanced User Guidance**: Clear hints about profile ordering and menu bar display
+- **Drag-and-Drop Guidance**: Visual instructions with drag handle icons and contextual hints
+- **Profile Deletion Confirmation**: Safety dialog prevents accidental profile removal
+- **Profile Editing Functionality**: Edit existing profile names and Scholar IDs with dedicated edit dialog
+- **Menu Clickability Hints**: Concise visual tip in dropdown menu showing profile names are clickable
+- **Direct Support Access**: "Support & Feedback" button in menu opens settings to About tab with feedback links
+- **One-Click Primary Setting**: "Set Primary" button for instant profile prioritization
+- **Immediate Loading Feedback**: New profiles show "Loading citations..." status immediately
+- **Feedback & Support Section**: Direct links to email (info@hichipli.com) and GitHub repository with perfect alignment
+- **Enhanced Tooltips**: Helpful tooltips throughout the interface for better user guidance
+
+### Improved
+- **Settings Interface**: Professional enabled/disabled indicators with eye icons, instant primary setting, drag handles
+- **User Experience**: Elegant design without cluttered toggles, immediate feedback, comprehensive guidance
+- **Code Architecture**: Centralized version management for easier maintenance
+- **App Icon Consistency**: Settings pages now use actual app icon instead of system icons
+- **About Page**: Fixed text truncation with elegant hidden scrollbars and responsive layout
+- **Profile Management**: Immediate UI updates for all operations, loading feedback, and full editing capabilities
+- **Menu Design**: Concise clickable hints, direct support access, and professional vector icons only
+
+### Changed
+- **Menu Icons**: All emojis replaced with SF Symbols for professional appearance
+- **Profile Management**: First profile in list is always shown in menu bar
+- **Settings UI**: Enhanced profile management with reordering capabilities and safety confirmations
+- **Version Display**: Dynamic version strings sourced from central location
+- **Deletion Process**: Added confirmation dialog for profile deletion with clear messaging
+
+### Fixed
+- **Text Truncation**: Menu hint text shortened to prevent ellipsis cutoff, About page displays fully
+- **Immediate Updates**: Menu bar refreshes instantly for all profile operations (add/edit/delete/enable/primary)
+- **User Guidance**: Comprehensive visual hints without emoji, professional vector icons only
+- **Safety**: Confirmation dialogs prevent accidental profile deletion
+- **Visual Alignment**: Perfect icon and text alignment in feedback section for professional appearance
+- **Scrollbar Design**: Hidden scrollbars in About tab for cleaner, more elegant interface
+- **Loading Feedback**: New profiles immediately show loading status before data fetch completes
+- **Primary Star Removal**: Eliminated redundant star icon, Primary badge is sufficient visual indicator
+
+### Technical
+- Implemented centralized version management system
+- Enhanced profile sorting and reordering functionality
+- Improved visual feedback for primary profile selection
+- Better separation of concerns in settings management
+- Added comprehensive user guidance and safety features
+- Fixed async/await warnings for cleaner code
+
 ## [1.2.0] - 2025-06-23
 
 ### Added
@@ -122,16 +174,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Future Roadmap
 
-### [1.3.0] - Planned
+### [1.4.0] - Planned  
 - [ ] Desktop Widget: macOS Desktop Widget for continuous citation visibility
 - [ ] Citation trend charts and visualizations  
 - [ ] Export functionality (CSV, JSON)
 - [ ] Dark mode support
 - [ ] Accessibility improvements
 - [ ] Push notifications for citation updates
-- [ ] Profile reordering with drag-and-drop interface
+- [ ] Advanced profile management (bulk import, profile templates)
 
-### [1.4.0] - Planned
+### [1.5.0] - Planned
 - [ ] Apple App Store distribution
 - [ ] Automatic update mechanism
 - [ ] Performance optimizations

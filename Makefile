@@ -5,7 +5,7 @@ PRODUCT_NAME = CiteBar
 SCHEME = CiteBar
 BUILD_DIR = .build
 
-# Extract version from Info.plist
+# Extract version from Info.plist (primary source)
 VERSION = $(shell /usr/bin/plutil -extract CFBundleShortVersionString raw Info.plist)
 BUILD_VERSION = $(shell /usr/bin/plutil -extract CFBundleVersion raw Info.plist)
 
@@ -69,6 +69,9 @@ install: build
 	# Copy app icon
 	cp Assets.xcassets/AppIcon.appiconset/1024.png "$(PRODUCT_NAME).app/Contents/Resources/AppIcon.png" 2>/dev/null || true
 	cp Assets.xcassets/AppIcon.appiconset/512.png "$(PRODUCT_NAME).app/Contents/Resources/AppIcon@2x.png" 2>/dev/null || true
+	# Apply ad-hoc code signing
+	@echo "🔐 Applying ad-hoc code signature..."
+	@codesign --force --deep --sign - "$(PRODUCT_NAME).app" || echo "⚠️  Warning: Code signing failed"
 	@echo "App bundle created: $(PRODUCT_NAME).app"
 	@echo ""
 	@echo "To complete installation:"
@@ -85,6 +88,9 @@ install-sudo: build
 	# Copy app icon
 	cp Assets.xcassets/AppIcon.appiconset/1024.png "$(PRODUCT_NAME).app/Contents/Resources/AppIcon.png" 2>/dev/null || true
 	cp Assets.xcassets/AppIcon.appiconset/512.png "$(PRODUCT_NAME).app/Contents/Resources/AppIcon@2x.png" 2>/dev/null || true
+	# Apply ad-hoc code signing before installation
+	@echo "🔐 Applying ad-hoc code signature..."
+	@codesign --force --deep --sign - "$(PRODUCT_NAME).app" || echo "⚠️  Warning: Code signing failed"
 	sudo cp -r "$(PRODUCT_NAME).app" /Applications/
 	# Force macOS to refresh icon cache
 	sudo touch "/Applications/$(PRODUCT_NAME).app"
@@ -110,6 +116,9 @@ package: build
 	else \
 		echo "⚠️  Warning: 512px icon not found"; \
 	fi
+	@# Apply ad-hoc code signing to prevent "damaged" error on other machines
+	@echo "🔐 Applying ad-hoc code signature..."
+	@codesign --force --deep --sign - "$(APP_BUNDLE)" || { echo "⚠️  Warning: Code signing failed, app may show as damaged on other machines"; }
 	@echo "✅ Package created: $(APP_BUNDLE)"
 
 dmg: package
@@ -151,7 +160,7 @@ help:
 	@echo "  clean        - Clean build artifacts and distribution files"
 	@echo "  install      - Create app bundle in current dir and guide to install to /Applications"
 	@echo "  install-sudo - Create app bundle and install to /Applications with sudo"
-	@echo "  package      - Create distribution package in '$(DIST_DIR)/' folder"
+	@echo "  package      - Create distribution package in '$(DIST_DIR)/' folder (with ad-hoc signing)"
 	@echo "  dmg          - Create DMG distribution file (includes package step)"
 	@echo "  help         - Show this help message"
 	@echo ""
@@ -160,3 +169,8 @@ help:
 	@echo "  VERSION:      $(VERSION) (build $(BUILD_VERSION))"
 	@echo "  ARCHITECTURE: $(ARCH_NAME)"
 	@echo "  DMG_NAME:     $(DMG_NAME)"
+	@echo ""
+	@echo "Code Signing:"
+	@echo "  All build targets now include ad-hoc signing to prevent 'damaged' errors"
+	@echo "  when distributing via GitHub or other networks. See DISTRIBUTION.md for"
+	@echo "  user installation instructions and troubleshooting."

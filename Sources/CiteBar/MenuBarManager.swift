@@ -13,10 +13,9 @@ import Cocoa
     func createMenu() -> NSMenu {
         let menu = NSMenu()
         
-        // Citation display section with dynamic header
-        let totalProfiles = SettingsManager.shared.settings.profiles.count
-        let headerTitle = totalProfiles > 0 ? "Scholar Metrics (\(totalProfiles) profile\(totalProfiles == 1 ? "" : "s"))" : "Citation Tracking"
-        let citationHeader = NSMenuItem(title: headerTitle, action: nil, keyEquivalent: "")
+        // Citation display section with dynamic header - this will be updated in updateMenu()
+        let citationHeader = NSMenuItem(title: "Citation Tracking", action: nil, keyEquivalent: "")
+        citationHeader.tag = 999 // Special tag for header
         citationHeader.isEnabled = false
         menu.addItem(citationHeader)
         
@@ -36,6 +35,12 @@ import Cocoa
         settingsItem.target = NSApplication.shared.delegate
         settingsItem.image = NSImage(systemSymbolName: "gear", accessibilityDescription: "Settings")
         menu.addItem(settingsItem)
+        
+        // Support/Feedback option
+        let supportItem = NSMenuItem(title: "Support & Feedback", action: #selector(AppDelegate.showSupport), keyEquivalent: "")
+        supportItem.target = NSApplication.shared.delegate
+        supportItem.image = NSImage(systemSymbolName: "questionmark.circle", accessibilityDescription: "Support")
+        menu.addItem(supportItem)
         
         menu.addItem(NSMenuItem.separator())
         
@@ -110,6 +115,19 @@ import Cocoa
         if !currentCitations.isEmpty || settingsManager.settings.isRefreshing {
             menu.insertItem(NSMenuItem.separator(), at: insertIndex)
             insertIndex += 1
+            
+            // Add clickable hint for profiles (shorter text)
+            if !currentCitations.isEmpty {
+                let hintItem = NSMenuItem(title: "Click names to open Scholar", action: nil, keyEquivalent: "")
+                hintItem.tag = 100
+                hintItem.isEnabled = false
+                hintItem.image = NSImage(systemSymbolName: "hand.point.up.left", accessibilityDescription: "Tip")
+                menu.insertItem(hintItem, at: insertIndex)
+                insertIndex += 1
+                
+                menu.insertItem(NSMenuItem.separator(), at: insertIndex)
+                insertIndex += 1
+            }
         }
         
         // Add current citation data - sorted by profile order, then by citation count
@@ -122,7 +140,6 @@ import Cocoa
         
         for (profile, count) in sortedCitations {
             // Create a more detailed display for each profile
-            let formattedCount = NumberFormatter.localizedString(from: NSNumber(value: count), number: .decimal)
             let citationItem = NSMenuItem(title: "\(profile.name)", 
                                         action: #selector(AppDelegate.openScholarProfile(_:)), 
                                         keyEquivalent: "")
@@ -134,10 +151,21 @@ import Cocoa
             insertIndex += 1
             
             // Add citation count as sub-item
-            let countItem = NSMenuItem(title: "    \(formattedCount) citations", action: nil, keyEquivalent: "")
+            let countText: String
+            let countIcon: String
+            if count == -1 {
+                countText = "    Loading citations..."
+                countIcon = "arrow.clockwise"
+            } else {
+                let formattedCount = NumberFormatter.localizedString(from: NSNumber(value: count), number: .decimal)
+                countText = "    \(formattedCount) citations"
+                countIcon = "book.closed"
+            }
+            
+            let countItem = NSMenuItem(title: countText, action: nil, keyEquivalent: "")
             countItem.tag = 100
             countItem.isEnabled = false
-            countItem.image = NSImage(systemSymbolName: "book.closed", accessibilityDescription: "Citations")
+            countItem.image = NSImage(systemSymbolName: countIcon, accessibilityDescription: "Citations")
             menu.insertItem(countItem, at: insertIndex)
             insertIndex += 1
             
@@ -209,5 +237,11 @@ import Cocoa
         } else {
             statusItem.button?.title = " --"
         }
+    }
+    
+    func showProfileLoading(_ profile: ScholarProfile) {
+        // Add the new profile to current citations with a loading indicator
+        currentCitations[profile] = -1 // Use -1 to indicate loading
+        updateMenu()
     }
 }

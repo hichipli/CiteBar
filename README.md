@@ -39,7 +39,19 @@ A macOS menu bar application that helps academics track their Google Scholar cit
 
 ### Option 2: Download Release
 
-Download the latest release from the [Releases page](https://github.com/hichipli/CiteBar/releases) and drag to your Applications folder.
+Download the latest DMG file from the [Releases page](https://github.com/hichipli/CiteBar/releases):
+1. Download `CiteBar-x.x.x-[arch]-[date].dmg`
+2. Double-click to open the DMG
+3. Drag CiteBar.app to the Applications folder
+4. Run CiteBar from Applications
+
+**macOS Security Note**: Since CiteBar is not signed with an Apple Developer Certificate, you may encounter security warnings:
+
+- **"CiteBar is damaged"**: Run `xattr -cr /Applications/CiteBar.app` in Terminal
+- **"Cannot verify developer"**: Right-click CiteBar.app → Open → Open
+- **Security warning**: Go to System Preferences → Privacy & Security → Security → Click "Open Anyway"
+
+For detailed installation instructions and troubleshooting, see [DISTRIBUTION.md](DISTRIBUTION.md).
 
 ## Usage
 
@@ -139,9 +151,10 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 If you encounter issues or have suggestions:
 
-1. Check the [Issues page](https://github.com/hichipli/CiteBar/issues)
-2. Create a new issue with details about your problem
-3. Include your macOS version and CiteBar version
+1. **Installation Issues**: See [DISTRIBUTION.md](DISTRIBUTION.md) for common macOS security and installation problems
+2. Check the [Issues page](https://github.com/hichipli/CiteBar/issues)
+3. Create a new issue with details about your problem
+4. Include your macOS version and CiteBar version
 
 ## Acknowledgments
 

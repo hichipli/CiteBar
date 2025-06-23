@@ -84,6 +84,10 @@ actor StorageManager {
         return records.map { ($0.timestamp, $0.citationCount) }
     }
     
+    func getAllRecords() -> [CitationRecord] {
+        return citationHistory
+    }
+    
     func cleanupOldRecords(olderThan days: Int = 365) {
         let cutoffDate = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
         

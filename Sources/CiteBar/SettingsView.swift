@@ -7,6 +7,7 @@ struct SettingsView: View {
     @State private var showingAddProfile = false
     @State private var showingError = false
     @State private var errorMessage = ""
+    @State private var selectedTab = 0
     
     var body: some View {
         VStack(spacing: 20) {
@@ -27,7 +28,7 @@ struct SettingsView: View {
             }
             .padding()
             
-            TabView {
+            TabView(selection: $selectedTab) {
                 // Profiles Tab
                 ProfilesTab(
                     settingsManager: settingsManager,
@@ -40,23 +41,29 @@ struct SettingsView: View {
                 .tabItem {
                     Label("Profiles", systemImage: "person.2.fill")
                 }
+                .tag(0)
                 
                 // General Tab
                 GeneralTab(settingsManager: settingsManager)
                     .tabItem {
                         Label("General", systemImage: "gear")
                     }
+                    .tag(1)
                 
                 // About Tab
                 AboutTab()
                     .tabItem {
                         Label("About", systemImage: "info.circle")
                     }
+                    .tag(2)
             }
             .frame(height: 300)
         }
         .padding()
         .frame(width: 500, height: 400)
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowSupportSection"))) { _ in
+            selectedTab = 2 // Switch to About tab
+        }
     }
 }
 
@@ -98,13 +105,67 @@ struct ProfilesTab: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List {
-                    ForEach(settingsManager.settings.profiles, id: \.id) { profile in
-                        ProfileRow(profile: profile) { updatedProfile in
-                            settingsManager.updateProfile(updatedProfile)
-                        } onDelete: {
-                            settingsManager.removeProfile(profile)
+                VStack(alignment: .leading, spacing: 12) {
+                    // Header with guidance
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text("Profile Order")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            
+                            Spacer()
+                            
+                            Text("First profile shows in menu bar")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                         }
+                        
+                        // Drag-and-drop guidance
+                        HStack {
+                            Image(systemName: "hand.point.up.left")
+                                .foregroundColor(.blue)
+                                .font(.caption)
+                            
+                            Text("Drag profiles to reorder • Click profile names in menu to open Scholar pages")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .italic()
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(6)
+                    }
+                    
+                    List {
+                        ForEach(settingsManager.settings.profiles.sorted(by: { $0.sortOrder < $1.sortOrder }), id: \.id) { profile in
+                            ProfileRow(profile: profile) { updatedProfile in
+                                settingsManager.updateProfile(updatedProfile)
+                            } onDelete: {
+                                settingsManager.removeProfile(profile)
+                                
+                                // Trigger immediate refresh when deleting profile
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+                                        appDelegate.updateMenuBarDisplay()
+                                    }
+                                }
+                            } onMakePrimary: {
+                                // Move this profile to first position
+                                var profiles = settingsManager.settings.profiles
+                                profiles.removeAll { $0.id == profile.id }
+                                profiles.insert(profile, at: 0)
+                                settingsManager.reorderProfiles(profiles)
+                                
+                                // Trigger immediate refresh when making primary
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+                                        appDelegate.updateMenuBarDisplay()
+                                    }
+                                }
+                            }
+                        }
+                        .onMove(perform: moveProfiles)
                     }
                 }
             }
@@ -123,12 +184,27 @@ struct ProfilesTab: View {
                 newProfileName = ""
                 showingAddProfile = false
                 
-                // Trigger immediate refresh when adding new profile
+                // Immediately show new profile in menu with "Loading..." status
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+                        appDelegate.showNewProfileLoading(profile)
+                        // Then trigger actual data fetch
                         appDelegate.refreshCitations()
                     }
                 }
+            }
+        }
+    }
+    
+    private func moveProfiles(from source: IndexSet, to destination: Int) {
+        var sortedProfiles = settingsManager.settings.profiles.sorted(by: { $0.sortOrder < $1.sortOrder })
+        sortedProfiles.move(fromOffsets: source, toOffset: destination)
+        settingsManager.reorderProfiles(sortedProfiles)
+        
+        // Immediately update menu bar display after reordering
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+                appDelegate.updateMenuBarDisplay()
             }
         }
     }
@@ -138,12 +214,35 @@ struct ProfileRow: View {
     let profile: ScholarProfile
     let onUpdate: (ScholarProfile) -> Void
     let onDelete: () -> Void
+    let onMakePrimary: () -> Void
+    
+    @State private var showingEditSheet = false
     
     var body: some View {
-        HStack {
+        HStack(spacing: 12) {
+            // Drag handle
+            Image(systemName: "line.3.horizontal")
+                .foregroundColor(.secondary)
+                .font(.caption)
+                .help("Drag to reorder profiles")
+            
             VStack(alignment: .leading, spacing: 4) {
-                Text(profile.name)
-                    .font(.headline)
+                HStack {
+                    Text(profile.name)
+                        .font(.headline)
+                    
+                    if profile.sortOrder == 0 {
+                        Text("Primary")
+                            .font(.caption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.blue.opacity(0.2))
+                            .foregroundColor(.blue)
+                            .cornerRadius(4)
+                    }
+                    
+                    Spacer()
+                }
                 
                 Text("ID: \(profile.id)")
                     .font(.caption)
@@ -158,21 +257,30 @@ struct ProfileRow: View {
             
             Spacer()
             
-            Toggle("", isOn: Binding(
-                get: { profile.isEnabled },
-                set: { enabled in
-                    var updatedProfile = profile
-                    updatedProfile.isEnabled = enabled
-                    onUpdate(updatedProfile)
+            // Make Primary button (only show for non-primary profiles)
+            if profile.sortOrder != 0 {
+                Button("Set Primary") {
+                    onMakePrimary()
                 }
-            ))
-            
-            Button("Delete") {
-                onDelete()
+                .font(.caption)
+                .foregroundColor(.orange)
+                .help("Make this the primary profile")
             }
-            .foregroundColor(.red)
+            
+            Button("Edit") {
+                showingEditSheet = true
+            }
+            .foregroundColor(.blue)
+            .help("Edit or delete this profile")
         }
         .padding(.vertical, 4)
+        .sheet(isPresented: $showingEditSheet) {
+            EditProfileSheet(profile: profile, onUpdate: { updatedProfile in
+                onUpdate(updatedProfile)
+            }, onDelete: {
+                onDelete()
+            })
+        }
     }
 }
 
@@ -230,6 +338,17 @@ struct GeneralTab: View {
                     .foregroundColor(.secondary)
             }
             
+            Divider()
+            
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Menu Bar Display")
+                    .font(.headline)
+                
+                Text("The first profile in your Profiles list will be shown in the menu bar. Drag profiles to reorder them.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
             Spacer()
         }
         .padding()
@@ -238,36 +357,90 @@ struct GeneralTab: View {
 
 struct AboutTab: View {
     var body: some View {
-        VStack(spacing: 16) {
-            AppIconView(size: 80)
-            
-            Text("CiteBar")
-                .font(.title)
-                .bold()
-            
-            Text("Citation Tracking for Academics")
-                .font(.headline)
-                .foregroundColor(.secondary)
-            
-            Text("Version 1.2.0")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            
-            Divider()
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("CiteBar helps early-career academics track their Google Scholar citation metrics right from the menu bar.")
-                    .multilineTextAlignment(.center)
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 16) {
+                AppIconView(size: 80)
                 
-                Text("Built with passion for the academic community.")
-                    .font(.caption)
+                Text("CiteBar")
+                    .font(.title)
+                    .bold()
+                
+                Text("Citation Tracking for Academics")
+                    .font(.headline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
+                
+                Text(AppVersion.displayString)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Divider()
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("CiteBar helps early-career academics track their Google Scholar citation metrics right from the menu bar.")
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                    
+                    Text("Built with passion for the academic community.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity)
+                
+                Divider()
+                
+                // Feedback section
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Feedback & Support")
+                        .font(.headline)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                    
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .center, spacing: 8) {
+                            Image(systemName: "envelope")
+                                .foregroundColor(.blue)
+                                .frame(width: 16, height: 16)
+                            
+                            Button("Email: info@hichipli.com") {
+                                if let url = URL(string: "mailto:info@hichipli.com") {
+                                    NSWorkspace.shared.open(url)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundColor(.blue)
+                            
+                            Spacer()
+                        }
+                        
+                        HStack(alignment: .center, spacing: 8) {
+                            Image(systemName: "globe")
+                                .foregroundColor(.blue)
+                                .frame(width: 16, height: 16)
+                            
+                            Button("GitHub: CiteBar Repository") {
+                                if let url = URL(string: "https://github.com/hichipli/CiteBar") {
+                                    NSWorkspace.shared.open(url)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundColor(.blue)
+                            
+                            Spacer()
+                        }
+                    }
+                    .font(.caption)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                
+                Spacer(minLength: 20)
             }
-            
-            Spacer()
+            .padding()
+            .frame(maxWidth: .infinity)
         }
-        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -280,112 +453,421 @@ struct AddProfileSheet: View {
     
     @State private var urlInput = ""
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var focusedField: Field?
+    
+    enum Field {
+        case name, url, id
+    }
     
     var body: some View {
-        VStack(spacing: 20) {
-            Text("Add Google Scholar Profile")
-                .font(.headline)
+        VStack(spacing: 24) {
+            // Header
+            HStack {
+                AppIconView(size: 32)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Add Google Scholar Profile")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                    Text("Track citation metrics for a researcher")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+            }
             
+            // Profile Name Section
             VStack(alignment: .leading, spacing: 8) {
-                Text("Profile Name")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                Label("Profile Name", systemImage: "person.circle")
+                    .font(.headline)
+                    .foregroundColor(.primary)
                 
-                TextField("Your Name", text: $profileName)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-            }
-            
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Google Scholar Profile")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                // URL Input with paste button
-                HStack {
-                    TextField("Paste your Google Scholar profile URL here", text: $urlInput)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .onChange(of: urlInput) { newValue in
-                            extractScholarId(from: newValue)
-                        }
-                    
-                    Button("Paste") {
-                        if let clipboardString = NSPasteboard.general.string(forType: .string) {
-                            urlInput = clipboardString
-                            extractScholarId(from: clipboardString)
-                        }
+                TextField("e.g., Dr. Jane Smith", text: $profileName)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focusedField, equals: .name)
+                    .onSubmit {
+                        focusedField = .url
                     }
-                    .buttonStyle(.bordered)
-                }
-                
-                Text("Or enter Scholar ID directly:")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                TextField("e.g., ABC123DEF456", text: $profileId)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("How to find your Google Scholar ID:")
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundColor(.secondary)
-                    
-                    Text("1. Go to your Google Scholar profile page")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Text("2. Copy the full URL (e.g., https://scholar.google.com/citations?user=ABC123DEF&hl=en)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Text("3. Paste it above, or just copy the ID part after 'user='")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .padding(.top, 4)
             }
             
+            // Scholar URL/ID Section
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Google Scholar Profile", systemImage: "link")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                
+                // URL Input with enhanced paste support
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        TextField("Paste Google Scholar URL here", text: $urlInput)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($focusedField, equals: .url)
+                            .onChange(of: urlInput) { newValue in
+                                extractScholarId(from: newValue)
+                            }
+                            .onSubmit {
+                                if profileId.isEmpty {
+                                    focusedField = .id
+                                } else {
+                                    submitForm()
+                                }
+                            }
+                        
+                        Button(action: {
+                            if let clipboardString = NSPasteboard.general.string(forType: .string) {
+                                urlInput = clipboardString
+                                extractScholarId(from: clipboardString)
+                            }
+                        }) {
+                            Image(systemName: "doc.on.clipboard")
+                        }
+                        .buttonStyle(.bordered)
+                        .help("Paste from clipboard")
+                    }
+                    
+                    Text("Example: https://scholar.google.com/citations?user=ABC123DEF&hl=en")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                // Alternative ID input
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Or enter Scholar ID directly:")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    TextField("e.g., ABC123DEF456", text: $profileId)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($focusedField, equals: .id)
+                        .onSubmit {
+                            submitForm()
+                        }
+                }
+                
+                // Instructions
+                DisclosureGroup {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Image(systemName: "1.circle.fill")
+                                .foregroundColor(.blue)
+                            Text("Go to your Google Scholar profile page")
+                        }
+                        .font(.caption)
+                        
+                        HStack {
+                            Image(systemName: "2.circle.fill")
+                                .foregroundColor(.blue)
+                            Text("Copy the full URL from your browser")
+                        }
+                        .font(.caption)
+                        
+                        HStack {
+                            Image(systemName: "3.circle.fill")
+                                .foregroundColor(.blue)
+                            Text("Paste it above - we'll extract the ID automatically")
+                        }
+                        .font(.caption)
+                    }
+                    .padding(.top, 8)
+                } label: {
+                    Label("How to find your Scholar ID", systemImage: "questionmark.circle")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            // Success indicator
             if !profileId.isEmpty {
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(.green)
-                    Text("Scholar ID: \(profileId)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    Text("Scholar ID extracted: \(profileId)")
+                        .font(.callout)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.green.opacity(0.1))
+                .cornerRadius(8)
             }
             
-            HStack {
+            // Action buttons
+            HStack(spacing: 12) {
                 Button("Cancel") {
-                    profileId = ""
-                    profileName = ""
-                    urlInput = ""
+                    clearForm()
                     dismiss()
                 }
+                .buttonStyle(.bordered)
+                .keyboardShortcut(.cancelAction)
                 
                 Spacer()
                 
                 Button("Add Profile") {
-                    if profileId.isEmpty || profileName.isEmpty {
-                        errorMessage = "Please fill in all fields"
-                        showingError = true
-                    } else if !isValidScholarId(profileId) {
-                        errorMessage = "Invalid Scholar ID format. Please check your ID."
-                        showingError = true
-                    } else {
-                        onAdd(profileId, profileName)
-                        dismiss()
-                    }
+                    submitForm()
                 }
+                .buttonStyle(.borderedProminent)
                 .disabled(profileId.isEmpty || profileName.isEmpty)
+                .keyboardShortcut(.defaultAction)
             }
         }
         .padding()
-        .frame(width: 500)
+        .frame(width: 560)
+        .onAppear {
+            focusedField = .name
+        }
         .alert("Error", isPresented: $showingError) {
             Button("OK") { }
         } message: {
             Text(errorMessage)
+        }
+    }
+    
+    private func tryAutoPaste() {
+        if let clipboardString = NSPasteboard.general.string(forType: .string) {
+            urlInput = clipboardString
+            extractScholarId(from: clipboardString)
+        }
+    }
+    
+    private func submitForm() {
+        if profileId.isEmpty || profileName.isEmpty {
+            errorMessage = "Please fill in all fields"
+            showingError = true
+        } else if !isValidScholarId(profileId) {
+            errorMessage = "Invalid Scholar ID format. Please check your ID."
+            showingError = true
+        } else {
+            onAdd(profileId, profileName)
+            dismiss()
+        }
+    }
+    
+    private func clearForm() {
+        profileId = ""
+        profileName = ""
+        urlInput = ""
+    }
+    
+    private func extractScholarId(from url: String) {
+        // Extract Scholar ID from URL
+        if let range = url.range(of: "user=") {
+            var id = String(url[range.upperBound...])
+            
+            // Remove everything after & or # if present
+            if let ampersandRange = id.range(of: "&") {
+                id = String(id[..<ampersandRange.lowerBound])
+            }
+            if let hashRange = id.range(of: "#") {
+                id = String(id[..<hashRange.lowerBound])
+            }
+            
+            if !id.isEmpty && id != profileId {
+                profileId = id
+            }
+        }
+    }
+    
+    private func isValidScholarId(_ id: String) -> Bool {
+        // Basic validation: should be alphanumeric and reasonable length
+        let pattern = "^[A-Za-z0-9_-]{8,20}$"
+        let regex = try? NSRegularExpression(pattern: pattern)
+        let range = NSRange(location: 0, length: id.count)
+        return regex?.firstMatch(in: id, options: [], range: range) != nil
+    }
+}
+
+struct EditProfileSheet: View {
+    let profile: ScholarProfile
+    let onUpdate: (ScholarProfile) -> Void
+    let onDelete: () -> Void
+    
+    @State private var profileName: String
+    @State private var profileId: String
+    @State private var urlInput: String = ""
+    @State private var showingError = false
+    @State private var errorMessage = ""
+    @State private var showingDeleteConfirmation = false
+    
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var focusedField: Field?
+    
+    enum Field {
+        case name, url, id
+    }
+    
+    init(profile: ScholarProfile, onUpdate: @escaping (ScholarProfile) -> Void, onDelete: @escaping () -> Void) {
+        self.profile = profile
+        self.onUpdate = onUpdate
+        self.onDelete = onDelete
+        self._profileName = State(initialValue: profile.name)
+        self._profileId = State(initialValue: profile.id)
+    }
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            // Header
+            HStack {
+                AppIconView(size: 32)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Edit Profile")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                    Text("Update researcher information")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+            }
+            
+            // Profile Name Section
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Profile Name", systemImage: "person.circle")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                
+                TextField("e.g., Dr. Jane Smith", text: $profileName)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focusedField, equals: .name)
+                    .onSubmit {
+                        focusedField = .url
+                    }
+            }
+            
+            // Scholar URL/ID Section
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Google Scholar Profile", systemImage: "link")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                
+                // URL Input with enhanced paste support
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        TextField("Paste Google Scholar URL here", text: $urlInput)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($focusedField, equals: .url)
+                            .onChange(of: urlInput) { newValue in
+                                extractScholarId(from: newValue)
+                            }
+                            .onSubmit {
+                                if profileId.isEmpty {
+                                    focusedField = .id
+                                } else {
+                                    submitForm()
+                                }
+                            }
+                        
+                        Button(action: {
+                            if let clipboardString = NSPasteboard.general.string(forType: .string) {
+                                urlInput = clipboardString
+                                extractScholarId(from: clipboardString)
+                            }
+                        }) {
+                            Image(systemName: "doc.on.clipboard")
+                        }
+                        .buttonStyle(.bordered)
+                        .help("Paste from clipboard")
+                    }
+                    
+                    Text("Example: https://scholar.google.com/citations?user=ABC123DEF&hl=en")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                // Direct ID input
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Scholar ID:")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    TextField("e.g., ABC123DEF456", text: $profileId)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($focusedField, equals: .id)
+                        .onSubmit {
+                            submitForm()
+                        }
+                }
+            }
+            
+            // Success indicator
+            if !profileId.isEmpty && profileId != profile.id {  
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Text("Scholar ID updated: \(profileId)")
+                        .font(.callout)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.green.opacity(0.1))
+                .cornerRadius(8)
+            }
+            
+            // Action buttons
+            HStack(spacing: 12) {
+                Button("Delete Profile") {
+                    showingDeleteConfirmation = true
+                }
+                .buttonStyle(.bordered)
+                .foregroundColor(.red)
+                
+                Spacer()
+                
+                Button("Cancel") {
+                    dismiss()
+                }
+                .buttonStyle(.bordered)
+                .keyboardShortcut(.cancelAction)
+                
+                Button("Save Changes") {
+                    submitForm()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(profileId.isEmpty || profileName.isEmpty)
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding()
+        .frame(width: 560)
+        .onAppear {
+            focusedField = .name
+        }
+        .alert("Error", isPresented: $showingError) {
+            Button("OK") { }
+        } message: {
+            Text(errorMessage)
+        }
+        .confirmationDialog("Delete Profile", isPresented: $showingDeleteConfirmation) {
+            Button("Delete \(profile.name)", role: .destructive) {
+                onDelete()
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Are you sure you want to delete '\(profile.name)'? This action cannot be undone.")
+        }
+    }
+    
+    private func submitForm() {
+        if profileId.isEmpty || profileName.isEmpty {
+            errorMessage = "Please fill in all fields"
+            showingError = true
+        } else if !isValidScholarId(profileId) {
+            errorMessage = "Invalid Scholar ID format. Please check your ID."
+            showingError = true
+        } else {
+            // Create new profile with updated values
+            let updatedProfile = ScholarProfile(id: profileId, name: profileName, sortOrder: profile.sortOrder)
+            var mutableProfile = updatedProfile
+            mutableProfile.isEnabled = profile.isEnabled
+            mutableProfile.recentGrowth = profile.recentGrowth
+            onUpdate(mutableProfile)
+            dismiss()
         }
     }
     

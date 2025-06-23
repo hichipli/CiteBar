@@ -81,8 +81,28 @@ import SwiftUI
         NSApp.activate(ignoringOtherApps: true)
     }
     
+    @objc func showSupport() {
+        // Show settings window and navigate to About tab with feedback section
+        showSettings()
+        
+        // Post a notification to switch to About tab and scroll to feedback
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            NotificationCenter.default.post(name: NSNotification.Name("ShowSupportSection"), object: nil)
+        }
+    }
+    
     @objc func refreshCitations() {
         citationManager?.checkCitations()
+    }
+    
+    func updateMenuBarDisplay() {
+        // Update menu bar display immediately with existing data
+        citationManager?.updateMenuBarWithCurrentData()
+    }
+    
+    func showNewProfileLoading(_ profile: ScholarProfile) {
+        // Show new profile immediately with loading status
+        menuBarManager?.showProfileLoading(profile)
     }
     
     @objc func openScholarProfile(_ sender: NSMenuItem) {

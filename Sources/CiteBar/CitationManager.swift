@@ -212,6 +212,32 @@ import SwiftSoup
             self.setupTimer()
         }
     }
+    
+    func updateMenuBarWithCurrentData() {
+        // Update menu display immediately without fetching new data
+        let profiles = settingsManager.settings.profiles.filter { $0.isEnabled }
+        if !profiles.isEmpty {
+            // Get last known citation data for these profiles
+            Task {
+                let records = await storageManager.getAllRecords()
+                var currentData: [ScholarProfile: Int] = [:]
+                
+                for profile in profiles {
+                    // Find the most recent record for this profile
+                    let profileRecords = records.filter { $0.profileId == profile.id }
+                    if let latestRecord = profileRecords.max(by: { $0.timestamp < $1.timestamp }) {
+                        currentData[profile] = latestRecord.citationCount
+                    }
+                }
+                
+                if !currentData.isEmpty {
+                    await MainActor.run {
+                        delegate?.citationsUpdated(currentData)
+                    }
+                }
+            }
+        }
+    }
 }
 
 enum CitationError: Error, LocalizedError {

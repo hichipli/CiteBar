@@ -85,6 +85,17 @@ import Foundation
         save()
     }
     
+    func reorderProfiles(_ profiles: [ScholarProfile]) {
+        // Update sort order based on new arrangement
+        var updatedProfiles: [ScholarProfile] = []
+        for (index, var profile) in profiles.enumerated() {
+            profile.sortOrder = index
+            updatedProfiles.append(profile)
+        }
+        settings.profiles = updatedProfiles
+        save()
+    }
+    
     private func enableAutoLaunch() {
         // Add to Login Items
         if Bundle.main.bundleIdentifier != nil {
