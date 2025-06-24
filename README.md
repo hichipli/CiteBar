@@ -31,7 +31,7 @@ Because refreshing your Google Scholar profile every 20 minutes isn't productive
 
 1. **Download** the latest release:
    - **[Click here to download CiteBar](https://github.com/hichipli/CiteBar/releases)**
-   - Choose the latest `CiteBar-x.x.x-[your-mac-arch]-[date].dmg` file
+   - Choose the latest `CiteBar-x.x.x-arm64-[date].dmg` file (Apple Silicon only)
    - Double-click the DMG file when downloaded
    - Drag CiteBar.app to the Applications folder
 
@@ -304,8 +304,10 @@ We take research ethics seriously:
 
 **System Requirements:**
 - macOS 13.0 (Ventura) or later
-- 64-bit Intel or Apple Silicon Mac
+- Apple Silicon Mac (M1, M2, M3, M4 series)
 - 50MB free disk space
+
+**Note:** Currently supports Apple Silicon Macs only. Intel Mac support coming soon!
 
 **Dependencies:**
 - SwiftSoup (HTML parsing)

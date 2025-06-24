@@ -58,6 +58,7 @@ Don't worry, we don't bite! Here's how to get your feet wet:
 
 You'll need:
 - macOS 13.0+ (this is a Mac app, after all)
+- Apple Silicon Mac (M1, M2, M3, M4 series - Intel support coming soon!)
 - Xcode Command Line Tools
 - A functioning internet connection (for Google Scholar scraping)
 - Coffee or tea (highly recommended)
@@ -280,7 +281,7 @@ Before/after screenshots help reviewers understand the impact.
 - [ ] Code builds without warnings
 - [ ] Tests pass
 - [ ] Documentation updated
-- [ ] Tested on Intel and Apple Silicon (if possible)
+- [ ] Tested on Apple Silicon (Intel support coming soon)
 ```
 
 ### Review Process
