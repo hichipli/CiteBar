@@ -5,9 +5,9 @@ PRODUCT_NAME = CiteBar
 SCHEME = CiteBar
 BUILD_DIR = .build
 
-# Extract version from Info.plist (primary source)
-VERSION = $(shell /usr/bin/plutil -extract CFBundleShortVersionString raw Info.plist)
-BUILD_VERSION = $(shell /usr/bin/plutil -extract CFBundleVersion raw Info.plist)
+# Extract version from AppVersion.swift (primary source)
+VERSION = $(shell grep 'static let current' Sources/CiteBar/AppVersion.swift | cut -d'"' -f2)
+BUILD_VERSION = $(shell grep 'static let build' Sources/CiteBar/AppVersion.swift | cut -d'"' -f2)
 
 # Detect architecture
 ARCH = $(shell uname -m)
@@ -65,7 +65,7 @@ install: build
 	mkdir -p "$(PRODUCT_NAME).app/Contents/MacOS"
 	mkdir -p "$(PRODUCT_NAME).app/Contents/Resources"
 	cp ./.build/release/$(PRODUCT_NAME) "$(PRODUCT_NAME).app/Contents/MacOS/"
-	cp Info.plist "$(PRODUCT_NAME).app/Contents/"
+	./scripts/create-info-plist.sh "$(PRODUCT_NAME).app/Contents/Info.plist"
 	# Copy app icon
 	cp Assets.xcassets/AppIcon.appiconset/1024.png "$(PRODUCT_NAME).app/Contents/Resources/AppIcon.png" 2>/dev/null || true
 	cp Assets.xcassets/AppIcon.appiconset/512.png "$(PRODUCT_NAME).app/Contents/Resources/AppIcon@2x.png" 2>/dev/null || true
@@ -84,7 +84,7 @@ install-sudo: build
 	mkdir -p "$(PRODUCT_NAME).app/Contents/MacOS"
 	mkdir -p "$(PRODUCT_NAME).app/Contents/Resources"
 	cp ./.build/release/$(PRODUCT_NAME) "$(PRODUCT_NAME).app/Contents/MacOS/"
-	cp Info.plist "$(PRODUCT_NAME).app/Contents/"
+	./scripts/create-info-plist.sh "$(PRODUCT_NAME).app/Contents/Info.plist"
 	# Copy app icon
 	cp Assets.xcassets/AppIcon.appiconset/1024.png "$(PRODUCT_NAME).app/Contents/Resources/AppIcon.png" 2>/dev/null || true
 	cp Assets.xcassets/AppIcon.appiconset/512.png "$(PRODUCT_NAME).app/Contents/Resources/AppIcon@2x.png" 2>/dev/null || true
@@ -102,7 +102,7 @@ package: build
 	@mkdir -p "$(APP_BUNDLE)/Contents/MacOS"
 	@mkdir -p "$(APP_BUNDLE)/Contents/Resources"
 	@cp ./.build/release/$(PRODUCT_NAME) "$(APP_BUNDLE)/Contents/MacOS/" || { echo "❌ Failed to copy executable"; exit 1; }
-	@cp Info.plist "$(APP_BUNDLE)/Contents/" || { echo "❌ Failed to copy Info.plist"; exit 1; }
+	@./scripts/create-info-plist.sh "$(APP_BUNDLE)/Contents/Info.plist" || { echo "❌ Failed to create Info.plist"; exit 1; }
 	@# Copy app icons with error handling
 	@if [ -f "$(ICON_1024)" ]; then \
 		cp "$(ICON_1024)" "$(APP_BUNDLE)/Contents/Resources/AppIcon.png"; \
