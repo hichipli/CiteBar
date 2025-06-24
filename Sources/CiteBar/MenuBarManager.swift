@@ -1,6 +1,6 @@
 import Cocoa
 
-@MainActor class MenuBarManager {
+@MainActor class MenuBarManager: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private var currentCitations: [ScholarProfile: Int] = [:]
     private var lastError: String?
@@ -64,6 +64,9 @@ import Cocoa
         quitItem.target = NSApplication.shared.delegate
         quitItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: "Quit")
         menu.addItem(quitItem)
+        
+        // Set delegate to handle menu updates
+        menu.delegate = self
         
         return menu
     }
@@ -283,5 +286,29 @@ import Cocoa
         // Add the new profile to current citations with a loading indicator
         currentCitations[profile] = -1 // Use -1 to indicate loading
         updateMenu()
+    }
+    
+    // MARK: - NSMenuDelegate
+    
+    func menuWillOpen(_ menu: NSMenu) {
+        // Update relative time whenever menu is about to open
+        updateRelativeTime(in: menu)
+    }
+    
+    private func updateRelativeTime(in menu: NSMenu) {
+        guard let lastUpdate = settingsManager.settings.lastUpdateTime else { return }
+        
+        // Find the relative time menu item (it has a specific pattern)
+        for item in menu.items {
+            if item.tag == 100 && item.title.hasPrefix("  (") && item.title.hasSuffix(")") {
+                // This is the relative time item, update it
+                let relativeFormatter = RelativeDateTimeFormatter()
+                relativeFormatter.dateTimeStyle = .named
+                relativeFormatter.locale = Locale.current
+                let relativeTime = relativeFormatter.localizedString(for: lastUpdate, relativeTo: Date())
+                item.title = "  (\(relativeTime))"
+                break
+            }
+        }
     }
 }
