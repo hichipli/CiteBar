@@ -57,6 +57,12 @@ import Sparkle
     }
     
     private func setupUpdater() {
+        // Only set up Sparkle in release builds or when we have a proper bundle identifier
+        guard Bundle.main.bundleIdentifier != nil && Bundle.main.bundleIdentifier != "" else {
+            print("Debug mode: Skipping Sparkle setup due to missing bundle identifier")
+            return
+        }
+        
         // Create updater with configuration
         let updaterDelegate = UpdaterDelegate()
         
@@ -72,6 +78,8 @@ import Sparkle
             updater.automaticallyChecksForUpdates = true
             updater.updateCheckInterval = 86400 // 24 hours
         }
+        
+        print("Sparkle updater initialized successfully")
     }
     
     @objc private func menuBarClicked() {
@@ -137,7 +145,22 @@ import Sparkle
     }
     
     @objc func checkForUpdates() {
-        updaterController?.checkForUpdates(nil)
+        guard let updaterController = updaterController else {
+            print("Sparkle updater not available (likely debug mode)")
+            
+            // Show a simple alert in debug mode
+            DispatchQueue.main.async {
+                let alert = NSAlert()
+                alert.messageText = "Updates Not Available"
+                alert.informativeText = "Automatic updates are only available in release builds."
+                alert.alertStyle = .informational
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+            }
+            return
+        }
+        
+        updaterController.checkForUpdates(nil)
     }
     
     @objc func quitApp() {

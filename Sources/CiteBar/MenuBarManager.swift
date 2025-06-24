@@ -38,11 +38,18 @@ import Cocoa
         settingsItem.image = NSImage(systemSymbolName: "gear", accessibilityDescription: "Settings")
         menu.addItem(settingsItem)
         
-        // Check for Updates option
-        let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(AppDelegate.checkForUpdates), keyEquivalent: "")
-        updateItem.target = NSApplication.shared.delegate
-        updateItem.image = NSImage(systemSymbolName: "arrow.down.circle", accessibilityDescription: "Check for Updates")
-        menu.addItem(updateItem)
+        // Check for Updates option (only show if bundle identifier exists)
+        if Bundle.main.bundleIdentifier != nil && !Bundle.main.bundleIdentifier!.isEmpty {
+            let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(AppDelegate.checkForUpdates), keyEquivalent: "")
+            updateItem.target = NSApplication.shared.delegate
+            updateItem.image = NSImage(systemSymbolName: "arrow.down.circle", accessibilityDescription: "Check for Updates")
+            menu.addItem(updateItem)
+        } else {
+            let debugItem = NSMenuItem(title: "Debug Mode (No Updates)", action: nil, keyEquivalent: "")
+            debugItem.isEnabled = false
+            debugItem.image = NSImage(systemSymbolName: "ladybug", accessibilityDescription: "Debug Mode")
+            menu.addItem(debugItem)
+        }
         
         // Support/Feedback option
         let supportItem = NSMenuItem(title: "Support & Feedback", action: #selector(AppDelegate.showSupport), keyEquivalent: "")

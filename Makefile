@@ -66,9 +66,22 @@ install: build
 	mkdir -p "$(PRODUCT_NAME).app/Contents/Resources"
 	cp ./.build/release/$(PRODUCT_NAME) "$(PRODUCT_NAME).app/Contents/MacOS/"
 	./scripts/create-info-plist.sh "$(PRODUCT_NAME).app/Contents/Info.plist"
+	# Copy Sparkle framework if it exists
+	@if [ -d ".build/release/Sparkle.framework" ]; then \
+		mkdir -p "$(PRODUCT_NAME).app/Contents/Frameworks"; \
+		cp -R ".build/release/Sparkle.framework" "$(PRODUCT_NAME).app/Contents/Frameworks/"; \
+		echo "✅ Copied Sparkle framework"; \
+	else \
+		echo "⚠️  Warning: Sparkle framework not found"; \
+	fi
 	# Copy app icon
 	cp Assets.xcassets/AppIcon.appiconset/1024.png "$(PRODUCT_NAME).app/Contents/Resources/AppIcon.png" 2>/dev/null || true
 	cp Assets.xcassets/AppIcon.appiconset/512.png "$(PRODUCT_NAME).app/Contents/Resources/AppIcon@2x.png" 2>/dev/null || true
+	# Fix rpath for Sparkle framework
+	@if [ -d "$(PRODUCT_NAME).app/Contents/Frameworks/Sparkle.framework" ]; then \
+		echo "🔧 Fixing rpath for Sparkle framework..."; \
+		install_name_tool -add_rpath @loader_path/../Frameworks "$(PRODUCT_NAME).app/Contents/MacOS/$(PRODUCT_NAME)" 2>/dev/null || true; \
+	fi
 	# Apply ad-hoc code signing
 	@echo "🔐 Applying ad-hoc code signature..."
 	@codesign --force --deep --sign - "$(PRODUCT_NAME).app" || echo "⚠️  Warning: Code signing failed"
@@ -85,9 +98,22 @@ install-sudo: build
 	mkdir -p "$(PRODUCT_NAME).app/Contents/Resources"
 	cp ./.build/release/$(PRODUCT_NAME) "$(PRODUCT_NAME).app/Contents/MacOS/"
 	./scripts/create-info-plist.sh "$(PRODUCT_NAME).app/Contents/Info.plist"
+	# Copy Sparkle framework if it exists
+	@if [ -d ".build/release/Sparkle.framework" ]; then \
+		mkdir -p "$(PRODUCT_NAME).app/Contents/Frameworks"; \
+		cp -R ".build/release/Sparkle.framework" "$(PRODUCT_NAME).app/Contents/Frameworks/"; \
+		echo "✅ Copied Sparkle framework"; \
+	else \
+		echo "⚠️  Warning: Sparkle framework not found"; \
+	fi
 	# Copy app icon
 	cp Assets.xcassets/AppIcon.appiconset/1024.png "$(PRODUCT_NAME).app/Contents/Resources/AppIcon.png" 2>/dev/null || true
 	cp Assets.xcassets/AppIcon.appiconset/512.png "$(PRODUCT_NAME).app/Contents/Resources/AppIcon@2x.png" 2>/dev/null || true
+	# Fix rpath for Sparkle framework
+	@if [ -d "$(PRODUCT_NAME).app/Contents/Frameworks/Sparkle.framework" ]; then \
+		echo "🔧 Fixing rpath for Sparkle framework..."; \
+		install_name_tool -add_rpath @loader_path/../Frameworks "$(PRODUCT_NAME).app/Contents/MacOS/$(PRODUCT_NAME)" 2>/dev/null || true; \
+	fi
 	# Apply ad-hoc code signing before installation
 	@echo "🔐 Applying ad-hoc code signature..."
 	@codesign --force --deep --sign - "$(PRODUCT_NAME).app" || echo "⚠️  Warning: Code signing failed"
@@ -103,6 +129,14 @@ package: build
 	@mkdir -p "$(APP_BUNDLE)/Contents/Resources"
 	@cp ./.build/release/$(PRODUCT_NAME) "$(APP_BUNDLE)/Contents/MacOS/" || { echo "❌ Failed to copy executable"; exit 1; }
 	@./scripts/create-info-plist.sh "$(APP_BUNDLE)/Contents/Info.plist" || { echo "❌ Failed to create Info.plist"; exit 1; }
+	@# Copy Sparkle framework if it exists
+	@if [ -d ".build/release/Sparkle.framework" ]; then \
+		mkdir -p "$(APP_BUNDLE)/Contents/Frameworks"; \
+		cp -R ".build/release/Sparkle.framework" "$(APP_BUNDLE)/Contents/Frameworks/"; \
+		echo "✅ Copied Sparkle framework"; \
+	else \
+		echo "⚠️  Warning: Sparkle framework not found"; \
+	fi
 	@# Copy app icons with error handling
 	@if [ -f "$(ICON_1024)" ]; then \
 		cp "$(ICON_1024)" "$(APP_BUNDLE)/Contents/Resources/AppIcon.png"; \
@@ -115,6 +149,11 @@ package: build
 		echo "✅ Copied 512px icon"; \
 	else \
 		echo "⚠️  Warning: 512px icon not found"; \
+	fi
+	@# Fix rpath for Sparkle framework
+	@if [ -d "$(APP_BUNDLE)/Contents/Frameworks/Sparkle.framework" ]; then \
+		echo "🔧 Fixing rpath for Sparkle framework..."; \
+		install_name_tool -add_rpath @loader_path/../Frameworks "$(APP_BUNDLE)/Contents/MacOS/$(PRODUCT_NAME)" 2>/dev/null || true; \
 	fi
 	@# Apply ad-hoc code signing to prevent "damaged" error on other machines
 	@echo "🔐 Applying ad-hoc code signature..."

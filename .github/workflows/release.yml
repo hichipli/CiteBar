@@ -141,6 +141,9 @@ jobs:
         DMG_SHA256=$(shasum -a 256 "$DMG_FILE" | cut -d' ' -f1)
         CURRENT_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S %Z")
         
+        # Generate release notes from AppVersion.swift
+        RELEASE_NOTES_HTML=$(swift scripts/extract-release-notes.swift html)
+        
         # Create appcast.xml
         cat > appcast.xml << EOF
         <?xml version="1.0" encoding="utf-8"?>
@@ -154,16 +157,7 @@ jobs:
               <title>Version ${{ steps.get_version.outputs.VERSION }}</title>
               <pubDate>$CURRENT_DATE</pubDate>
               <description><![CDATA[
-                <h2>What's New in CiteBar ${{ steps.get_version.outputs.VERSION }}</h2>
-                <ul>
-                  <li>Added automatic update functionality via Sparkle framework</li>
-                  <li>Fixed citation history persistence issues on app reinstall</li>
-                  <li>Improved last update time display with specific timestamps</li>
-                  <li>Enhanced About page with better layout and feature highlights</li>
-                  <li>Updated Scholar Metrics header to show dynamic profile count</li>
-                  <li>Fixed auto-launch functionality using modern SMAppService API</li>
-                </ul>
-                <p>This update improves the overall reliability and user experience of CiteBar.</p>
+                $RELEASE_NOTES_HTML
               ]]></description>
               <enclosure url="https://github.com/hichipli/CiteBar/releases/download/${{ steps.get_version.outputs.TAG }}/${{ steps.get_version.outputs.DMG_NAME }}.dmg"
                          sparkle:version="${{ steps.get_version.outputs.VERSION }}"
@@ -178,33 +172,17 @@ jobs:
         EOF
         
     - name: Create Release
+      run: |
+        # Generate release notes from AppVersion.swift
+        RELEASE_NOTES_MARKDOWN=$(swift scripts/extract-release-notes.swift markdown)
+        echo "$RELEASE_NOTES_MARKDOWN" > release-notes.md
+        
+    - name: Publish Release
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ steps.get_version.outputs.TAG }}
         name: CiteBar ${{ steps.get_version.outputs.VERSION }}
-        body: |
-          ## What's New in CiteBar ${{ steps.get_version.outputs.VERSION }}
-          
-          - ✨ Added automatic update functionality via Sparkle framework
-          - 🔧 Fixed citation history persistence issues on app reinstall  
-          - ⏰ Improved last update time display with specific timestamps
-          - 🎨 Enhanced About page with better layout and feature highlights
-          - 📊 Updated Scholar Metrics header to show dynamic profile count
-          - 🚀 Fixed auto-launch functionality using modern SMAppService API
-          
-          This update improves the overall reliability and user experience of CiteBar.
-          
-          ## Installation
-          
-          1. Download the DMG file below
-          2. Open the DMG and drag CiteBar to your Applications folder
-          3. Launch CiteBar from Applications
-          4. Configure your Google Scholar profiles in Settings
-          
-          ## System Requirements
-          
-          - macOS 13.0 or later
-          - Intel or Apple Silicon Mac
+        body_path: release-notes.md
         draft: false
         prerelease: false
         files: |
