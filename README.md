@@ -30,16 +30,28 @@ Because refreshing your Google Scholar profile every 20 minutes isn't productive
 **Just want to use CiteBar?** Skip the technical stuff and get started in 60 seconds:
 
 1. **Download** the latest release:
-   ```
-   → Go to Releases page
-   → Download CiteBar-x.x.x-[your-mac-arch]-[date].dmg
-   → Double-click DMG, drag to Applications
-   ```
+   - **[Click here to download CiteBar](https://github.com/hichipli/CiteBar/releases)**
+   - Choose the latest `CiteBar-x.x.x-[your-mac-arch]-[date].dmg` file
+   - Double-click the DMG file when downloaded
+   - Drag CiteBar.app to the Applications folder
 
 2. **Handle macOS security** (because we're not paying Apple $99/year... yet):
+   
+   **Method 1 - Using Terminal (Quickest):**
+   - Press `Cmd + Space` to open Spotlight search
+   - Type "Terminal" and press Enter
+   - Copy and paste this command, then press Enter:
    ```bash
    xattr -cr /Applications/CiteBar.app
    ```
+   
+   **Method 2 - Through System Settings (No Terminal Required):**
+   - Try to run CiteBar from Applications - it will show a security warning
+   - Go to **System Settings** (or **System Preferences** on older macOS)
+   - Click **Privacy & Security** 
+   - Scroll down to the **Security** section
+   - You'll see a message about CiteBar being blocked
+   - Click **"Open Anyway"** button next to the message
 
 3. **Set up your profile**:
    - Click the CiteBar icon in menu bar
