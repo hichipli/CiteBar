@@ -72,11 +72,12 @@ import Sparkle
         
         // Create updater with configuration
         let updaterDelegate = UpdaterDelegate()
+        let userDriverDelegate = CustomUserDriverDelegate()
         
         updaterController = SPUStandardUpdaterController(
             startingUpdater: true,
             updaterDelegate: updaterDelegate,
-            userDriverDelegate: nil
+            userDriverDelegate: userDriverDelegate
         )
         
         // Configure updater settings
@@ -254,6 +255,36 @@ extension AppDelegate: NSWindowDelegate {
         // Ensure window is properly shown
         if let window = notification.object as? NSWindow, window == settingsWindow {
             window.makeKeyAndOrderFront(nil)
+        }
+    }
+}
+
+// MARK: - Custom Sparkle User Driver Delegate
+class CustomUserDriverDelegate: NSObject, SPUStandardUserDriverDelegate {
+    
+    // Custom implementation for "no updates available" dialog
+    func standardUserDriverDidNotFindUpdate() {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "You're up to date!"
+            alert.informativeText = "CiteBar \(AppVersion.current) is currently the newest version available."
+            alert.alertStyle = .informational
+            
+            // Add "OK" button
+            alert.addButton(withTitle: "OK")
+            
+            // Add "View Releases" button
+            let viewReleasesButton = alert.addButton(withTitle: "View Releases")
+            viewReleasesButton.keyEquivalent = ""
+            
+            let response = alert.runModal()
+            
+            // Handle button responses
+            if response == .alertSecondButtonReturn { // "View Releases" button
+                if let url = URL(string: "https://github.com/hichipli/CiteBar/releases") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
         }
     }
 }
