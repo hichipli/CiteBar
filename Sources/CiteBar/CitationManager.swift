@@ -9,6 +9,12 @@ import SwiftSoup
     
     init() {
         setupTimer()
+        // Debug storage status at startup
+        Task {
+            let info = await storageManager.getStorageInfo()
+            print("Storage status: \(info.recordCount) records, file exists: \(info.fileExists)")
+            print("Storage path: \(info.filePath)")
+        }
     }
     
     deinit {

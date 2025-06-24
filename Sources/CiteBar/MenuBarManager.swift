@@ -14,7 +14,9 @@ import Cocoa
         let menu = NSMenu()
         
         // Citation display section with dynamic header - this will be updated in updateMenu()
-        let citationHeader = NSMenuItem(title: "Citation Tracking", action: nil, keyEquivalent: "")
+        let profileCount = settingsManager.settings.profiles.count
+        let headerTitle = profileCount == 1 ? "Scholar Metrics (1 Profile)" : "Scholar Metrics (\(profileCount) Profiles)"
+        let citationHeader = NSMenuItem(title: headerTitle, action: nil, keyEquivalent: "")
         citationHeader.tag = 999 // Special tag for header
         citationHeader.isEnabled = false
         menu.addItem(citationHeader)
@@ -80,6 +82,13 @@ import Cocoa
     private func updateMenu() {
         guard let menu = statusItem.menu else { return }
         
+        // Update header with current profile count
+        if let headerItem = menu.items.first(where: { $0.tag == 999 }) {
+            let profileCount = settingsManager.settings.profiles.count
+            let headerTitle = profileCount == 1 ? "Scholar Metrics (1 Profile)" : "Scholar Metrics (\(profileCount) Profiles)"
+            headerItem.title = headerTitle
+        }
+        
         // Remove existing citation items (keep header, separator, and control items)
         let itemsToRemove = menu.items.filter { item in
             return item.tag == 100 // Citation items will have tag 100
@@ -100,15 +109,33 @@ import Cocoa
             menu.insertItem(refreshingItem, at: insertIndex)
             insertIndex += 1
         } else if let lastUpdate = settingsManager.settings.lastUpdateTime {
-            let timeFormatter = RelativeDateTimeFormatter()
-            timeFormatter.dateTimeStyle = .named
-            let timeString = timeFormatter.localizedString(for: lastUpdate, relativeTo: Date())
+            // Format specific time with user's timezone
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateStyle = .short
+            dateFormatter.timeStyle = .short
+            dateFormatter.locale = Locale.current
+            let specificTime = dateFormatter.string(from: lastUpdate)
             
-            let updateItem = NSMenuItem(title: "Last updated \(timeString)", action: nil, keyEquivalent: "")
-            updateItem.tag = 100
-            updateItem.isEnabled = false
-            updateItem.image = NSImage(systemSymbolName: "clock", accessibilityDescription: "Last updated")
-            menu.insertItem(updateItem, at: insertIndex)
+            // Format relative time
+            let relativeFormatter = RelativeDateTimeFormatter()
+            relativeFormatter.dateTimeStyle = .named
+            relativeFormatter.locale = Locale.current
+            let relativeTime = relativeFormatter.localizedString(for: lastUpdate, relativeTo: Date())
+            
+            // Add specific time item
+            let specificTimeItem = NSMenuItem(title: "Last updated: \(specificTime)", action: nil, keyEquivalent: "")
+            specificTimeItem.tag = 100
+            specificTimeItem.isEnabled = false
+            specificTimeItem.image = NSImage(systemSymbolName: "clock", accessibilityDescription: "Last updated")
+            menu.insertItem(specificTimeItem, at: insertIndex)
+            insertIndex += 1
+            
+            // Add relative time item
+            let relativeTimeItem = NSMenuItem(title: "  (\(relativeTime))", action: nil, keyEquivalent: "")
+            relativeTimeItem.tag = 100
+            relativeTimeItem.isEnabled = false
+            relativeTimeItem.image = NSImage(systemSymbolName: "timer", accessibilityDescription: "Time ago")
+            menu.insertItem(relativeTimeItem, at: insertIndex)
             insertIndex += 1
         }
         

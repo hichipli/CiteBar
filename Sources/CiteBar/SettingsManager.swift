@@ -1,4 +1,5 @@
 import Foundation
+import ServiceManagement
 
 @MainActor class SettingsManager: ObservableObject {
     static let shared = SettingsManager()
@@ -75,6 +76,18 @@ import Foundation
         }
     }
     
+    func isAutoLaunchEnabled() -> Bool {
+        // Check SMAppService status first
+        switch SMAppService.mainApp.status {
+        case .enabled:
+            return true
+        case .notRegistered, .notFound, .requiresApproval:
+            return false
+        @unknown default:
+            return false
+        }
+    }
+    
     func setLastUpdateTime(_ time: Date) {
         settings.lastUpdateTime = time
         save()
@@ -97,7 +110,31 @@ import Foundation
     }
     
     private func enableAutoLaunch() {
-        // Add to Login Items
+        // Use SMAppService for modern login item management
+        do {
+            try SMAppService.mainApp.register()
+            print("Successfully registered for auto-launch")
+        } catch {
+            print("Failed to register for auto-launch: \(error)")
+            // Fallback to older Login Items if SMAppService fails
+            enableAutoLaunchFallback()
+        }
+    }
+    
+    private func disableAutoLaunch() {
+        // Use SMAppService to unregister
+        do {
+            try SMAppService.mainApp.unregister()
+            print("Successfully unregistered from auto-launch")
+        } catch {
+            print("Failed to unregister from auto-launch: \(error)")
+            // Fallback to older Login Items cleanup if SMAppService fails
+            disableAutoLaunchFallback()
+        }
+    }
+    
+    private func enableAutoLaunchFallback() {
+        // Fallback method using AppleScript for older systems
         if Bundle.main.bundleIdentifier != nil {
             let script = """
                 tell application "System Events"
@@ -110,8 +147,8 @@ import Foundation
         }
     }
     
-    private func disableAutoLaunch() {
-        // Remove from Login Items
+    private func disableAutoLaunchFallback() {
+        // Fallback method using AppleScript for older systems
         let script = """
             tell application "System Events"
                 delete every login item whose name is "CiteBar"

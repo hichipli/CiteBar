@@ -3,6 +3,7 @@ import Foundation
 actor StorageManager {
     private let citationHistoryURL: URL
     private var citationHistory: [CitationRecord] = []
+    private var isInitialized = false
     
     init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -12,15 +13,37 @@ actor StorageManager {
         
         citationHistoryURL = appFolder.appendingPathComponent("citation_history.json")
         
-        Task {
-            await loadCitationHistory()
+        // Load citation history synchronously during initialization
+        loadCitationHistory()
+    }
+    
+    private nonisolated func loadCitationHistory() {
+        do {
+            let data = try Data(contentsOf: citationHistoryURL)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let history = try decoder.decode([CitationRecord].self, from: data)
+            Task {
+                await self.setCitationHistory(history)
+                print("Successfully loaded \(history.count) citation records from storage")
+            }
+        } catch {
+            print("Failed to load citation history: \(error)")
+            // Initialize with empty history if loading fails
+            Task {
+                await self.setCitationHistory([])
+            }
         }
     }
     
-    private func loadCitationHistory() {
-        if let data = try? Data(contentsOf: citationHistoryURL),
-           let history = try? JSONDecoder().decode([CitationRecord].self, from: data) {
-            citationHistory = history
+    private func setCitationHistory(_ history: [CitationRecord]) {
+        citationHistory = history
+        isInitialized = true
+    }
+    
+    private func ensureInitialized() async {
+        while !isInitialized {
+            try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
         }
     }
     
@@ -28,14 +51,23 @@ actor StorageManager {
         do {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = .prettyPrinted
             let data = try encoder.encode(citationHistory)
-            try data.write(to: citationHistoryURL)
+            
+            // Write to a temporary file first, then move to final location
+            // This prevents corruption if the app crashes during write
+            let tempURL = citationHistoryURL.appendingPathExtension("tmp")
+            try data.write(to: tempURL)
+            _ = try FileManager.default.replaceItem(at: citationHistoryURL, withItemAt: tempURL, backupItemName: nil, options: [], resultingItemURL: nil)
+            
+            print("Successfully saved \(citationHistory.count) citation records to storage")
         } catch {
             print("Failed to save citation history: \(error)")
         }
     }
     
-    func saveCitationRecord(_ record: CitationRecord) {
+    func saveCitationRecord(_ record: CitationRecord) async {
+        await ensureInitialized()
         citationHistory.append(record)
         
         // Keep only the last 1000 records per profile to manage storage
@@ -51,7 +83,8 @@ actor StorageManager {
         saveCitationHistory()
     }
     
-    func getCitationHistory(for profileId: String, days: Int = 30) -> [CitationRecord] {
+    func getCitationHistory(for profileId: String, days: Int = 30) async -> [CitationRecord] {
+        await ensureInitialized()
         let cutoffDate = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
         
         return citationHistory
@@ -59,8 +92,8 @@ actor StorageManager {
             .sorted { $0.timestamp < $1.timestamp }
     }
     
-    func calculateRecentGrowth(for profileId: String, days: Int = 30) -> Int? {
-        let records = getCitationHistory(for: profileId, days: days)
+    func calculateRecentGrowth(for profileId: String, days: Int = 30) async -> Int? {
+        let records = await getCitationHistory(for: profileId, days: days)
         
         guard let oldest = records.first,
               let newest = records.last,
@@ -71,7 +104,8 @@ actor StorageManager {
         return newest.citationCount - oldest.citationCount
     }
     
-    func getLatestCitationCount(for profileId: String) -> Int? {
+    func getLatestCitationCount(for profileId: String) async -> Int? {
+        await ensureInitialized()
         return citationHistory
             .filter { $0.profileId == profileId }
             .sorted { $0.timestamp > $1.timestamp }
@@ -79,19 +113,32 @@ actor StorageManager {
             .citationCount
     }
     
-    func getCitationTrend(for profileId: String, days: Int = 30) -> [(Date, Int)] {
-        let records = getCitationHistory(for: profileId, days: days)
+    func getCitationTrend(for profileId: String, days: Int = 30) async -> [(Date, Int)] {
+        let records = await getCitationHistory(for: profileId, days: days)
         return records.map { ($0.timestamp, $0.citationCount) }
     }
     
-    func getAllRecords() -> [CitationRecord] {
+    func getAllRecords() async -> [CitationRecord] {
+        await ensureInitialized()
         return citationHistory
     }
     
-    func cleanupOldRecords(olderThan days: Int = 365) {
+    func cleanupOldRecords(olderThan days: Int = 365) async {
+        await ensureInitialized()
         let cutoffDate = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
         
         citationHistory.removeAll { $0.timestamp < cutoffDate }
         saveCitationHistory()
+    }
+    
+    func getStorageInfo() async -> (recordCount: Int, filePath: String, fileExists: Bool) {
+        await ensureInitialized()
+        let fileExists = FileManager.default.fileExists(atPath: citationHistoryURL.path)
+        return (citationHistory.count, citationHistoryURL.path, fileExists)
+    }
+    
+    func forceReload() {
+        print("Force reloading citation history from disk...")
+        loadCitationHistory()
     }
 }
