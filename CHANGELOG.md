@@ -5,6 +5,27 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2025-01-15
+
+### Fixed
+- **Startup Data Loading**: Fixed issue where app showed "No data available" on restart despite having historical citation data
+- **Offline Experience**: App now displays last known citation counts immediately on launch, even without network
+- **Network Error Handling**: Improved error handling to preserve displayed historical data during network failures
+
+### Enhanced
+- **About Page Design**: Completely redesigned with professional, clean layout and left-aligned text for better readability
+- **Startup Sequence**: Modified app launch to prioritize loading historical data before attempting network requests
+- **Empty State Messages**: Better user feedback with loading indicators and helpful messages
+- **Visual Hierarchy**: Streamlined Settings interface with improved component organization
+
+### Technical
+- Modified `AppDelegate.applicationDidFinishLaunching` to load historical data first, then fetch updates
+- Enhanced `CitationManager.updateMenuBarWithCurrentData` with better error handling and growth calculation
+- Improved `MenuBarManager.updateMenu` with smarter empty state handling
+- Created reusable `FeatureRow` and `SupportRow` components for About page
+- Fixed color compatibility issues for better macOS version support
+- Added comprehensive logging for startup data loading diagnostics
+
 ## [1.3.1] - 2025-06-24
 
 ### Added

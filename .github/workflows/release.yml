@@ -70,6 +70,11 @@ jobs:
         
     - name: Build and Package
       run: |
+        # Verify version was updated correctly
+        UPDATED_VERSION=$(grep 'static let current' Sources/CiteBar/AppVersion.swift | cut -d'"' -f2)
+        echo "Updated version in code: $UPDATED_VERSION"
+        echo "Expected version: ${{ steps.get_version.outputs.VERSION }}"
+        
         # Create properly configured app bundle with Sparkle framework, rpath fixes, and signing
         make package
         
@@ -78,19 +83,32 @@ jobs:
         # Use Makefile to create DMG (it will handle everything properly)
         make dmg
         
-        # Move DMG to expected filename format
+        # Get the actual DMG file created by Makefile
         MAKEFILE_DMG=$(ls dist/*.dmg | head -1)
-        EXPECTED_DMG="${{ steps.get_version.outputs.DMG_NAME }}.dmg"
+        EXPECTED_DMG="dist/${{ steps.get_version.outputs.DMG_NAME }}.dmg"
+        
+        echo "Makefile created: $MAKEFILE_DMG"
+        echo "Expected filename: $EXPECTED_DMG"
         
         if [ "$MAKEFILE_DMG" != "$EXPECTED_DMG" ]; then
           mv "$MAKEFILE_DMG" "$EXPECTED_DMG"
           echo "Renamed DMG: $MAKEFILE_DMG -> $EXPECTED_DMG"
+        else
+          echo "DMG filename is already correct"
+        fi
+        
+        # Verify the final DMG exists
+        if [ ! -f "$EXPECTED_DMG" ]; then
+          echo "Error: Expected DMG file not found: $EXPECTED_DMG"
+          echo "Available files in dist/:"
+          ls -la dist/
+          exit 1
         fi
         
     - name: Generate Appcast
       run: |
         # Get file size and calculate SHA256
-        DMG_FILE="${{ steps.get_version.outputs.DMG_NAME }}.dmg"
+        DMG_FILE="dist/${{ steps.get_version.outputs.DMG_NAME }}.dmg"
         DMG_SIZE=$(stat -f%z "$DMG_FILE")
         DMG_SHA256=$(shasum -a 256 "$DMG_FILE" | cut -d' ' -f1)
         CURRENT_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S %Z")
@@ -140,7 +158,7 @@ jobs:
         draft: false
         prerelease: false
         files: |
-          ${{ steps.get_version.outputs.DMG_NAME }}.dmg
+          dist/${{ steps.get_version.outputs.DMG_NAME }}.dmg
           appcast.xml
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

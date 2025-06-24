@@ -384,165 +384,234 @@ struct GeneralTab: View {
 struct AboutTab: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 20) {
-                // CiteBar helps section at the top
-                VStack(spacing: 16) {
-                    Text("How CiteBar Helps")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(alignment: .top, spacing: 12) {
-                            Image(systemName: "chart.line.uptrend.xyaxis.circle.fill")
-                                .foregroundColor(.blue)
-                                .font(.title3)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Real-time Citation Tracking")
-                                    .font(.headline)
-                                Text("Monitor your Google Scholar citation metrics directly from your menu bar without manual checking.")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            Spacer()
-                        }
-                        
-                        HStack(alignment: .top, spacing: 12) {
-                            Image(systemName: "person.2.circle.fill")
-                                .foregroundColor(.green)
-                                .font(.title3)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Multiple Profile Support")
-                                    .font(.headline)
-                                Text("Track citation counts for multiple researchers, perfect for collaborations and team oversight.")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            Spacer()
-                        }
-                        
-                        HStack(alignment: .top, spacing: 12) {
-                            Image(systemName: "bell.circle.fill")
-                                .foregroundColor(.orange)
-                                .font(.title3)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Productivity Focus")
-                                    .font(.headline)
-                                Text("Stay focused on research while staying informed about your academic impact and growth.")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            Spacer()
-                        }
-                    }
-                }
-                .padding(.vertical, 8)
-                
-                Divider()
-                
-                // Feedback & Support section
-                VStack(spacing: 16) {
-                    Text("Feedback & Support")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(alignment: .center, spacing: 12) {
-                            Image(systemName: "envelope.circle.fill")
-                                .foregroundColor(.blue)
-                                .font(.title3)
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Button("Email Support") {
-                                    if let url = URL(string: "mailto:info@hichipli.com") {
-                                        NSWorkspace.shared.open(url)
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundColor(.blue)
-                                .font(.headline)
-                                
-                                Text("info@hichipli.com")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            Spacer()
-                        }
-                        
-                        HStack(alignment: .center, spacing: 12) {
-                            Image(systemName: "globe.badge.chevron.backward")
-                                .foregroundColor(.purple)
-                                .font(.title3)
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Button("GitHub Repository") {
-                                    if let url = URL(string: "https://github.com/hichipli/CiteBar") {
-                                        NSWorkspace.shared.open(url)
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundColor(.purple)
-                                .font(.headline)
-                                
-                                Text("Report issues & contribute")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            Spacer()
-                        }
-                    }
-                }
-                .padding(.vertical, 8)
-                
-                Divider()
-                
-                // Product info section at the bottom
+            VStack(spacing: 24) {
+                // App header section
                 VStack(spacing: 16) {
                     HStack(spacing: 16) {
-                        AppIconView(size: 64)
+                        AppIconView(size: 56)
                         
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 6) {
                             Text("CiteBar")
                                 .font(.title)
                                 .fontWeight(.bold)
                             
                             Text("Citation Tracking for Academics")
-                                .font(.headline)
-                                .foregroundColor(.secondary)
-                            
-                            Text(AppVersion.displayString)
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(Color.secondary.opacity(0.1))
-                                .cornerRadius(4)
+                            
+                            HStack(spacing: 8) {
+                                Text(AppVersion.displayString)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.secondary.opacity(0.1))
+                                    .cornerRadius(3)
+                                
+                                Text("macOS")
+                                    .font(.caption)
+                                    .foregroundColor(.blue)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.blue.opacity(0.1))
+                                    .cornerRadius(3)
+                            }
                         }
                         
                         Spacer()
                     }
-                    
-                    Text("Built with passion for the academic community.")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 8)
                 }
-                .padding(.vertical, 12)
                 
-                Spacer(minLength: 20)
+                Divider()
+                
+                // Key features section
+                VStack(spacing: 16) {
+                    HStack {
+                        Text("Key Features")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                        Spacer()
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 12) {
+                        FeatureRow(
+                            icon: "chart.line.uptrend.xyaxis",
+                            iconColor: .blue,
+                            title: "Real-time Citation Tracking",
+                            description: "Monitor Google Scholar metrics directly from your menu bar"
+                        )
+                        
+                        FeatureRow(
+                            icon: "person.2",
+                            iconColor: .green,
+                            title: "Multiple Profile Support",
+                            description: "Track citations for multiple researchers and collaborators"
+                        )
+                        
+                        FeatureRow(
+                            icon: "clock.arrow.circlepath",
+                            iconColor: .orange,
+                            title: "Configurable Updates",
+                            description: "Set custom refresh intervals to respect rate limits"
+                        )
+                        
+                        FeatureRow(
+                            icon: "chart.xyaxis.line",
+                            iconColor: .purple,
+                            title: "Historical Data",
+                            description: "View citation growth trends over time"
+                        )
+                    }
+                }
+                
+                Divider()
+                
+                // Support section
+                VStack(spacing: 16) {
+                    HStack {
+                        Text("Support & Feedback")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                        Spacer()
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 10) {
+                        SupportRow(
+                            icon: "envelope",
+                            iconColor: .blue,
+                            title: "Email Support",
+                            subtitle: "info@hichipli.com",
+                            action: {
+                                if let url = URL(string: "mailto:info@hichipli.com") {
+                                    NSWorkspace.shared.open(url)
+                                }
+                            }
+                        )
+                        
+                        SupportRow(
+                            icon: "globe",
+                            iconColor: .purple,
+                            title: "GitHub Repository",
+                            subtitle: "Report issues & contribute",
+                            action: {
+                                if let url = URL(string: "https://github.com/hichipli/CiteBar") {
+                                    NSWorkspace.shared.open(url)
+                                }
+                            }
+                        )
+                    }
+                }
+                
+                Divider()
+                
+                // Footer section
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Built with passion for the academic community.")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            
+                            Text("Helping researchers focus on what matters most.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                    }
+                    
+                    HStack {
+                        Text("© 2025 CiteBar")
+                            .font(.caption)
+                            .foregroundColor(.secondary.opacity(0.7))
+                        
+                        Spacer()
+                        
+                        Text("Made for macOS")
+                            .font(.caption)
+                            .foregroundColor(.secondary.opacity(0.7))
+                    }
+                }
+                
+                Spacer(minLength: 16)
             }
-            .padding()
-            .frame(maxWidth: .infinity)
+            .padding(20)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+struct FeatureRow: View {
+    let icon: String
+    let iconColor: Color
+    let title: String
+    let description: String
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .foregroundColor(iconColor)
+                .font(.system(size: 16, weight: .medium))
+                .frame(width: 20, height: 20)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                
+                Text(description)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            
+            Spacer()
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+struct SupportRow: View {
+    let icon: String
+    let iconColor: Color
+    let title: String
+    let subtitle: String
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: icon)
+                    .foregroundColor(iconColor)
+                    .font(.system(size: 16, weight: .medium))
+                    .frame(width: 20, height: 20)
+                
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                    
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .foregroundColor(.secondary)
+                    .font(.caption)
+            }
+            .padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            if hovering {
+                NSCursor.pointingHand.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
     }
 }
 

@@ -3,10 +3,10 @@ import Foundation
 /// Centralized version management for CiteBar
 struct AppVersion {
     /// Current application version
-    static let current: String = "1.3.1"
+    static let current: String = "1.3.2"
     
     /// Current build number
-    static let build: String = "5"
+    static let build: String = "6"
     
     /// Version display string for UI
     static let displayString: String = "Version \(current)"
@@ -34,21 +34,21 @@ extension AppVersion {
     static let releaseNotes = ReleaseNotes(
         version: current,
         highlights: [
-            "Added automatic update functionality via Sparkle framework",
-            "Fixed citation history persistence issues on app reinstall",
-            "Improved last update time display with specific timestamps",
-            "Enhanced About page with better layout and feature highlights",
-            "Updated Scholar Metrics header to show dynamic profile count",
-            "Fixed auto-launch functionality using modern SMAppService API"
+            "Fixed startup data loading - now shows historical citation data immediately on launch",
+            "Improved offline experience - displays last known citation counts when network is unavailable",
+            "Redesigned About page with professional, clean layout and left-aligned text",
+            "Enhanced startup sequence to prioritize historical data before network requests",
+            "Better error handling to preserve displayed data during network failures",
+            "Streamlined Settings interface with improved visual hierarchy"
         ],
-        description: "This update improves the overall reliability and user experience of CiteBar.",
+        description: "This update focuses on improving the app startup experience and ensuring citation data is always available, even when offline. The interface has been refined for a more professional appearance.",
         technicalNotes: [
-            "Integrated Sparkle 2.6.0 for automatic updates",
-            "Implemented atomic file writes for data safety",
-            "Added initialization state tracking for thread-safe data access",
-            "Created automated release pipeline with GitHub Actions",
-            "Enhanced error handling and logging for storage operations",
-            "Improved data loading reliability with proper async patterns"
+            "Modified app launch sequence to load historical data first, then fetch updates",
+            "Improved CitationManager to avoid overriding displayed data on network errors",
+            "Enhanced MenuBarManager with better empty state handling and loading indicators",
+            "Redesigned AboutTab with reusable FeatureRow and SupportRow components",
+            "Fixed color compatibility issues for better macOS version support",
+            "Added comprehensive logging for startup data loading diagnostics"
         ]
     )
     

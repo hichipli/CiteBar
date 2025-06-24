@@ -247,10 +247,25 @@ import Cocoa
                 helpItem.isEnabled = false
                 menu.insertItem(helpItem, at: insertIndex)
             } else {
-                let noDataItem = NSMenuItem(title: "No citation data available", action: nil, keyEquivalent: "")
-                noDataItem.tag = 100
-                noDataItem.isEnabled = false
-                menu.insertItem(noDataItem, at: insertIndex)
+                // Check if we have any profiles configured
+                if !settingsManager.settings.profiles.isEmpty {
+                    let noDataItem = NSMenuItem(title: "Loading historical data...", action: nil, keyEquivalent: "")
+                    noDataItem.tag = 100
+                    noDataItem.isEnabled = false
+                    noDataItem.image = NSImage(systemSymbolName: "clock", accessibilityDescription: "Loading")
+                    menu.insertItem(noDataItem, at: insertIndex)
+                    insertIndex += 1
+                    
+                    let helpItem = NSMenuItem(title: "  Try Refresh if data doesn't appear", action: nil, keyEquivalent: "")
+                    helpItem.tag = 100
+                    helpItem.isEnabled = false
+                    menu.insertItem(helpItem, at: insertIndex)
+                } else {
+                    let noDataItem = NSMenuItem(title: "No profiles configured", action: nil, keyEquivalent: "")
+                    noDataItem.tag = 100
+                    noDataItem.isEnabled = false
+                    menu.insertItem(noDataItem, at: insertIndex)
+                }
             }
         }
     }

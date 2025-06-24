@@ -14,6 +14,13 @@ import SwiftSoup
             let info = await storageManager.getStorageInfo()
             print("Storage status: \(info.recordCount) records, file exists: \(info.fileExists)")
             print("Storage path: \(info.filePath)")
+            
+            // If we have historical data, log which profiles have data
+            if info.recordCount > 0 {
+                let records = await storageManager.getAllRecords()
+                let profileIds = Set(records.map { $0.profileId })
+                print("Historical data available for profile IDs: \(profileIds)")
+            }
         }
     }
     
@@ -103,7 +110,26 @@ import SwiftSoup
             if !results.isEmpty {
                 delegate?.citationsUpdated(results)
             } else {
-                delegate?.citationCheckFailed(CitationError.noDataAvailable)
+                // If network request failed but we might have historical data showing,
+                // don't call citationCheckFailed as it would show error and hide historical data
+                // Instead, just log the issue
+                print("Network request completed but no new data retrieved")
+                
+                // Only show error if we have no historical data available
+                // Check if we have any stored data for current profiles
+                Task {
+                    let profiles = settingsManager.settings.profiles.filter { $0.isEnabled }
+                    let records = await storageManager.getAllRecords()
+                    let hasHistoricalData = profiles.contains { profile in
+                        records.contains { $0.profileId == profile.id }
+                    }
+                    
+                    if !hasHistoricalData {
+                        await MainActor.run {
+                            delegate?.citationCheckFailed(CitationError.noDataAvailable)
+                        }
+                    }
+                }
             }
         }
     }
@@ -232,16 +258,28 @@ import SwiftSoup
                     // Find the most recent record for this profile
                     let profileRecords = records.filter { $0.profileId == profile.id }
                     if let latestRecord = profileRecords.max(by: { $0.timestamp < $1.timestamp }) {
-                        currentData[profile] = latestRecord.citationCount
+                        // Calculate recent growth for historical data
+                        let growth = await storageManager.calculateRecentGrowth(for: profile.id)
+                        var updatedProfile = profile
+                        updatedProfile.recentGrowth = growth
+                        currentData[updatedProfile] = latestRecord.citationCount
                     }
                 }
                 
-                if !currentData.isEmpty {
-                    await MainActor.run {
+                await MainActor.run {
+                    if !currentData.isEmpty {
+                        print("Loaded historical data for \(currentData.count) profiles")
                         delegate?.citationsUpdated(currentData)
+                    } else {
+                        print("No historical data found, showing empty state")
+                        // Show empty state with helpful message
+                        delegate?.citationsUpdated([:])
                     }
                 }
             }
+        } else {
+            // No enabled profiles
+            delegate?.citationsUpdated([:])
         }
     }
 }

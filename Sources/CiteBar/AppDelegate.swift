@@ -26,8 +26,15 @@ import Sparkle
                 self.showSettings()
             }
         } else {
-            // Start initial citation check for existing users
-            citationManager?.checkCitations()
+            // For existing users, first load historical data to show immediately
+            // This ensures users see data even if network is unavailable
+            citationManager?.updateMenuBarWithCurrentData()
+            
+            // Then start network request to get fresh data
+            // Add a small delay to allow historical data to load first
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.citationManager?.checkCitations()
+            }
         }
     }
     
