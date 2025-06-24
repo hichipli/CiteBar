@@ -11,6 +11,10 @@ on:
         required: true
         type: string
 
+# Grant GITHUB_TOKEN the permissions required to make releases
+permissions:
+  contents: write
+
 jobs:
   build-and-release:
     runs-on: macos-15
@@ -41,6 +45,22 @@ jobs:
           echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
         fi
         
+        # Get architecture and date for DMG naming (match Makefile format)
+        ARCH=$(uname -m)
+        if [ "$ARCH" = "x86_64" ]; then
+          ARCH_NAME="intel"
+        elif [ "$ARCH" = "arm64" ]; then
+          ARCH_NAME="arm64"
+        else
+          ARCH_NAME="$ARCH"
+        fi
+        BUILD_DATE=$(date +%Y%m%d)
+        DMG_NAME="CiteBar-$(echo $VERSION | sed 's/^v//')-${ARCH_NAME}-${BUILD_DATE}"
+        
+        echo "ARCH_NAME=$ARCH_NAME" >> $GITHUB_OUTPUT
+        echo "BUILD_DATE=$BUILD_DATE" >> $GITHUB_OUTPUT
+        echo "DMG_NAME=$DMG_NAME" >> $GITHUB_OUTPUT
+        
     - name: Update version in code
       run: |
         VERSION="${{ steps.get_version.outputs.VERSION }}"
@@ -64,6 +84,25 @@ jobs:
         chmod +x scripts/create-info-plist.sh
         ./scripts/create-info-plist.sh CiteBar.app/Contents/Info.plist
         
+        # Copy app icons
+        if [ -f "Assets.xcassets/AppIcon.appiconset/1024.png" ]; then
+          cp "Assets.xcassets/AppIcon.appiconset/1024.png" "CiteBar.app/Contents/Resources/AppIcon.png"
+          echo "✅ Copied 1024px icon"
+        fi
+        if [ -f "Assets.xcassets/AppIcon.appiconset/512.png" ]; then
+          cp "Assets.xcassets/AppIcon.appiconset/512.png" "CiteBar.app/Contents/Resources/AppIcon@2x.png"
+          echo "✅ Copied 512px icon"
+        fi
+        
+        # Create icns file from PNG (optional, for DMG)
+        if [ -f "Assets.xcassets/AppIcon.appiconset/1024.png" ]; then
+          mkdir -p AppIcon.iconset
+          cp "Assets.xcassets/AppIcon.appiconset/1024.png" "AppIcon.iconset/icon_512x512@2x.png"
+          cp "Assets.xcassets/AppIcon.appiconset/512.png" "AppIcon.iconset/icon_512x512.png" 2>/dev/null || cp "Assets.xcassets/AppIcon.appiconset/1024.png" "AppIcon.iconset/icon_512x512.png"
+          iconutil -c icns AppIcon.iconset -o "CiteBar.app/Contents/Resources/AppIcon.icns" 2>/dev/null || echo "Could not create icns file"
+          rm -rf AppIcon.iconset
+        fi
+        
         # Make executable
         chmod +x CiteBar.app/Contents/MacOS/CiteBar
         
@@ -72,32 +111,34 @@ jobs:
         # Install create-dmg
         brew install create-dmg
         
-        # Create DMG
+        # Create DMG with proper naming format
+        DMG_FILE="${{ steps.get_version.outputs.DMG_NAME }}.dmg"
+        
         create-dmg \
           --volname "CiteBar ${{ steps.get_version.outputs.VERSION }}" \
-          --volicon "CiteBar.app/Contents/Resources/AppIcon.icns" \
           --window-pos 200 120 \
           --window-size 600 300 \
           --icon-size 100 \
           --icon "CiteBar.app" 175 120 \
           --hide-extension "CiteBar.app" \
           --app-drop-link 425 120 \
-          "CiteBar-${{ steps.get_version.outputs.VERSION }}.dmg" \
+          "$DMG_FILE" \
           "CiteBar.app" || true
           
         # If create-dmg fails, create simple DMG
-        if [ ! -f "CiteBar-${{ steps.get_version.outputs.VERSION }}.dmg" ]; then
+        if [ ! -f "$DMG_FILE" ]; then
           hdiutil create -volname "CiteBar ${{ steps.get_version.outputs.VERSION }}" \
             -srcfolder CiteBar.app \
             -ov -format UDZO \
-            "CiteBar-${{ steps.get_version.outputs.VERSION }}.dmg"
+            "$DMG_FILE"
         fi
         
     - name: Generate Appcast
       run: |
         # Get file size and calculate SHA256
-        DMG_SIZE=$(stat -f%z "CiteBar-${{ steps.get_version.outputs.VERSION }}.dmg")
-        DMG_SHA256=$(shasum -a 256 "CiteBar-${{ steps.get_version.outputs.VERSION }}.dmg" | cut -d' ' -f1)
+        DMG_FILE="${{ steps.get_version.outputs.DMG_NAME }}.dmg"
+        DMG_SIZE=$(stat -f%z "$DMG_FILE")
+        DMG_SHA256=$(shasum -a 256 "$DMG_FILE" | cut -d' ' -f1)
         CURRENT_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S %Z")
         
         # Create appcast.xml
@@ -124,7 +165,7 @@ jobs:
                 </ul>
                 <p>This update improves the overall reliability and user experience of CiteBar.</p>
               ]]></description>
-              <enclosure url="https://github.com/hichipli/CiteBar/releases/download/${{ steps.get_version.outputs.TAG }}/CiteBar-${{ steps.get_version.outputs.VERSION }}.dmg"
+              <enclosure url="https://github.com/hichipli/CiteBar/releases/download/${{ steps.get_version.outputs.TAG }}/${{ steps.get_version.outputs.DMG_NAME }}.dmg"
                          sparkle:version="${{ steps.get_version.outputs.VERSION }}"
                          sparkle:shortVersionString="${{ steps.get_version.outputs.VERSION }}"
                          sparkle:sha256Sum="$DMG_SHA256"
@@ -167,7 +208,7 @@ jobs:
         draft: false
         prerelease: false
         files: |
-          CiteBar-${{ steps.get_version.outputs.VERSION }}.dmg
+          ${{ steps.get_version.outputs.DMG_NAME }}.dmg
           appcast.xml
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
