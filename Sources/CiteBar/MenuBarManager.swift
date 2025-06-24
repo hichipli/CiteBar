@@ -38,6 +38,12 @@ import Cocoa
         settingsItem.image = NSImage(systemSymbolName: "gear", accessibilityDescription: "Settings")
         menu.addItem(settingsItem)
         
+        // Check for Updates option
+        let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(AppDelegate.checkForUpdates), keyEquivalent: "")
+        updateItem.target = NSApplication.shared.delegate
+        updateItem.image = NSImage(systemSymbolName: "arrow.down.circle", accessibilityDescription: "Check for Updates")
+        menu.addItem(updateItem)
+        
         // Support/Feedback option
         let supportItem = NSMenuItem(title: "Support & Feedback", action: #selector(AppDelegate.showSupport), keyEquivalent: "")
         supportItem.target = NSApplication.shared.delegate

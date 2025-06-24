@@ -1,0 +1,199 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.3.1)'
+        required: true
+        type: string
+
+jobs:
+  build-and-release:
+    runs-on: macos-14
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Setup Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: '15.4'
+        
+    - name: Get version
+      id: get_version
+      run: |
+        if [ "${{ github.event.inputs.version }}" != "" ]; then
+          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          echo "TAG=v${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Update version in code
+      run: |
+        VERSION="${{ steps.get_version.outputs.VERSION }}"
+        sed -i '' "s/static let current: String = \".*\"/static let current: String = \"$VERSION\"/" Sources/CiteBar/AppVersion.swift
+        BUILD_NUMBER=$(date +%s)
+        sed -i '' "s/static let build: String = \".*\"/static let build: String = \"$BUILD_NUMBER\"/" Sources/CiteBar/AppVersion.swift
+        
+    - name: Build Release
+      run: |
+        make build
+        
+    - name: Create App Bundle
+      run: |
+        mkdir -p CiteBar.app/Contents/MacOS
+        mkdir -p CiteBar.app/Contents/Resources
+        
+        # Copy executable
+        cp .build/release/CiteBar CiteBar.app/Contents/MacOS/
+        
+        # Create Info.plist
+        cat > CiteBar.app/Contents/Info.plist << 'EOF'
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>CFBundleDevelopmentRegion</key>
+            <string>en</string>
+            <key>CFBundleExecutable</key>
+            <string>CiteBar</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.hichipli.citebar</string>
+            <key>CFBundleInfoDictionaryVersion</key>
+            <string>6.0</string>
+            <key>CFBundleName</key>
+            <string>CiteBar</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>CFBundleShortVersionString</key>
+            <string>${{ steps.get_version.outputs.VERSION }}</string>
+            <key>CFBundleVersion</key>
+            <string>$(date +%s)</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>13.0</string>
+            <key>LSUIElement</key>
+            <true/>
+            <key>SUFeedURL</key>
+            <string>https://github.com/hichipli/CiteBar/releases/latest/download/appcast.xml</string>
+            <key>SUEnableAutomaticChecks</key>
+            <true/>
+            <key>SUScheduledCheckInterval</key>
+            <integer>86400</integer>
+        </dict>
+        </plist>
+        EOF
+        
+        # Make executable
+        chmod +x CiteBar.app/Contents/MacOS/CiteBar
+        
+    - name: Create DMG
+      run: |
+        # Install create-dmg
+        brew install create-dmg
+        
+        # Create DMG
+        create-dmg \
+          --volname "CiteBar ${{ steps.get_version.outputs.VERSION }}" \
+          --volicon "CiteBar.app/Contents/Resources/AppIcon.icns" \
+          --window-pos 200 120 \
+          --window-size 600 300 \
+          --icon-size 100 \
+          --icon "CiteBar.app" 175 120 \
+          --hide-extension "CiteBar.app" \
+          --app-drop-link 425 120 \
+          "CiteBar-${{ steps.get_version.outputs.VERSION }}.dmg" \
+          "CiteBar.app" || true
+          
+        # If create-dmg fails, create simple DMG
+        if [ ! -f "CiteBar-${{ steps.get_version.outputs.VERSION }}.dmg" ]; then
+          hdiutil create -volname "CiteBar ${{ steps.get_version.outputs.VERSION }}" \
+            -srcfolder CiteBar.app \
+            -ov -format UDZO \
+            "CiteBar-${{ steps.get_version.outputs.VERSION }}.dmg"
+        fi
+        
+    - name: Generate Appcast
+      run: |
+        # Get file size and calculate SHA256
+        DMG_SIZE=$(stat -f%z "CiteBar-${{ steps.get_version.outputs.VERSION }}.dmg")
+        DMG_SHA256=$(shasum -a 256 "CiteBar-${{ steps.get_version.outputs.VERSION }}.dmg" | cut -d' ' -f1)
+        CURRENT_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S %Z")
+        
+        # Create appcast.xml
+        cat > appcast.xml << EOF
+        <?xml version="1.0" encoding="utf-8"?>
+        <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+          <channel>
+            <title>CiteBar</title>
+            <description>Citation Tracking for Academics</description>
+            <language>en</language>
+            <link>https://github.com/hichipli/CiteBar</link>
+            <item>
+              <title>Version ${{ steps.get_version.outputs.VERSION }}</title>
+              <pubDate>$CURRENT_DATE</pubDate>
+              <description><![CDATA[
+                <h2>What's New in CiteBar ${{ steps.get_version.outputs.VERSION }}</h2>
+                <ul>
+                  <li>Added automatic update functionality via Sparkle framework</li>
+                  <li>Fixed citation history persistence issues on app reinstall</li>
+                  <li>Improved last update time display with specific timestamps</li>
+                  <li>Enhanced About page with better layout and feature highlights</li>
+                  <li>Updated Scholar Metrics header to show dynamic profile count</li>
+                  <li>Fixed auto-launch functionality using modern SMAppService API</li>
+                </ul>
+                <p>This update improves the overall reliability and user experience of CiteBar.</p>
+              ]]></description>
+              <enclosure url="https://github.com/hichipli/CiteBar/releases/download/${{ steps.get_version.outputs.TAG }}/CiteBar-${{ steps.get_version.outputs.VERSION }}.dmg"
+                         sparkle:version="${{ steps.get_version.outputs.VERSION }}"
+                         sparkle:shortVersionString="${{ steps.get_version.outputs.VERSION }}"
+                         sparkle:sha256Sum="$DMG_SHA256"
+                         length="$DMG_SIZE"
+                         type="application/octet-stream" />
+              <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            </item>
+          </channel>
+        </rss>
+        EOF
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.get_version.outputs.TAG }}
+        name: CiteBar ${{ steps.get_version.outputs.VERSION }}
+        body: |
+          ## What's New in CiteBar ${{ steps.get_version.outputs.VERSION }}
+          
+          - ✨ Added automatic update functionality via Sparkle framework
+          - 🔧 Fixed citation history persistence issues on app reinstall  
+          - ⏰ Improved last update time display with specific timestamps
+          - 🎨 Enhanced About page with better layout and feature highlights
+          - 📊 Updated Scholar Metrics header to show dynamic profile count
+          - 🚀 Fixed auto-launch functionality using modern SMAppService API
+          
+          This update improves the overall reliability and user experience of CiteBar.
+          
+          ## Installation
+          
+          1. Download the DMG file below
+          2. Open the DMG and drag CiteBar to your Applications folder
+          3. Launch CiteBar from Applications
+          4. Configure your Google Scholar profiles in Settings
+          
+          ## System Requirements
+          
+          - macOS 13.0 or later
+          - Intel or Apple Silicon Mac
+        draft: false
+        prerelease: false
+        files: |
+          CiteBar-${{ steps.get_version.outputs.VERSION }}.dmg
+          appcast.xml
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

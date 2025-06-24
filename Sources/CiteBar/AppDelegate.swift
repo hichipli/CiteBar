@@ -1,5 +1,6 @@
 import Cocoa
 import SwiftUI
+import Sparkle
 
 @MainActor class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
@@ -10,9 +11,13 @@ import SwiftUI
     // Shared settings manager for checking first launch
     private let settingsManager = SettingsManager.shared
     
+    // Sparkle updater
+    private var updaterController: SPUStandardUpdaterController?
+    
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         setupMenuBar()
         setupManagers()
+        setupUpdater()
         
         // Check if this is first launch (no profiles configured)
         if settingsManager.settings.profiles.isEmpty {
@@ -49,6 +54,24 @@ import SwiftUI
     private func setupManagers() {
         citationManager = CitationManager()
         citationManager?.delegate = self
+    }
+    
+    private func setupUpdater() {
+        // Create updater with configuration
+        let updaterDelegate = UpdaterDelegate()
+        
+        updaterController = SPUStandardUpdaterController(
+            startingUpdater: true,
+            updaterDelegate: updaterDelegate,
+            userDriverDelegate: nil
+        )
+        
+        // Configure updater settings
+        if let updater = updaterController?.updater {
+            // Check for updates silently on startup (optional)
+            updater.automaticallyChecksForUpdates = true
+            updater.updateCheckInterval = 86400 // 24 hours
+        }
     }
     
     @objc private func menuBarClicked() {
@@ -113,6 +136,10 @@ import SwiftUI
         }
     }
     
+    @objc func checkForUpdates() {
+        updaterController?.checkForUpdates(nil)
+    }
+    
     @objc func quitApp() {
         // Clean up resources before quitting
         cleanup()
@@ -162,6 +189,17 @@ extension AppDelegate: CitationManagerDelegate {
             guard let self = self else { return }
             self.menuBarManager?.updateRefreshingState()
         }
+    }
+}
+
+// MARK: - Sparkle Updater Delegate
+class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
+    func feedURLString(for updater: SPUUpdater) -> String? {
+        return "https://github.com/hichipli/CiteBar/releases/latest/download/appcast.xml"
+    }
+    
+    func allowedChannels(for updater: SPUUpdater) -> Set<String> {
+        return Set(["release"])
     }
 }
 

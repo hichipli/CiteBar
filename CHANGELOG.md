@@ -5,6 +5,42 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2025-06-24
+
+### Added
+- **Automatic Update System**: Integrated Sparkle framework for seamless auto-updates
+- **Check for Updates Menu**: Manual update checking available from menu bar
+- **GitHub Actions Release Workflow**: Automated DMG creation and appcast generation
+- **Update Notifications**: User-friendly update prompts with release notes
+
+### Enhanced
+- **Citation History Persistence**: Fixed data loss issues on app reinstall/updates
+- **Last Update Time Display**: Now shows specific timestamp and relative time
+- **About Page Layout**: Redesigned with feature highlights, support links, and product info
+- **Scholar Metrics Header**: Dynamic profile count display that updates in real-time
+- **Auto-Launch Functionality**: Upgraded to modern SMAppService API for better reliability
+
+### Fixed
+- **Data Persistence**: Citation history now properly survives app reinstalls and updates
+- **Time Display**: Last update time shows both specific timestamp and "X minutes ago" format
+- **Actor Initialization**: Resolved race conditions in StorageManager data loading
+- **Profile Count**: Menu header correctly updates when profiles are added/removed
+- **Auto-Launch**: Modern implementation works reliably across macOS versions
+
+### Technical
+- Integrated Sparkle 2.6.0 for automatic updates
+- Implemented atomic file writes for data safety
+- Added initialization state tracking for thread-safe data access
+- Created automated release pipeline with GitHub Actions
+- Enhanced error handling and logging for storage operations
+- Improved data loading reliability with proper async patterns
+
+### Developer Experience
+- Automated DMG creation and appcast.xml generation
+- Version-tagged releases with detailed changelogs
+- One-command release process via GitHub Actions
+- Comprehensive update mechanism testing
+
 ## [1.3.0] - 2025-06-23
 
 ### Added
@@ -185,9 +221,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### [1.5.0] - Planned
 - [ ] Apple App Store distribution
-- [ ] Automatic update mechanism
 - [ ] Performance optimizations
 - [ ] Additional citation metrics
+- [ ] Enhanced notification settings
 
 ### [2.0.0] - Future
 - [ ] Integration with other academic platforms

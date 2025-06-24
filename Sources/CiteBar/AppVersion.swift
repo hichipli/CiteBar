@@ -3,10 +3,10 @@ import Foundation
 /// Centralized version management for CiteBar
 struct AppVersion {
     /// Current application version
-    static let current: String = "1.3.0"
+    static let current: String = "1.3.1"
     
     /// Current build number
-    static let build: String = "4"
+    static let build: String = "5"
     
     /// Version display string for UI
     static let displayString: String = "Version \(current)"
