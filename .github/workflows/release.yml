@@ -45,7 +45,20 @@ jobs:
           echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
         fi
         
-        # Get architecture and date for DMG naming (match Makefile format)
+    - name: Update version in code
+      run: |
+        VERSION="${{ steps.get_version.outputs.VERSION }}"
+        sed -i '' "s/static let current: String = \".*\"/static let current: String = \"$VERSION\"/" Sources/CiteBar/AppVersion.swift
+        BUILD_NUMBER=$(date +%s)
+        sed -i '' "s/static let build: String = \".*\"/static let build: String = \"$BUILD_NUMBER\"/" Sources/CiteBar/AppVersion.swift
+        
+    - name: Calculate DMG name (same as Makefile)
+      id: dmg_name
+      run: |
+        # Extract version from AppVersion.swift (same as Makefile)
+        VERSION=$(grep 'static let current' Sources/CiteBar/AppVersion.swift | cut -d'"' -f2)
+        
+        # Get architecture and date for DMG naming (match Makefile format exactly)
         ARCH=$(uname -m)
         if [ "$ARCH" = "x86_64" ]; then
           ARCH_NAME="intel"
@@ -55,18 +68,15 @@ jobs:
           ARCH_NAME="$ARCH"
         fi
         BUILD_DATE=$(date +%Y%m%d)
-        DMG_NAME="CiteBar-$(echo $VERSION | sed 's/^v//')-${ARCH_NAME}-${BUILD_DATE}"
+        DMG_NAME="CiteBar-${VERSION}-${ARCH_NAME}-${BUILD_DATE}"
         
+        echo "VERSION_FROM_FILE=$VERSION" >> $GITHUB_OUTPUT
         echo "ARCH_NAME=$ARCH_NAME" >> $GITHUB_OUTPUT
         echo "BUILD_DATE=$BUILD_DATE" >> $GITHUB_OUTPUT
         echo "DMG_NAME=$DMG_NAME" >> $GITHUB_OUTPUT
         
-    - name: Update version in code
-      run: |
-        VERSION="${{ steps.get_version.outputs.VERSION }}"
-        sed -i '' "s/static let current: String = \".*\"/static let current: String = \"$VERSION\"/" Sources/CiteBar/AppVersion.swift
-        BUILD_NUMBER=$(date +%s)
-        sed -i '' "s/static let build: String = \".*\"/static let build: String = \"$BUILD_NUMBER\"/" Sources/CiteBar/AppVersion.swift
+        echo "Calculated DMG name: $DMG_NAME"
+        echo "Version from file: $VERSION"
         
     - name: Build and Package
       run: |
@@ -74,6 +84,7 @@ jobs:
         UPDATED_VERSION=$(grep 'static let current' Sources/CiteBar/AppVersion.swift | cut -d'"' -f2)
         echo "Updated version in code: $UPDATED_VERSION"
         echo "Expected version: ${{ steps.get_version.outputs.VERSION }}"
+        echo "DMG name will be: ${{ steps.dmg_name.outputs.DMG_NAME }}"
         
         # Create properly configured app bundle with Sparkle framework, rpath fixes, and signing
         make package
@@ -85,7 +96,7 @@ jobs:
         
         # Get the actual DMG file created by Makefile
         MAKEFILE_DMG=$(ls dist/*.dmg | head -1)
-        EXPECTED_DMG="dist/${{ steps.get_version.outputs.DMG_NAME }}.dmg"
+        EXPECTED_DMG="dist/${{ steps.dmg_name.outputs.DMG_NAME }}.dmg"
         
         echo "Makefile created: $MAKEFILE_DMG"
         echo "Expected filename: $EXPECTED_DMG"
@@ -108,7 +119,7 @@ jobs:
     - name: Generate Appcast
       run: |
         # Get file size and calculate SHA256
-        DMG_FILE="dist/${{ steps.get_version.outputs.DMG_NAME }}.dmg"
+        DMG_FILE="dist/${{ steps.dmg_name.outputs.DMG_NAME }}.dmg"
         DMG_SIZE=$(stat -f%z "$DMG_FILE")
         DMG_SHA256=$(shasum -a 256 "$DMG_FILE" | cut -d' ' -f1)
         CURRENT_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S %Z")
@@ -126,14 +137,14 @@ jobs:
             <language>en</language>
             <link>https://github.com/hichipli/CiteBar</link>
             <item>
-              <title>Version ${{ steps.get_version.outputs.VERSION }}</title>
+              <title>Version ${{ steps.dmg_name.outputs.VERSION_FROM_FILE }}</title>
               <pubDate>$CURRENT_DATE</pubDate>
               <description><![CDATA[
                 $RELEASE_NOTES_HTML
               ]]></description>
-              <enclosure url="https://github.com/hichipli/CiteBar/releases/download/${{ steps.get_version.outputs.TAG }}/${{ steps.get_version.outputs.DMG_NAME }}.dmg"
-                         sparkle:version="${{ steps.get_version.outputs.VERSION }}"
-                         sparkle:shortVersionString="${{ steps.get_version.outputs.VERSION }}"
+              <enclosure url="https://github.com/hichipli/CiteBar/releases/download/${{ steps.get_version.outputs.TAG }}/${{ steps.dmg_name.outputs.DMG_NAME }}.dmg"
+                         sparkle:version="${{ steps.dmg_name.outputs.VERSION_FROM_FILE }}"
+                         sparkle:shortVersionString="${{ steps.dmg_name.outputs.VERSION_FROM_FILE }}"
                          sparkle:sha256Sum="$DMG_SHA256"
                          length="$DMG_SIZE"
                          type="application/octet-stream" />
@@ -153,12 +164,12 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ steps.get_version.outputs.TAG }}
-        name: CiteBar ${{ steps.get_version.outputs.VERSION }}
+        name: CiteBar ${{ steps.dmg_name.outputs.VERSION_FROM_FILE }}
         body_path: release-notes.md
         draft: false
         prerelease: false
         files: |
-          dist/${{ steps.get_version.outputs.DMG_NAME }}.dmg
+          dist/${{ steps.dmg_name.outputs.DMG_NAME }}.dmg
           appcast.xml
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
