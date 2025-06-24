@@ -11,7 +11,7 @@ let format = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "markd
 let currentDir = FileManager.default.currentDirectoryPath
 let appVersionPath = "\(currentDir)/Sources/CiteBar/AppVersion.swift"
 
-guard let content = try? String(contentsOfFile: appVersionPath) else {
+guard let content = try? String(contentsOfFile: appVersionPath, encoding: .utf8) else {
     print("Error: Could not read AppVersion.swift")
     exit(1)
 }

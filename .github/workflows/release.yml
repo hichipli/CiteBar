@@ -68,69 +68,23 @@ jobs:
         BUILD_NUMBER=$(date +%s)
         sed -i '' "s/static let build: String = \".*\"/static let build: String = \"$BUILD_NUMBER\"/" Sources/CiteBar/AppVersion.swift
         
-    - name: Build Release
+    - name: Build and Package
       run: |
-        make build
-        
-    - name: Create App Bundle
-      run: |
-        mkdir -p CiteBar.app/Contents/MacOS
-        mkdir -p CiteBar.app/Contents/Resources
-        
-        # Copy executable
-        cp .build/release/CiteBar CiteBar.app/Contents/MacOS/
-        
-        # Make script executable and create Info.plist
-        chmod +x scripts/create-info-plist.sh
-        ./scripts/create-info-plist.sh CiteBar.app/Contents/Info.plist
-        
-        # Copy app icons
-        if [ -f "Assets.xcassets/AppIcon.appiconset/1024.png" ]; then
-          cp "Assets.xcassets/AppIcon.appiconset/1024.png" "CiteBar.app/Contents/Resources/AppIcon.png"
-          echo "✅ Copied 1024px icon"
-        fi
-        if [ -f "Assets.xcassets/AppIcon.appiconset/512.png" ]; then
-          cp "Assets.xcassets/AppIcon.appiconset/512.png" "CiteBar.app/Contents/Resources/AppIcon@2x.png"
-          echo "✅ Copied 512px icon"
-        fi
-        
-        # Create icns file from PNG (optional, for DMG)
-        if [ -f "Assets.xcassets/AppIcon.appiconset/1024.png" ]; then
-          mkdir -p AppIcon.iconset
-          cp "Assets.xcassets/AppIcon.appiconset/1024.png" "AppIcon.iconset/icon_512x512@2x.png"
-          cp "Assets.xcassets/AppIcon.appiconset/512.png" "AppIcon.iconset/icon_512x512.png" 2>/dev/null || cp "Assets.xcassets/AppIcon.appiconset/1024.png" "AppIcon.iconset/icon_512x512.png"
-          iconutil -c icns AppIcon.iconset -o "CiteBar.app/Contents/Resources/AppIcon.icns" 2>/dev/null || echo "Could not create icns file"
-          rm -rf AppIcon.iconset
-        fi
-        
-        # Make executable
-        chmod +x CiteBar.app/Contents/MacOS/CiteBar
+        # Create properly configured app bundle with Sparkle framework, rpath fixes, and signing
+        make package
         
     - name: Create DMG
       run: |
-        # Install create-dmg
-        brew install create-dmg
+        # Use Makefile to create DMG (it will handle everything properly)
+        make dmg
         
-        # Create DMG with proper naming format
-        DMG_FILE="${{ steps.get_version.outputs.DMG_NAME }}.dmg"
+        # Move DMG to expected filename format
+        MAKEFILE_DMG=$(ls dist/*.dmg | head -1)
+        EXPECTED_DMG="${{ steps.get_version.outputs.DMG_NAME }}.dmg"
         
-        create-dmg \
-          --volname "CiteBar ${{ steps.get_version.outputs.VERSION }}" \
-          --window-pos 200 120 \
-          --window-size 600 300 \
-          --icon-size 100 \
-          --icon "CiteBar.app" 175 120 \
-          --hide-extension "CiteBar.app" \
-          --app-drop-link 425 120 \
-          "$DMG_FILE" \
-          "CiteBar.app" || true
-          
-        # If create-dmg fails, create simple DMG
-        if [ ! -f "$DMG_FILE" ]; then
-          hdiutil create -volname "CiteBar ${{ steps.get_version.outputs.VERSION }}" \
-            -srcfolder CiteBar.app \
-            -ov -format UDZO \
-            "$DMG_FILE"
+        if [ "$MAKEFILE_DMG" != "$EXPECTED_DMG" ]; then
+          mv "$MAKEFILE_DMG" "$EXPECTED_DMG"
+          echo "Renamed DMG: $MAKEFILE_DMG -> $EXPECTED_DMG"
         fi
         
     - name: Generate Appcast

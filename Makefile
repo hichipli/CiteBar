@@ -77,10 +77,12 @@ install: build
 	# Copy app icon
 	cp Assets.xcassets/AppIcon.appiconset/1024.png "$(PRODUCT_NAME).app/Contents/Resources/AppIcon.png" 2>/dev/null || true
 	cp Assets.xcassets/AppIcon.appiconset/512.png "$(PRODUCT_NAME).app/Contents/Resources/AppIcon@2x.png" 2>/dev/null || true
-	# Fix rpath for Sparkle framework
+	# Fix rpath and signing for Sparkle framework
 	@if [ -d "$(PRODUCT_NAME).app/Contents/Frameworks/Sparkle.framework" ]; then \
 		echo "🔧 Fixing rpath for Sparkle framework..."; \
 		install_name_tool -add_rpath @loader_path/../Frameworks "$(PRODUCT_NAME).app/Contents/MacOS/$(PRODUCT_NAME)" 2>/dev/null || true; \
+		echo "🔏 Re-signing Sparkle framework..."; \
+		codesign --force --deep --sign - "$(PRODUCT_NAME).app/Contents/Frameworks/Sparkle.framework" 2>/dev/null || true; \
 	fi
 	# Apply ad-hoc code signing
 	@echo "🔐 Applying ad-hoc code signature..."
@@ -109,10 +111,12 @@ install-sudo: build
 	# Copy app icon
 	cp Assets.xcassets/AppIcon.appiconset/1024.png "$(PRODUCT_NAME).app/Contents/Resources/AppIcon.png" 2>/dev/null || true
 	cp Assets.xcassets/AppIcon.appiconset/512.png "$(PRODUCT_NAME).app/Contents/Resources/AppIcon@2x.png" 2>/dev/null || true
-	# Fix rpath for Sparkle framework
+	# Fix rpath and signing for Sparkle framework
 	@if [ -d "$(PRODUCT_NAME).app/Contents/Frameworks/Sparkle.framework" ]; then \
 		echo "🔧 Fixing rpath for Sparkle framework..."; \
 		install_name_tool -add_rpath @loader_path/../Frameworks "$(PRODUCT_NAME).app/Contents/MacOS/$(PRODUCT_NAME)" 2>/dev/null || true; \
+		echo "🔏 Re-signing Sparkle framework..."; \
+		codesign --force --deep --sign - "$(PRODUCT_NAME).app/Contents/Frameworks/Sparkle.framework" 2>/dev/null || true; \
 	fi
 	# Apply ad-hoc code signing before installation
 	@echo "🔐 Applying ad-hoc code signature..."
@@ -150,10 +154,12 @@ package: build
 	else \
 		echo "⚠️  Warning: 512px icon not found"; \
 	fi
-	@# Fix rpath for Sparkle framework
+	@# Fix rpath and signing for Sparkle framework
 	@if [ -d "$(APP_BUNDLE)/Contents/Frameworks/Sparkle.framework" ]; then \
 		echo "🔧 Fixing rpath for Sparkle framework..."; \
 		install_name_tool -add_rpath @loader_path/../Frameworks "$(APP_BUNDLE)/Contents/MacOS/$(PRODUCT_NAME)" 2>/dev/null || true; \
+		echo "🔏 Re-signing Sparkle framework..."; \
+		codesign --force --deep --sign - "$(APP_BUNDLE)/Contents/Frameworks/Sparkle.framework" 2>/dev/null || true; \
 	fi
 	@# Apply ad-hoc code signing to prevent "damaged" error on other machines
 	@echo "🔐 Applying ad-hoc code signature..."
