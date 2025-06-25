@@ -27,7 +27,11 @@ let package = Package(
         .testTarget(
             name: "CiteBarTests",
             dependencies: ["CiteBar"],
-            path: "Tests"
+            path: "Tests",
+            sources: ["CiteBarTests/CiteBarTests.swift", "CiteBarTests/MockURLProtocol.swift"],
+            resources: [
+                .process("CiteBarTests/Resources")
+            ]
         )
     ]
 )

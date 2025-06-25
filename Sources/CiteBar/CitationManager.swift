@@ -6,8 +6,10 @@ import SwiftSoup
     private let settingsManager = SettingsManager.shared
     private let storageManager = StorageManager()
     private var refreshTimer: Timer?
-    
-    init() {
+    private let urlSession: URLSession
+
+    init(urlSession: URLSession = .shared) {
+        self.urlSession = urlSession
         setupTimer()
         // Debug storage status at startup
         Task {
@@ -134,7 +136,7 @@ import SwiftSoup
         }
     }
     
-    private func fetchCitationCount(for profile: ScholarProfile) async throws -> Int {
+    func fetchCitationCount(for profile: ScholarProfile) async throws -> Int {
         guard let url = URL(string: profile.url) else {
             throw CitationError.invalidURL
         }
@@ -147,7 +149,7 @@ import SwiftSoup
         request.setValue("gzip, deflate, br", forHTTPHeaderField: "Accept-Encoding")
         request.timeoutInterval = 30.0
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await urlSession.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw CitationError.networkError
