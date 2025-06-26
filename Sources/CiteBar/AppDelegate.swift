@@ -200,7 +200,7 @@ import Sparkle
 }
 
 extension AppDelegate: CitationManagerDelegate {
-    func citationsUpdated(_ citations: [ScholarProfile: Int]) {
+    func citationsUpdated(_ citations: [ScholarProfile: ProfileMetrics]) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.menuBarManager?.updateDisplayWith(citations)

@@ -3,10 +3,10 @@ import Foundation
 /// Centralized version management for CiteBar
 struct AppVersion {
     /// Current application version
-    static let current: String = "1.3.2"
+    static let current: String = "1.3.3"
     
     /// Current build number
-    static let build: String = "6"
+    static let build: String = "7"
     
     /// Version display string for UI
     static let displayString: String = "Version \(current)"
@@ -34,21 +34,22 @@ extension AppVersion {
     static let releaseNotes = ReleaseNotes(
         version: current,
         highlights: [
-            "Fixed startup data loading - now shows historical citation data immediately on launch",
-            "Improved offline experience - displays last known citation counts when network is unavailable",
-            "Redesigned About page with professional, clean layout and left-aligned text",
-            "Enhanced startup sequence to prioritize historical data before network requests",
-            "Better error handling to preserve displayed data during network failures",
-            "Streamlined Settings interface with improved visual hierarchy"
+            "Added h-index display alongside citation counts for comprehensive academic metrics",
+            "Fixed critical parsing bug where years (2020-2025) were misidentified as citation counts",
+            "Corrected h-index extraction to show actual h-index values, not i10-index or recent citations",
+            "Restored 30-day growth display that was broken due to data flow issues",
+            "Enhanced menu to show name, citations, h-index, and growth for each scholar",
+            "Improved Google Scholar parsing with intelligent data validation"
         ],
-        description: "This update focuses on improving the app startup experience and ensuring citation data is always available, even when offline. The interface has been refined for a more professional appearance.",
+        description: "This major update adds h-index support and fixes critical parsing issues that affected citation accuracy. Users now get comprehensive academic metrics with reliable data extraction from Google Scholar.",
         technicalNotes: [
-            "Modified app launch sequence to load historical data first, then fetch updates",
-            "Improved CitationManager to avoid overriding displayed data on network errors",
-            "Enhanced MenuBarManager with better empty state handling and loading indicators",
-            "Redesigned AboutTab with reusable FeatureRow and SupportRow components",
-            "Fixed color compatibility issues for better macOS version support",
-            "Added comprehensive logging for startup data loading diagnostics"
+            "Extended CitationRecord data model to include h-index field with backward compatibility",
+            "Replaced fetchCitationCount API with fetchScholarMetrics for comprehensive data",
+            "Implemented row-based HTML table parsing to correctly extract metrics",
+            "Added ScholarMetrics and ProfileMetrics structures for better type safety",
+            "Fixed delegate pattern to properly pass h-index data through UI layers",
+            "Enhanced data validation to filter out years and unrealistic citation counts",
+            "Updated test suite to work with new metrics-based API architecture"
         ]
     )
     

@@ -70,24 +70,33 @@ import SwiftSoup
     }
     
     private func performCitationCheck(for profiles: [ScholarProfile]) async {
-        var results: [ScholarProfile: Int] = [:]
+        var results: [ScholarProfile: ProfileMetrics] = [:]
         
         for profile in profiles {
             do {
-                let count = try await fetchCitationCount(for: profile)
-                results[profile] = count
+                let metrics = try await fetchScholarMetrics(for: profile)
                 
                 // Store the record
-                let record = CitationRecord(profileId: profile.id, citationCount: count)
+                let record = CitationRecord(profileId: profile.id, citationCount: metrics.citationCount, hIndex: metrics.hIndex)
                 await storageManager.saveCitationRecord(record)
                 
                 // Calculate recent growth
                 let growth = await storageManager.calculateRecentGrowth(for: profile.id)
                 var updatedProfile = profile
                 updatedProfile.recentGrowth = growth
-                results[updatedProfile] = count
                 
-                print("Successfully fetched \(count) citations for \(profile.name)")
+                // Only add the updated profile with growth data to results
+                results[updatedProfile] = ProfileMetrics(citationCount: metrics.citationCount, hIndex: metrics.hIndex)
+                
+                print("Successfully fetched \(metrics.citationCount) citations for \(profile.name)")
+                if let hIndex = metrics.hIndex {
+                    print("h-index for \(profile.name): \(hIndex)")
+                }
+                if let growth = growth {
+                    print("Recent growth for \(profile.name): \(growth > 0 ? "+\(growth)" : "\(growth)") in last 30 days")
+                } else {
+                    print("No recent growth data available for \(profile.name) (insufficient historical data)")
+                }
                 
                 // Add delay to be respectful to Google's servers
                 try await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
@@ -136,7 +145,7 @@ import SwiftSoup
         }
     }
     
-    func fetchCitationCount(for profile: ScholarProfile) async throws -> Int {
+    func fetchScholarMetrics(for profile: ScholarProfile) async throws -> ScholarMetrics {
         guard let url = URL(string: profile.url) else {
             throw CitationError.invalidURL
         }
@@ -168,48 +177,73 @@ import SwiftSoup
         // Debug: Print first 500 characters of HTML
         print("HTML Preview: \(String(html.prefix(500)))")
         
-        return try parseCitationCount(from: html)
+        return try parseScholarMetrics(from: html)
     }
     
-    private func parseCitationCount(from html: String) throws -> Int {
+    private func parseScholarMetrics(from html: String) throws -> ScholarMetrics {
         do {
             let doc = try SwiftSoup.parse(html)
             
-            // Debug: Check if we can find any citation-related elements
-            let allTableCells = try doc.select("td")
-            print("Found \(allTableCells.count) table cells")
-            
-            // Try multiple selectors for citation count
+            // Try multiple selectors for the statistics table
             let possibleSelectors = [
-                "td.gsc_rsb_std",
-                "#gsc_rsb_st td",
-                ".gsc_rsb_std",
-                "table.gsc_rsb_st td"
+                "table.gsc_rsb_st",
+                "#gsc_rsb_st",
+                ".gsc_rsb_st"
             ]
             
             for selector in possibleSelectors {
-                let elements = try doc.select(selector)
-                print("Selector '\(selector)' found \(elements.count) elements")
-                
-                if let firstElement = elements.first() {
-                    let text = try firstElement.text()
-                    print("First element text: '\(text)'")
-                    
-                    // Look for numbers in the text
-                    if let number = extractNumber(from: text) {
-                        print("Successfully extracted citation count: \(number)")
-                        return number
+                let tables = try doc.select(selector)
+                if !tables.isEmpty() {
+                    if let table = tables.first() {
+                        let metrics = try parseScholarTable(table)
+                        if metrics.citationCount > 0 {
+                            print("Successfully parsed from table - Citations: \(metrics.citationCount), h-index: \(metrics.hIndex ?? -1)")
+                            return metrics
+                        }
                     }
                 }
             }
             
-            // If standard selectors fail, look for any element containing numbers
+            // Fallback: Try to find cells directly
+            let cellSelectors = [
+                "td.gsc_rsb_std",
+                "#gsc_rsb_st td",
+                ".gsc_rsb_std"
+            ]
+            
+            for selector in cellSelectors {
+                let elements = try doc.select(selector)
+                print("Selector '\(selector)' found \(elements.count) elements")
+                
+                if elements.count >= 2 {
+                    // Debug: Print all table cell values to understand the structure
+                    let elementsArray = Array(elements)
+                    print("=== Table Cell Contents ===")
+                    for (index, element) in elementsArray.enumerated() {
+                        do {
+                            let text = try element.text()
+                            print("Cell \(index): '\(text)'")
+                        } catch {
+                            print("Cell \(index): Error reading text")
+                        }
+                    }
+                    print("=== End Table Cells ===")
+                    
+                    let metrics = parseScholarCellArray(elementsArray)
+                    if metrics.citationCount > 0 {
+                        print("Successfully parsed from cells - Citations: \(metrics.citationCount), h-index: \(metrics.hIndex ?? -1)")
+                        return metrics
+                    }
+                }
+            }
+            
+            // Last resort fallback
             let allElements = try doc.select("*")
             for element in allElements {
                 let text = try element.text()
-                if text.count < 10, let number = extractNumber(from: text), number > 0 {
-                    print("Found potential citation count in element: \(text) -> \(number)")
-                    return number
+                if let number = extractValidCitationCount(from: text) {
+                    print("Found potential citation count in fallback: \(text) -> \(number)")
+                    return ScholarMetrics(citationCount: number, hIndex: nil)
                 }
             }
             
@@ -220,6 +254,121 @@ import SwiftSoup
             print("HTML parsing error: \(error)")
             throw CitationError.parsingError
         }
+    }
+    
+    private func parseScholarTable(_ table: Element) throws -> ScholarMetrics {
+        // Parse the table row by row to find Citations and h-index rows
+        let rows = try table.select("tr")
+        var citationCount: Int?
+        var hIndex: Int?
+        
+        for row in rows {
+            let cells = try row.select("td")
+            if cells.count >= 2 {
+                let rowLabel = try cells.first()?.text() ?? ""
+                print("Row label: '\(rowLabel)'")
+                
+                if rowLabel.lowercased().contains("citations") {
+                    // This is the citations row, get the "All" value (second cell)
+                    if cells.count >= 2 {
+                        let allCell = cells[1]
+                        let text = try allCell.text()
+                        citationCount = extractValidCitationCount(from: text)
+                        print("Found citations row: \(text) -> \(citationCount ?? -1)")
+                    }
+                } else if rowLabel.lowercased().contains("h-index") {
+                    // This is the h-index row, get the "All" value (second cell)
+                    if cells.count >= 2 {
+                        let allCell = cells[1]
+                        let text = try allCell.text()
+                        hIndex = extractNumber(from: text)
+                        print("Found h-index row: \(text) -> \(hIndex ?? -1)")
+                    }
+                }
+            }
+        }
+        
+        return ScholarMetrics(citationCount: citationCount ?? 0, hIndex: hIndex)
+    }
+    
+    private func parseScholarCellArray(_ elements: [Element]) -> ScholarMetrics {
+        // Google Scholar table structure when read as linear array:
+        // The exact pattern depends on how the HTML is structured, so we need to be more flexible
+        
+        var citationCount: Int?
+        var hIndex: Int?
+        
+        // Look for patterns in the text content
+        for (index, element) in elements.enumerated() {
+            do {
+                let text = try element.text()
+                
+                // If we find a cell that says "Citations", the next numeric cell should be citation count
+                if text.lowercased().contains("citations") && index + 1 < elements.count {
+                    let nextElement = elements[index + 1]
+                    let nextText = try nextElement.text()
+                    citationCount = extractValidCitationCount(from: nextText)
+                    print("Found citations after label at index \(index + 1): \(nextText) -> \(citationCount ?? -1)")
+                }
+                
+                // If we find a cell that says "h-index", the next numeric cell should be h-index
+                if text.lowercased().contains("h-index") && index + 1 < elements.count {
+                    let nextElement = elements[index + 1]
+                    let nextText = try nextElement.text()
+                    hIndex = extractNumber(from: nextText)
+                    print("Found h-index after label at index \(index + 1): \(nextText) -> \(hIndex ?? -1)")
+                }
+            } catch {
+                continue
+            }
+        }
+        
+        // If we still don't have citation count, try the old method as fallback
+        if citationCount == nil {
+            citationCount = extractValidCitationCount(from: elements)
+        }
+        
+        return ScholarMetrics(citationCount: citationCount ?? 0, hIndex: hIndex)
+    }
+    
+    private func extractValidCitationCount(from elements: [Element]) -> Int? {
+        // Look for citation count in the first few elements
+        for (index, element) in elements.enumerated() {
+            if index > 5 { break } // Don't check too many elements
+            
+            do {
+                let text = try element.text()
+                if let number = extractValidCitationCount(from: text) {
+                    return number
+                }
+            } catch {
+                continue
+            }
+        }
+        return nil
+    }
+    
+    
+    private func extractValidCitationCount(from text: String) -> Int? {
+        guard let number = extractNumber(from: text) else { return nil }
+        
+        // Filter out numbers that are likely years (1900-2030)
+        if number >= 1900 && number <= 2030 {
+            return nil
+        }
+        
+        // Filter out numbers that are too small to be realistic citation counts for established scholars
+        // But allow 0 for new scholars
+        if number < 0 {
+            return nil
+        }
+        
+        // Filter out unrealistically large numbers (probably parsing errors)
+        if number > 1000000 {
+            return nil
+        }
+        
+        return number
     }
     
     private func extractNumber(from text: String) -> Int? {
@@ -254,7 +403,7 @@ import SwiftSoup
             // Get last known citation data for these profiles
             Task {
                 let records = await storageManager.getAllRecords()
-                var currentData: [ScholarProfile: Int] = [:]
+                var currentData: [ScholarProfile: ProfileMetrics] = [:]
                 
                 for profile in profiles {
                     // Find the most recent record for this profile
@@ -264,7 +413,15 @@ import SwiftSoup
                         let growth = await storageManager.calculateRecentGrowth(for: profile.id)
                         var updatedProfile = profile
                         updatedProfile.recentGrowth = growth
-                        currentData[updatedProfile] = latestRecord.citationCount
+                        currentData[updatedProfile] = ProfileMetrics(citationCount: latestRecord.citationCount, hIndex: latestRecord.hIndex)
+                        
+                        print("Loaded historical data for \(profile.name): \(latestRecord.citationCount) citations")
+                        if let hIndex = latestRecord.hIndex {
+                            print("Historical h-index for \(profile.name): \(hIndex)")
+                        }
+                        if let growth = growth {
+                            print("Historical growth for \(profile.name): \(growth > 0 ? "+\(growth)" : "\(growth)") in last 30 days")
+                        }
                     }
                 }
                 

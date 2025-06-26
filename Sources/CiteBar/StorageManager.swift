@@ -113,6 +113,15 @@ actor StorageManager {
             .citationCount
     }
     
+    func getLatestHIndex(for profileId: String) async -> Int? {
+        await ensureInitialized()
+        return citationHistory
+            .filter { $0.profileId == profileId }
+            .sorted { $0.timestamp > $1.timestamp }
+            .first?
+            .hIndex
+    }
+    
     func getCitationTrend(for profileId: String, days: Int = 30) async -> [(Date, Int)] {
         let records = await getCitationHistory(for: profileId, days: days)
         return records.map { ($0.timestamp, $0.citationCount) }

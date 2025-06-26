@@ -24,14 +24,21 @@ struct ScholarProfile: Hashable, Codable {
     }
 }
 
+struct ScholarMetrics {
+    let citationCount: Int
+    let hIndex: Int?
+}
+
 struct CitationRecord: Codable {
     let profileId: String
     let citationCount: Int
+    let hIndex: Int?
     let timestamp: Date
     
-    init(profileId: String, citationCount: Int, timestamp: Date = Date()) {
+    init(profileId: String, citationCount: Int, hIndex: Int? = nil, timestamp: Date = Date()) {
         self.profileId = profileId
         self.citationCount = citationCount
+        self.hIndex = hIndex
         self.timestamp = timestamp
     }
 }
@@ -76,8 +83,13 @@ struct AppSettings: Codable {
     }
 }
 
+struct ProfileMetrics {
+    let citationCount: Int
+    let hIndex: Int?
+}
+
 @MainActor protocol CitationManagerDelegate: AnyObject {
-    func citationsUpdated(_ citations: [ScholarProfile: Int])
+    func citationsUpdated(_ citations: [ScholarProfile: ProfileMetrics])
     func citationCheckFailed(_ error: Error)
     func refreshingStateChanged(_ isRefreshing: Bool)
 }

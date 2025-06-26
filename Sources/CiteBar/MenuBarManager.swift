@@ -2,7 +2,7 @@ import Cocoa
 
 @MainActor class MenuBarManager: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
-    private var currentCitations: [ScholarProfile: Int] = [:]
+    private var currentCitations: [ScholarProfile: ProfileMetrics] = [:]
     private var lastError: String?
     private let settingsManager = SettingsManager.shared
     
@@ -71,7 +71,7 @@ import Cocoa
         return menu
     }
     
-    func updateDisplayWith(_ citations: [ScholarProfile: Int]) {
+    func updateDisplayWith(_ citations: [ScholarProfile: ProfileMetrics]) {
         currentCitations = citations
         clearError() // Clear any previous errors
         
@@ -83,8 +83,8 @@ import Cocoa
             // Update menu bar display - show first profile by sort order
             let sortedProfiles = citations.keys.sorted { $0.sortOrder < $1.sortOrder }
             if let primaryProfile = sortedProfiles.first,
-               let citationCount = citations[primaryProfile] {
-                updateMenuBarWithCount(citationCount)
+               let metrics = citations[primaryProfile] {
+                updateMenuBarWithCount(metrics.citationCount)
             } else {
                 statusItem.button?.image = NSImage(systemSymbolName: "book.circle", accessibilityDescription: "CiteBar - No data")
                 statusItem.button?.title = ""
@@ -176,12 +176,12 @@ import Cocoa
         // Add current citation data - sorted by profile order, then by citation count
         let sortedCitations = currentCitations.sorted { (lhs, rhs) -> Bool in
             if lhs.key.sortOrder == rhs.key.sortOrder {
-                return lhs.value > rhs.value
+                return lhs.value.citationCount > rhs.value.citationCount
             }
             return lhs.key.sortOrder < rhs.key.sortOrder
         }
         
-        for (profile, count) in sortedCitations {
+        for (profile, metrics) in sortedCitations {
             // Create a more detailed display for each profile
             let citationItem = NSMenuItem(title: "\(profile.name)", 
                                         action: #selector(AppDelegate.openScholarProfile(_:)), 
@@ -196,11 +196,11 @@ import Cocoa
             // Add citation count as sub-item
             let countText: String
             let countIcon: String
-            if count == -1 {
+            if metrics.citationCount == -1 {
                 countText = "    Loading citations..."
                 countIcon = "arrow.clockwise"
             } else {
-                let formattedCount = NumberFormatter.localizedString(from: NSNumber(value: count), number: .decimal)
+                let formattedCount = NumberFormatter.localizedString(from: NSNumber(value: metrics.citationCount), number: .decimal)
                 countText = "    \(formattedCount) citations"
                 countIcon = "book.closed"
             }
@@ -211,6 +211,17 @@ import Cocoa
             countItem.image = NSImage(systemSymbolName: countIcon, accessibilityDescription: "Citations")
             menu.insertItem(countItem, at: insertIndex)
             insertIndex += 1
+            
+            // Add h-index if available
+            if let hIndex = metrics.hIndex {
+                let hIndexText = "    h-index: \(hIndex)"
+                let hIndexItem = NSMenuItem(title: hIndexText, action: nil, keyEquivalent: "")
+                hIndexItem.tag = 100
+                hIndexItem.isEnabled = false
+                hIndexItem.image = NSImage(systemSymbolName: "number.square", accessibilityDescription: "h-index")
+                menu.insertItem(hIndexItem, at: insertIndex)
+                insertIndex += 1
+            }
             
             // Add growth info if available
             if let growth = profile.recentGrowth {
@@ -299,7 +310,7 @@ import Cocoa
     
     func showProfileLoading(_ profile: ScholarProfile) {
         // Add the new profile to current citations with a loading indicator
-        currentCitations[profile] = -1 // Use -1 to indicate loading
+        currentCitations[profile] = ProfileMetrics(citationCount: -1, hIndex: nil) // Use -1 to indicate loading
         updateMenu()
     }
     

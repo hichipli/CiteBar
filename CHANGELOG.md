@@ -5,7 +5,42 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.2] - 2025-01-15
+## [1.3.3] - 2025-06-26
+
+### Added
+- **h-index Display**: Added h-index display alongside citation counts for comprehensive academic metrics
+- **Enhanced Scholar Metrics**: Menu now shows both citation count and h-index for each profile
+- **Intelligent Data Parsing**: Smart extraction of both citations and h-index from Google Scholar pages
+
+### Fixed
+- **Citation Parsing Accuracy**: Fixed issue where years (2020-2025) were incorrectly parsed as citation counts
+- **h-index Extraction**: Corrected h-index parsing to extract actual h-index values instead of i10-index or recent citation counts
+- **30-Day Growth Display**: Fixed critical bug where 30-day citation growth wasn't displaying due to data flow issues
+- **Google Scholar Table Parsing**: Completely redesigned parsing logic to correctly handle Google Scholar's table structure
+
+### Enhanced
+- **Visual Hierarchy**: Each profile now displays name, total citations, h-index, and 30-day growth in organized layout
+- **Data Validation**: Added intelligent filtering to prevent years and unrealistic numbers from being parsed as citations
+- **Parser Robustness**: Implemented row-based table parsing with fallback strategies for different HTML structures
+- **Debug Information**: Enhanced logging for citation and h-index extraction to aid troubleshooting
+
+### Technical
+- **Data Model Updates**: Extended `CitationRecord` to include h-index field with backward compatibility
+- **API Restructuring**: Replaced `fetchCitationCount` with `fetchScholarMetrics` returning comprehensive metrics
+- **Parser Architecture**: Implemented `parseScholarTable` for accurate row-based HTML parsing
+- **Type Safety**: Added `ScholarMetrics` and `ProfileMetrics` structures for better data handling
+- **Test Suite Updates**: Updated all tests to work with new metrics-based API
+- **UI Data Flow**: Fixed delegate pattern to properly pass h-index data through to menu display
+
+### Menu Display Format
+```
+👤 Scholar Name
+    1,234 citations
+    🔢 h-index: 42  
+    📈 +15 in last 30 days
+```
+
+## [1.3.2] - 2025-06-24
 
 ### Fixed
 - **Startup Data Loading**: Fixed issue where app showed "No data available" on restart despite having historical citation data

@@ -48,6 +48,16 @@ final class CiteBarTests: XCTestCase {
         
         XCTAssertEqual(record.profileId, "test")
         XCTAssertEqual(record.citationCount, 100)
+        XCTAssertNil(record.hIndex)
+        XCTAssertNotNil(record.timestamp)
+    }
+    
+    func testCitationRecordWithHIndex() {
+        let record = CitationRecord(profileId: "test", citationCount: 100, hIndex: 25)
+        
+        XCTAssertEqual(record.profileId, "test")
+        XCTAssertEqual(record.citationCount, 100)
+        XCTAssertEqual(record.hIndex, 25)
         XCTAssertNotNil(record.timestamp)
     }
     
@@ -63,7 +73,7 @@ final class CiteBarTests: XCTestCase {
     // New tests for CitationManager
     
     @MainActor
-    func testFetchCitationCount_Success() async throws {
+    func testFetchScholarMetrics_Success() async throws {
         let profile = ScholarProfile(id: "_5pgNWgAAAAJ", name: "Test User")
         guard let url = URL(string: profile.url) else {
             XCTFail("Invalid URL")
@@ -77,13 +87,14 @@ final class CiteBarTests: XCTestCase {
         
         let citationManager = CitationManager(urlSession: urlSession)
         
-        let citationCount = try await citationManager.fetchCitationCount(for: profile)
+        let metrics = try await citationManager.fetchScholarMetrics(for: profile)
         
-        XCTAssertEqual(citationCount, 98, "Citation count should be parsed correctly from the sample HTML.")
+        XCTAssertEqual(metrics.citationCount, 98, "Citation count should be parsed correctly from the sample HTML.")
+        // Note: h-index test would depend on the sample HTML content
     }
     
     @MainActor
-    func testFetchCitationCount_NetworkError() async throws {
+    func testFetchScholarMetrics_NetworkError() async throws {
         let profile = ScholarProfile(id: "error_user", name: "Error User")
         guard let url = URL(string: profile.url) else {
             XCTFail("Invalid URL")
@@ -96,8 +107,8 @@ final class CiteBarTests: XCTestCase {
         let citationManager = CitationManager(urlSession: urlSession)
         
         do {
-            _ = try await citationManager.fetchCitationCount(for: profile)
-            XCTFail("Expected fetchCitationCount to throw an error, but it did not.")
+            _ = try await citationManager.fetchScholarMetrics(for: profile)
+            XCTFail("Expected fetchScholarMetrics to throw an error, but it did not.")
         } catch {
             let nsError = error as NSError
             XCTAssertEqual(nsError.domain, NSURLErrorDomain)
