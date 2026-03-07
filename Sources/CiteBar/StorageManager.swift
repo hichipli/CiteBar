@@ -121,6 +121,15 @@ actor StorageManager {
             .first?
             .hIndex
     }
+
+    func getLatestI10Index(for profileId: String) async -> Int? {
+        await ensureInitialized()
+        return citationHistory
+            .filter { $0.profileId == profileId }
+            .sorted { $0.timestamp > $1.timestamp }
+            .first?
+            .i10Index
+    }
     
     func getCitationTrend(for profileId: String, days: Int = 30) async -> [(Date, Int)] {
         let records = await getCitationHistory(for: profileId, days: days)
