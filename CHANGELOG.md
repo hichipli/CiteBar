@@ -5,6 +5,18 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-03-08
+
+### Fixed
+- **Sparkle Update Detection**: Corrected appcast version comparison so older installed builds can discover newer updates reliably
+- **No-Update UX**: Added version history/release fallback behavior in the Sparkle no-update flow
+- **Updater Delegate Lifetime**: Kept Sparkle delegates strongly referenced to preserve custom update UI callbacks
+
+### Technical
+- Updated release workflow to emit `sparkle:version` from build version (`CFBundleVersion`)
+- Kept `sparkle:shortVersionString` aligned with marketing version (`1.x.y`)
+- Replaced non-effective no-update delegate override with Sparkle 2 compatible version-history delegate methods
+
 ## [1.4.0] - 2026-03-08
 
 ### Added
