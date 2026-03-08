@@ -5,6 +5,16 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.3] - 2026-03-08
+
+### Fixed
+- **Legacy Update UX**: Builds older than the Sparkle signing baseline are now shown as informational updates, guiding users to a manual one-time upgrade instead of failing after clicking install
+- **Manual Upgrade Routing**: Appcast items now include a direct link to latest release downloads for affected legacy users
+
+### Technical
+- Added `sparkle:informationalUpdate` + `sparkle:belowVersion` in appcast generation
+- Added centralized `sparkleManualUpgradeBaselineBuild` version constant for release workflow
+
 ## [1.4.2] - 2026-03-08
 
 ### Fixed

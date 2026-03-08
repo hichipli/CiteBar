@@ -80,6 +80,7 @@ jobs:
         # Extract version from AppVersion.swift (same as Makefile)
         VERSION=$(grep 'static let current' Sources/CiteBar/AppVersion.swift | cut -d'"' -f2)
         BUILD_VERSION=$(grep 'static let build' Sources/CiteBar/AppVersion.swift | cut -d'"' -f2)
+        MANUAL_UPGRADE_BASELINE_BUILD=$(grep 'static let sparkleManualUpgradeBaselineBuild' Sources/CiteBar/AppVersion.swift | cut -d'"' -f2)
         
         # Get architecture and date for DMG naming (match Makefile format exactly)
         ARCH=$(uname -m)
@@ -95,6 +96,7 @@ jobs:
         
         echo "VERSION_FROM_FILE=$VERSION" >> $GITHUB_OUTPUT
         echo "BUILD_VERSION_FROM_FILE=$BUILD_VERSION" >> $GITHUB_OUTPUT
+        echo "MANUAL_UPGRADE_BASELINE_BUILD_FROM_FILE=$MANUAL_UPGRADE_BASELINE_BUILD" >> $GITHUB_OUTPUT
         echo "ARCH_NAME=$ARCH_NAME" >> $GITHUB_OUTPUT
         echo "BUILD_DATE=$BUILD_DATE" >> $GITHUB_OUTPUT
         echo "DMG_NAME=$DMG_NAME" >> $GITHUB_OUTPUT
@@ -102,6 +104,7 @@ jobs:
         echo "Calculated DMG name: $DMG_NAME"
         echo "Version from file: $VERSION"
         echo "Build version from file: $BUILD_VERSION"
+        echo "Manual upgrade baseline build: $MANUAL_UPGRADE_BASELINE_BUILD"
         
     - name: Build and Package
       run: |
@@ -189,10 +192,14 @@ jobs:
             <link>https://github.com/hichipli/CiteBar</link>
             <item>
               <title>Version ${{ steps.dmg_name.outputs.VERSION_FROM_FILE }}</title>
+              <link>https://github.com/hichipli/CiteBar/releases/latest</link>
               <pubDate>$CURRENT_DATE</pubDate>
               <description><![CDATA[
                 $RELEASE_NOTES_HTML
               ]]></description>
+              <sparkle:informationalUpdate>
+                <sparkle:belowVersion>${{ steps.dmg_name.outputs.MANUAL_UPGRADE_BASELINE_BUILD_FROM_FILE }}</sparkle:belowVersion>
+              </sparkle:informationalUpdate>
               <enclosure url="https://github.com/hichipli/CiteBar/releases/download/${{ steps.get_version.outputs.TAG }}/${{ steps.dmg_name.outputs.DMG_NAME }}.dmg"
                          sparkle:version="${{ steps.dmg_name.outputs.BUILD_VERSION_FROM_FILE }}"
                          sparkle:shortVersionString="${{ steps.dmg_name.outputs.VERSION_FROM_FILE }}"
