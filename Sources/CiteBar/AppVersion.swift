@@ -3,10 +3,10 @@ import Foundation
 /// Centralized version management for CiteBar
 struct AppVersion {
     /// Current application version
-    static let current: String = "1.3.3"
+    static let current: String = "1.4.0"
     
     /// Current build number
-    static let build: String = "7"
+    static let build: String = "8"
     
     /// Version display string for UI
     static let displayString: String = "Version \(current)"
@@ -34,22 +34,17 @@ extension AppVersion {
     static let releaseNotes = ReleaseNotes(
         version: current,
         highlights: [
-            "Added h-index display alongside citation counts for comprehensive academic metrics",
-            "Fixed critical parsing bug where years (2020-2025) were misidentified as citation counts",
-            "Corrected h-index extraction to show actual h-index values, not i10-index or recent citations",
-            "Restored 30-day growth display that was broken due to data flow issues",
-            "Enhanced menu to show name, citations, h-index, and growth for each scholar",
-            "Improved Google Scholar parsing with intelligent data validation"
+            "Added i10-index support across parsing, storage, and menu display",
+            "Menu growth now shows the real baseline window (e.g. +X in last Y days)",
+            "Improved growth context for newly added profiles with fewer than 30 days of history",
+            "Extended profile model to carry growth baseline day count through the UI data flow"
         ],
-        description: "This major update adds h-index support and fixes critical parsing issues that affected citation accuracy. Users now get comprehensive academic metrics with reliable data extraction from Google Scholar.",
+        description: "This release expands Scholar metrics with i10-index and makes trend messaging more accurate by showing actual baseline days instead of always assuming 30 days.",
         technicalNotes: [
-            "Extended CitationRecord data model to include h-index field with backward compatibility",
-            "Replaced fetchCitationCount API with fetchScholarMetrics for comprehensive data",
-            "Implemented row-based HTML table parsing to correctly extract metrics",
-            "Added ScholarMetrics and ProfileMetrics structures for better type safety",
-            "Fixed delegate pattern to properly pass h-index data through UI layers",
-            "Enhanced data validation to filter out years and unrealistic citation counts",
-            "Updated test suite to work with new metrics-based API architecture"
+            "Extended ScholarMetrics, CitationRecord, and ProfileMetrics with optional i10-index support",
+            "Added StorageManager growth summary API returning both growth delta and baseline day span",
+            "Updated CitationManager and MenuBarManager to display dynamic growth windows",
+            "Kept data compatibility by using optional fields for newly added metrics and growth metadata"
         ]
     )
     

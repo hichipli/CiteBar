@@ -92,16 +92,27 @@ actor StorageManager {
             .sorted { $0.timestamp < $1.timestamp }
     }
     
-    func calculateRecentGrowth(for profileId: String, days: Int = 30) async -> Int? {
+    func calculateRecentGrowthSummary(for profileId: String, days: Int = 30) async -> (growth: Int, baselineDays: Int)? {
         let records = await getCitationHistory(for: profileId, days: days)
-        
-        guard let oldest = records.first,
-              let newest = records.last,
-              records.count > 1 else {
+        return StorageManager.computeGrowthSummary(from: records)
+    }
+
+    static func computeGrowthSummary(from records: [CitationRecord]) -> (growth: Int, baselineDays: Int)? {
+        guard records.count > 1,
+              let oldest = records.min(by: { $0.timestamp < $1.timestamp }),
+              let newest = records.max(by: { $0.timestamp < $1.timestamp }) else {
             return nil
         }
-        
-        return newest.citationCount - oldest.citationCount
+
+        let growth = newest.citationCount - oldest.citationCount
+        let dayDifference = Calendar.current.dateComponents([.day], from: oldest.timestamp, to: newest.timestamp).day ?? 0
+        let baselineDays = max(1, dayDifference)
+
+        return (growth, baselineDays)
+    }
+
+    func calculateRecentGrowth(for profileId: String, days: Int = 30) async -> Int? {
+        await calculateRecentGrowthSummary(for: profileId, days: days)?.growth
     }
     
     func getLatestCitationCount(for profileId: String) async -> Int? {

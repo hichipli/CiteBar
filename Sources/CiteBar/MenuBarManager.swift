@@ -238,7 +238,9 @@ import Cocoa
             if let growth = profile.recentGrowth {
                 let growthSymbol = growth > 0 ? "arrow.up.right" : (growth < 0 ? "arrow.down.right" : "minus")
                 let growthText = growth > 0 ? "+\(growth)" : "\(growth)"
-                let growthItem = NSMenuItem(title: "    \(growthText) in last 30 days", action: nil, keyEquivalent: "")
+                let growthDays = max(1, profile.recentGrowthDays ?? 30)
+                let dayLabel = growthDays == 1 ? "day" : "days"
+                let growthItem = NSMenuItem(title: "    \(growthText) in last \(growthDays) \(dayLabel)", action: nil, keyEquivalent: "")
                 growthItem.tag = 100
                 growthItem.isEnabled = false
                 growthItem.image = NSImage(systemSymbolName: growthSymbol, accessibilityDescription: "Growth trend")

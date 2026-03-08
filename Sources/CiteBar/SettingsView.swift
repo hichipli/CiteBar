@@ -250,9 +250,17 @@ struct ProfileRow: View {
                     .foregroundColor(.secondary)
                 
                 if let growth = profile.recentGrowth {
-                    Text("Recent growth: +\(growth)")
-                        .font(.caption)
-                        .foregroundColor(.green)
+                    let growthText = growth > 0 ? "+\(growth)" : "\(growth)"
+                    if let growthDays = profile.recentGrowthDays {
+                        let dayLabel = growthDays == 1 ? "day" : "days"
+                        Text("Recent growth: \(growthText) in last \(growthDays) \(dayLabel)")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                    } else {
+                        Text("Recent growth: \(growthText)")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                    }
                 }
             }
             
@@ -1037,6 +1045,7 @@ struct EditProfileSheet: View {
             var mutableProfile = updatedProfile
             mutableProfile.isEnabled = profile.isEnabled
             mutableProfile.recentGrowth = profile.recentGrowth
+            mutableProfile.recentGrowthDays = profile.recentGrowthDays
             onUpdate(mutableProfile)
             dismiss()
         }
@@ -1113,4 +1122,3 @@ struct AppIconView: View {
         return nil
     }
 }
-
