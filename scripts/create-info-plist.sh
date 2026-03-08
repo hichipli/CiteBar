@@ -3,6 +3,20 @@
 # Extract version from AppVersion.swift
 VERSION=$(grep 'static let current' Sources/CiteBar/AppVersion.swift | cut -d'"' -f2)
 BUILD_VERSION=$(grep 'static let build' Sources/CiteBar/AppVersion.swift | cut -d'"' -f2)
+SPARKLE_PUBLIC_ED_KEY_VALUE="${SPARKLE_PUBLIC_ED_KEY:-}"
+
+# Optional fallback file for local release builds
+if [ -z "$SPARKLE_PUBLIC_ED_KEY_VALUE" ] && [ -f ".sparkle/SUPublicEDKey.txt" ]; then
+    SPARKLE_PUBLIC_ED_KEY_VALUE=$(tr -d '[:space:]' < ".sparkle/SUPublicEDKey.txt")
+fi
+
+SUPUBLIC_ED_KEY_XML=""
+if [ -n "$SPARKLE_PUBLIC_ED_KEY_VALUE" ]; then
+    SUPUBLIC_ED_KEY_XML="    <key>SUPublicEDKey</key>
+    <string>$SPARKLE_PUBLIC_ED_KEY_VALUE</string>"
+else
+    echo "⚠️  Warning: SUPublicEDKey is not set. Sparkle update signature verification will fail."
+fi
 
 cat > "$1" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -62,6 +76,7 @@ cat > "$1" << EOF
     <true/>
     <key>SUScheduledCheckInterval</key>
     <integer>86400</integer>
+$SUPUBLIC_ED_KEY_XML
 </dict>
 </plist>
 EOF

@@ -58,3 +58,6 @@ Temporary Items
 
 # Logs
 *.log
+
+# Sparkle signing keys
+.sparkle/private_ed_key.txt

@@ -5,6 +5,22 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] - 2026-03-08
+
+### Fixed
+- **Sparkle Signature Validation**: Added required EdDSA (`sparkle:edSignature`) signing in release appcast generation to prevent "improperly signed" update failures
+- **Legacy Upgrade Guidance**: Added explicit manual-update fallback dialog when signature validation fails on older installed builds
+- **Public Key Embedding**: Release packaging now injects `SUPublicEDKey` into app `Info.plist` so Sparkle can verify signatures correctly
+
+### Improved
+- **Release Safety Checks**: Release workflow now hard-fails if Sparkle signing keys are missing in repository settings
+- **Update Recovery UX**: Signature-error fallback now offers one-click shortcuts to latest download and releases page
+
+### Technical
+- Build `sign_update` from Sparkle source during release workflow and sign generated DMG artifacts
+- Publish appcast with both `sparkle:edSignature` and `sparkle:sha256Sum`
+- Added Sparkle key setup instructions in distribution docs and release process docs
+
 ## [1.4.1] - 2026-03-08
 
 ### Fixed

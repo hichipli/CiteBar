@@ -44,6 +44,28 @@ jobs:
           echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
           echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
         fi
+
+    - name: Validate Sparkle signing configuration
+      env:
+        SPARKLE_PUBLIC_ED_KEY_VAR: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
+        SPARKLE_PUBLIC_ED_KEY_SECRET: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
+        SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+      run: |
+        PUBLIC_ED_KEY="${SPARKLE_PUBLIC_ED_KEY_VAR:-$SPARKLE_PUBLIC_ED_KEY_SECRET}"
+        
+        if [ -z "$PUBLIC_ED_KEY" ]; then
+          echo "Error: Missing Sparkle public key."
+          echo "Set repository variable or secret: SPARKLE_PUBLIC_ED_KEY"
+          exit 1
+        fi
+        
+        if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
+          echo "Error: Missing Sparkle private key."
+          echo "Set repository secret: SPARKLE_PRIVATE_KEY"
+          exit 1
+        fi
+        
+        echo "SPARKLE_PUBLIC_ED_KEY=$PUBLIC_ED_KEY" >> $GITHUB_ENV
         
     - name: Update version in code
       run: |
@@ -91,6 +113,8 @@ jobs:
         
         # Create properly configured app bundle with Sparkle framework, rpath fixes, and signing
         make package
+      env:
+        SPARKLE_PUBLIC_ED_KEY: ${{ env.SPARKLE_PUBLIC_ED_KEY }}
         
     - name: Create DMG
       run: |
@@ -118,14 +142,38 @@ jobs:
           ls -la dist/
           exit 1
         fi
+
+    - name: Build Sparkle sign_update tool
+      run: |
+        xcodebuild -project .build/checkouts/Sparkle/Sparkle.xcodeproj \
+          -scheme sign_update \
+          -configuration Release \
+          -derivedDataPath .build/sparkle-tools \
+          CODE_SIGNING_ALLOWED=NO
+        
+        SIGN_UPDATE_BIN=".build/sparkle-tools/Build/Products/Release/sign_update"
+        if [ ! -x "$SIGN_UPDATE_BIN" ]; then
+          echo "Error: sign_update tool was not built at expected path: $SIGN_UPDATE_BIN"
+          exit 1
+        fi
+        
+        echo "SIGN_UPDATE_BIN=$SIGN_UPDATE_BIN" >> $GITHUB_ENV
         
     - name: Generate Appcast
+      env:
+        SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
       run: |
         # Get file size and calculate SHA256
         DMG_FILE="dist/${{ steps.dmg_name.outputs.DMG_NAME }}.dmg"
         DMG_SIZE=$(stat -f%z "$DMG_FILE")
         DMG_SHA256=$(shasum -a 256 "$DMG_FILE" | cut -d' ' -f1)
         CURRENT_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S %Z")
+        
+        # Sign DMG with Sparkle EdDSA private key
+        ED_SIGNATURE=$(printf "%s" "$SPARKLE_PRIVATE_KEY" | "$SIGN_UPDATE_BIN" --ed-key-file - -p "$DMG_FILE")
+        
+        # Verify generated signature to fail fast on malformed keys
+        "$SIGN_UPDATE_BIN" --verify --ed-key-file - "$DMG_FILE" "$ED_SIGNATURE" <<< "$SPARKLE_PRIVATE_KEY"
         
         # Generate release notes from AppVersion.swift
         RELEASE_NOTES_HTML=$(swift scripts/extract-release-notes.swift html)
@@ -148,6 +196,7 @@ jobs:
               <enclosure url="https://github.com/hichipli/CiteBar/releases/download/${{ steps.get_version.outputs.TAG }}/${{ steps.dmg_name.outputs.DMG_NAME }}.dmg"
                          sparkle:version="${{ steps.dmg_name.outputs.BUILD_VERSION_FROM_FILE }}"
                          sparkle:shortVersionString="${{ steps.dmg_name.outputs.VERSION_FROM_FILE }}"
+                         sparkle:edSignature="$ED_SIGNATURE"
                          sparkle:sha256Sum="$DMG_SHA256"
                          length="$DMG_SIZE"
                          type="application/octet-stream" />

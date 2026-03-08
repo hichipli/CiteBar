@@ -15,6 +15,9 @@ import Sparkle
     private var updaterController: SPUStandardUpdaterController?
     private var updaterDelegate: UpdaterDelegate?
     private var userDriverDelegate: CustomUserDriverDelegate?
+    private static let releasesURL = URL(string: "https://github.com/hichipli/CiteBar/releases")
+    private static let latestReleaseURL = URL(string: "https://github.com/hichipli/CiteBar/releases/latest")
+    private static let minimumManualUpdateVersion = "1.4.2"
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         setupMenuBar()
@@ -73,7 +76,7 @@ import Sparkle
         }
         
         // Keep delegates strongly referenced because Sparkle keeps weak references.
-        updaterDelegate = UpdaterDelegate()
+        updaterDelegate = UpdaterDelegate(appDelegate: self)
         userDriverDelegate = CustomUserDriverDelegate()
 
         updaterController = SPUStandardUpdaterController(
@@ -170,7 +173,32 @@ import Sparkle
             return
         }
         
+        updaterDelegate?.markManualUpdateCheckRequested()
         updaterController.checkForUpdates(nil)
+    }
+
+    func showManualUpdateFallbackAlert(for error: NSError) {
+        let alert = NSAlert()
+        alert.messageText = "Manual Update Required"
+        alert.informativeText = """
+        Automatic update could not be validated on this installed version.
+
+        Please manually install CiteBar \(Self.minimumManualUpdateVersion) or newer once.
+        After upgrading to \(Self.minimumManualUpdateVersion)+, in-app automatic updates should work normally.
+
+        Sparkle error: \(error.localizedDescription)
+        """
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Download Latest")
+        alert.addButton(withTitle: "Open Releases")
+        alert.addButton(withTitle: "Later")
+
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn, let latestReleaseURL = Self.latestReleaseURL {
+            NSWorkspace.shared.open(latestReleaseURL)
+        } else if response == .alertSecondButtonReturn, let releasesURL = Self.releasesURL {
+            NSWorkspace.shared.open(releasesURL)
+        }
     }
     
     @objc func quitApp() {
@@ -227,12 +255,87 @@ extension AppDelegate: CitationManagerDelegate {
 
 // MARK: - Sparkle Updater Delegate
 class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
+    private weak var appDelegate: AppDelegate?
+    private let stateQueue = DispatchQueue(label: "com.hichipli.citebar.sparkle.updaterDelegate")
+    private var manualUpdateCheckDeadline: Date?
+
+    init(appDelegate: AppDelegate) {
+        self.appDelegate = appDelegate
+    }
+
+    func markManualUpdateCheckRequested() {
+        // Keep the manual-update context for a short window to avoid showing guidance
+        // for unrelated background checks.
+        stateQueue.sync {
+            manualUpdateCheckDeadline = Date().addingTimeInterval(180)
+        }
+    }
+
     func feedURLString(for updater: SPUUpdater) -> String? {
         return "https://github.com/hichipli/CiteBar/releases/latest/download/appcast.xml"
     }
     
     func allowedChannels(for updater: SPUUpdater) -> Set<String> {
         return Set(["release"])
+    }
+
+    func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
+        guard shouldShowManualUpdateGuidance else { return }
+
+        let nsError = error as NSError
+        guard Self.isLikelySignatureValidationError(nsError) else { return }
+
+        Task { @MainActor [weak appDelegate] in
+            appDelegate?.showManualUpdateFallbackAlert(for: nsError)
+        }
+    }
+
+    func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: Error) {
+        clearManualUpdateContext()
+    }
+
+    func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
+        clearManualUpdateContext()
+    }
+
+    private var shouldShowManualUpdateGuidance: Bool {
+        stateQueue.sync {
+            guard let deadline = manualUpdateCheckDeadline else { return false }
+
+            if Date() <= deadline {
+                manualUpdateCheckDeadline = nil
+                return true
+            }
+
+            manualUpdateCheckDeadline = nil
+            return false
+        }
+    }
+
+    private func clearManualUpdateContext() {
+        stateQueue.sync {
+            manualUpdateCheckDeadline = nil
+        }
+    }
+
+    private static func isLikelySignatureValidationError(_ error: NSError) -> Bool {
+        if error.code == 3001 || error.code == 3002 {
+            return true
+        }
+
+        let normalized = error.localizedDescription.lowercased()
+        if normalized.contains("improperly signed")
+            || normalized.contains("could not be validated")
+            || normalized.contains("signature")
+            || normalized.contains("eddsa") {
+            return true
+        }
+
+        if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError {
+            return isLikelySignatureValidationError(underlying)
+        }
+
+        return false
     }
 }
 

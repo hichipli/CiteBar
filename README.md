@@ -226,10 +226,13 @@ We test the parts that matter:
 
 CiteBar uses GitHub Actions for automated releases:
 
-1. Tag a version: `git tag v1.x.x && git push --tags`
-2. GitHub Actions builds DMG with version + architecture
-3. Sparkle appcast.xml auto-generated
-4. Users get automatic update notifications
+1. Configure Sparkle signing once (required for auto-update validation):
+   - Repository variable or secret: `SPARKLE_PUBLIC_ED_KEY`
+   - Repository secret: `SPARKLE_PRIVATE_KEY`
+2. Tag a version: `git tag v1.x.x && git push --tags`
+3. GitHub Actions builds DMG with version + architecture
+4. Workflow signs the DMG with EdDSA and generates `appcast.xml`
+5. Users get automatic update notifications
 
 ## Contributing
 

@@ -44,8 +44,50 @@ sudo chmod -R 755 /Applications/CiteBar.app
 ## Security Information
 
 - This application uses **ad-hoc signing** (self-signing), which is standard practice for temporary distribution
+- Automatic in-app updates are validated with **Sparkle EdDSA signatures** (`SUPublicEDKey` + `sparkle:edSignature`)
 - The application is open source, you can review the source code for security verification
 - Future versions will use Apple Developer Certificate for official signing
+
+## Sparkle Update Signing Setup (One-Time)
+
+To make automatic updates pass signature validation:
+
+```bash
+# Ensure Sparkle source checkout exists
+make build
+
+# 1) Build Sparkle key tool
+xcodebuild -project .build/checkouts/Sparkle/Sparkle.xcodeproj \
+  -scheme generate_keys \
+  -configuration Release \
+  -derivedDataPath .build/sparkle-tools \
+  CODE_SIGNING_ALLOWED=NO
+
+# 2) Generate key in login keychain (or print existing public key)
+.build/sparkle-tools/Build/Products/Release/generate_keys
+PUBLIC_KEY=$(.build/sparkle-tools/Build/Products/Release/generate_keys -p)
+
+# 3) Export private key to a local file (do NOT commit this file)
+mkdir -p .sparkle
+.build/sparkle-tools/Build/Products/Release/generate_keys -x .sparkle/private_ed_key.txt
+```
+
+Then configure GitHub repository settings:
+
+- `Variables` (or `Secrets`): `SPARKLE_PUBLIC_ED_KEY=$PUBLIC_KEY`
+- `Secrets`: `SPARKLE_PRIVATE_KEY=<contents of .sparkle/private_ed_key.txt>`
+
+Using GitHub CLI (recommended):
+
+```bash
+gh variable set SPARKLE_PUBLIC_ED_KEY --body "$PUBLIC_KEY"
+gh secret set SPARKLE_PRIVATE_KEY < .sparkle/private_ed_key.txt
+```
+
+After this, release workflow will:
+- write `SUPublicEDKey` into app `Info.plist`
+- sign DMG via `sign_update`
+- publish `sparkle:edSignature` into `appcast.xml`
 
 ## Technical Details
 
