@@ -222,6 +222,17 @@ import Cocoa
                 menu.insertItem(hIndexItem, at: insertIndex)
                 insertIndex += 1
             }
+
+            // Add i10-index if available
+            if let i10Index = metrics.i10Index {
+                let i10IndexText = "    i10-index: \(i10Index)"
+                let i10IndexItem = NSMenuItem(title: i10IndexText, action: nil, keyEquivalent: "")
+                i10IndexItem.tag = 100
+                i10IndexItem.isEnabled = false
+                i10IndexItem.image = NSImage(systemSymbolName: "number.square", accessibilityDescription: "i10-index")
+                menu.insertItem(i10IndexItem, at: insertIndex)
+                insertIndex += 1
+            }
             
             // Add growth info if available
             if let growth = profile.recentGrowth {
@@ -310,7 +321,7 @@ import Cocoa
     
     func showProfileLoading(_ profile: ScholarProfile) {
         // Add the new profile to current citations with a loading indicator
-        currentCitations[profile] = ProfileMetrics(citationCount: -1, hIndex: nil) // Use -1 to indicate loading
+        currentCitations[profile] = ProfileMetrics(citationCount: -1, hIndex: nil, i10Index: nil) // Use -1 to indicate loading
         updateMenu()
     }
     

@@ -45,19 +45,21 @@ final class CiteBarTests: XCTestCase {
     
     func testCitationRecordCreation() {
         let record = CitationRecord(profileId: "test", citationCount: 100)
-        
+
         XCTAssertEqual(record.profileId, "test")
         XCTAssertEqual(record.citationCount, 100)
         XCTAssertNil(record.hIndex)
+        XCTAssertNil(record.i10Index)
         XCTAssertNotNil(record.timestamp)
     }
-    
+
     func testCitationRecordWithHIndex() {
-        let record = CitationRecord(profileId: "test", citationCount: 100, hIndex: 25)
-        
+        let record = CitationRecord(profileId: "test", citationCount: 100, hIndex: 25, i10Index: 12)
+
         XCTAssertEqual(record.profileId, "test")
         XCTAssertEqual(record.citationCount, 100)
         XCTAssertEqual(record.hIndex, 25)
+        XCTAssertEqual(record.i10Index, 12)
         XCTAssertNotNil(record.timestamp)
     }
     
@@ -90,7 +92,8 @@ final class CiteBarTests: XCTestCase {
         let metrics = try await citationManager.fetchScholarMetrics(for: profile)
         
         XCTAssertEqual(metrics.citationCount, 98, "Citation count should be parsed correctly from the sample HTML.")
-        // Note: h-index test would depend on the sample HTML content
+        XCTAssertEqual(metrics.hIndex, 4, "h-index should be parsed correctly from the sample HTML.")
+        XCTAssertEqual(metrics.i10Index, 2, "i10-index should be parsed correctly from the sample HTML.")
     }
     
     @MainActor

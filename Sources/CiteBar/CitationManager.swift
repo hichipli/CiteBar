@@ -77,7 +77,7 @@ import SwiftSoup
                 let metrics = try await fetchScholarMetrics(for: profile)
                 
                 // Store the record
-                let record = CitationRecord(profileId: profile.id, citationCount: metrics.citationCount, hIndex: metrics.hIndex)
+                let record = CitationRecord(profileId: profile.id, citationCount: metrics.citationCount, hIndex: metrics.hIndex, i10Index: metrics.i10Index)
                 await storageManager.saveCitationRecord(record)
                 
                 // Calculate recent growth
@@ -86,11 +86,14 @@ import SwiftSoup
                 updatedProfile.recentGrowth = growth
                 
                 // Only add the updated profile with growth data to results
-                results[updatedProfile] = ProfileMetrics(citationCount: metrics.citationCount, hIndex: metrics.hIndex)
-                
+                results[updatedProfile] = ProfileMetrics(citationCount: metrics.citationCount, hIndex: metrics.hIndex, i10Index: metrics.i10Index)
+
                 print("Successfully fetched \(metrics.citationCount) citations for \(profile.name)")
                 if let hIndex = metrics.hIndex {
                     print("h-index for \(profile.name): \(hIndex)")
+                }
+                if let i10Index = metrics.i10Index {
+                    print("i10-index for \(profile.name): \(i10Index)")
                 }
                 if let growth = growth {
                     print("Recent growth for \(profile.name): \(growth > 0 ? "+\(growth)" : "\(growth)") in last 30 days")
@@ -197,7 +200,7 @@ import SwiftSoup
                     if let table = tables.first() {
                         let metrics = try parseScholarTable(table)
                         if metrics.citationCount > 0 {
-                            print("Successfully parsed from table - Citations: \(metrics.citationCount), h-index: \(metrics.hIndex ?? -1)")
+                            print("Successfully parsed from table - Citations: \(metrics.citationCount), h-index: \(metrics.hIndex ?? -1), i10-index: \(metrics.i10Index ?? -1)")
                             return metrics
                         }
                     }
@@ -231,7 +234,7 @@ import SwiftSoup
                     
                     let metrics = parseScholarCellArray(elementsArray)
                     if metrics.citationCount > 0 {
-                        print("Successfully parsed from cells - Citations: \(metrics.citationCount), h-index: \(metrics.hIndex ?? -1)")
+                        print("Successfully parsed from cells - Citations: \(metrics.citationCount), h-index: \(metrics.hIndex ?? -1), i10-index: \(metrics.i10Index ?? -1)")
                         return metrics
                     }
                 }
@@ -243,7 +246,7 @@ import SwiftSoup
                 let text = try element.text()
                 if let number = extractValidCitationCount(from: text) {
                     print("Found potential citation count in fallback: \(text) -> \(number)")
-                    return ScholarMetrics(citationCount: number, hIndex: nil)
+                    return ScholarMetrics(citationCount: number, hIndex: nil, i10Index: nil)
                 }
             }
             
@@ -257,17 +260,18 @@ import SwiftSoup
     }
     
     private func parseScholarTable(_ table: Element) throws -> ScholarMetrics {
-        // Parse the table row by row to find Citations and h-index rows
+        // Parse the table row by row to find Citations, h-index, and i10-index rows
         let rows = try table.select("tr")
         var citationCount: Int?
         var hIndex: Int?
-        
+        var i10Index: Int?
+
         for row in rows {
             let cells = try row.select("td")
             if cells.count >= 2 {
                 let rowLabel = try cells.first()?.text() ?? ""
                 print("Row label: '\(rowLabel)'")
-                
+
                 if rowLabel.lowercased().contains("citations") {
                     // This is the citations row, get the "All" value (second cell)
                     if cells.count >= 2 {
@@ -284,25 +288,34 @@ import SwiftSoup
                         hIndex = extractNumber(from: text)
                         print("Found h-index row: \(text) -> \(hIndex ?? -1)")
                     }
+                } else if rowLabel.lowercased().contains("i10-index") {
+                    // This is the i10-index row, get the "All" value (second cell)
+                    if cells.count >= 2 {
+                        let allCell = cells[1]
+                        let text = try allCell.text()
+                        i10Index = extractNumber(from: text)
+                        print("Found i10-index row: \(text) -> \(i10Index ?? -1)")
+                    }
                 }
             }
         }
-        
-        return ScholarMetrics(citationCount: citationCount ?? 0, hIndex: hIndex)
+
+        return ScholarMetrics(citationCount: citationCount ?? 0, hIndex: hIndex, i10Index: i10Index)
     }
     
     private func parseScholarCellArray(_ elements: [Element]) -> ScholarMetrics {
         // Google Scholar table structure when read as linear array:
         // The exact pattern depends on how the HTML is structured, so we need to be more flexible
-        
+
         var citationCount: Int?
         var hIndex: Int?
-        
+        var i10Index: Int?
+
         // Look for patterns in the text content
         for (index, element) in elements.enumerated() {
             do {
                 let text = try element.text()
-                
+
                 // If we find a cell that says "Citations", the next numeric cell should be citation count
                 if text.lowercased().contains("citations") && index + 1 < elements.count {
                     let nextElement = elements[index + 1]
@@ -310,7 +323,7 @@ import SwiftSoup
                     citationCount = extractValidCitationCount(from: nextText)
                     print("Found citations after label at index \(index + 1): \(nextText) -> \(citationCount ?? -1)")
                 }
-                
+
                 // If we find a cell that says "h-index", the next numeric cell should be h-index
                 if text.lowercased().contains("h-index") && index + 1 < elements.count {
                     let nextElement = elements[index + 1]
@@ -318,17 +331,25 @@ import SwiftSoup
                     hIndex = extractNumber(from: nextText)
                     print("Found h-index after label at index \(index + 1): \(nextText) -> \(hIndex ?? -1)")
                 }
+
+                // If we find a cell that says "i10-index", the next numeric cell should be i10-index
+                if text.lowercased().contains("i10-index") && index + 1 < elements.count {
+                    let nextElement = elements[index + 1]
+                    let nextText = try nextElement.text()
+                    i10Index = extractNumber(from: nextText)
+                    print("Found i10-index after label at index \(index + 1): \(nextText) -> \(i10Index ?? -1)")
+                }
             } catch {
                 continue
             }
         }
-        
+
         // If we still don't have citation count, try the old method as fallback
         if citationCount == nil {
             citationCount = extractValidCitationCount(from: elements)
         }
-        
-        return ScholarMetrics(citationCount: citationCount ?? 0, hIndex: hIndex)
+
+        return ScholarMetrics(citationCount: citationCount ?? 0, hIndex: hIndex, i10Index: i10Index)
     }
     
     private func extractValidCitationCount(from elements: [Element]) -> Int? {
@@ -413,11 +434,14 @@ import SwiftSoup
                         let growth = await storageManager.calculateRecentGrowth(for: profile.id)
                         var updatedProfile = profile
                         updatedProfile.recentGrowth = growth
-                        currentData[updatedProfile] = ProfileMetrics(citationCount: latestRecord.citationCount, hIndex: latestRecord.hIndex)
-                        
+                        currentData[updatedProfile] = ProfileMetrics(citationCount: latestRecord.citationCount, hIndex: latestRecord.hIndex, i10Index: latestRecord.i10Index)
+
                         print("Loaded historical data for \(profile.name): \(latestRecord.citationCount) citations")
                         if let hIndex = latestRecord.hIndex {
                             print("Historical h-index for \(profile.name): \(hIndex)")
+                        }
+                        if let i10Index = latestRecord.i10Index {
+                            print("Historical i10-index for \(profile.name): \(i10Index)")
                         }
                         if let growth = growth {
                             print("Historical growth for \(profile.name): \(growth > 0 ? "+\(growth)" : "\(growth)") in last 30 days")

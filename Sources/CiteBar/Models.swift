@@ -27,18 +27,21 @@ struct ScholarProfile: Hashable, Codable {
 struct ScholarMetrics {
     let citationCount: Int
     let hIndex: Int?
+    let i10Index: Int?
 }
 
 struct CitationRecord: Codable {
     let profileId: String
     let citationCount: Int
     let hIndex: Int?
+    let i10Index: Int?
     let timestamp: Date
-    
-    init(profileId: String, citationCount: Int, hIndex: Int? = nil, timestamp: Date = Date()) {
+
+    init(profileId: String, citationCount: Int, hIndex: Int? = nil, i10Index: Int? = nil, timestamp: Date = Date()) {
         self.profileId = profileId
         self.citationCount = citationCount
         self.hIndex = hIndex
+        self.i10Index = i10Index
         self.timestamp = timestamp
     }
 }
@@ -86,6 +89,7 @@ struct AppSettings: Codable {
 struct ProfileMetrics {
     let citationCount: Int
     let hIndex: Int?
+    let i10Index: Int?
 }
 
 @MainActor protocol CitationManagerDelegate: AnyObject {
