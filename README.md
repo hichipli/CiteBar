@@ -237,6 +237,8 @@ CiteBar uses GitHub Actions for automated releases:
 4. Workflow signs the DMG with EdDSA and generates `appcast.xml`
 5. Users get automatic update notifications
 
+Maintainers: see [RELEASING.md](RELEASING.md) for full release + signing workflow.
+
 ## Contributing
 
 We love contributions! Whether you're fixing bugs, adding features, or improving docs:
