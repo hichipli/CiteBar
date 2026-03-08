@@ -80,10 +80,11 @@ import SwiftSoup
                 let record = CitationRecord(profileId: profile.id, citationCount: metrics.citationCount, hIndex: metrics.hIndex, i10Index: metrics.i10Index)
                 await storageManager.saveCitationRecord(record)
                 
-                // Calculate recent growth
-                let growth = await storageManager.calculateRecentGrowth(for: profile.id)
+                // Calculate recent growth and baseline days
+                let growthSummary = await storageManager.calculateRecentGrowthSummary(for: profile.id)
                 var updatedProfile = profile
-                updatedProfile.recentGrowth = growth
+                updatedProfile.recentGrowth = growthSummary?.growth
+                updatedProfile.recentGrowthDays = growthSummary?.baselineDays
                 
                 // Only add the updated profile with growth data to results
                 results[updatedProfile] = ProfileMetrics(citationCount: metrics.citationCount, hIndex: metrics.hIndex, i10Index: metrics.i10Index)
@@ -95,8 +96,10 @@ import SwiftSoup
                 if let i10Index = metrics.i10Index {
                     print("i10-index for \(profile.name): \(i10Index)")
                 }
-                if let growth = growth {
-                    print("Recent growth for \(profile.name): \(growth > 0 ? "+\(growth)" : "\(growth)") in last 30 days")
+                if let growthSummary = growthSummary {
+                    let growth = growthSummary.growth
+                    let dayLabel = growthSummary.baselineDays == 1 ? "day" : "days"
+                    print("Recent growth for \(profile.name): \(growth > 0 ? "+\(growth)" : "\(growth)") in last \(growthSummary.baselineDays) \(dayLabel)")
                 } else {
                     print("No recent growth data available for \(profile.name) (insufficient historical data)")
                 }
@@ -431,9 +434,10 @@ import SwiftSoup
                     let profileRecords = records.filter { $0.profileId == profile.id }
                     if let latestRecord = profileRecords.max(by: { $0.timestamp < $1.timestamp }) {
                         // Calculate recent growth for historical data
-                        let growth = await storageManager.calculateRecentGrowth(for: profile.id)
+                        let growthSummary = await storageManager.calculateRecentGrowthSummary(for: profile.id)
                         var updatedProfile = profile
-                        updatedProfile.recentGrowth = growth
+                        updatedProfile.recentGrowth = growthSummary?.growth
+                        updatedProfile.recentGrowthDays = growthSummary?.baselineDays
                         currentData[updatedProfile] = ProfileMetrics(citationCount: latestRecord.citationCount, hIndex: latestRecord.hIndex, i10Index: latestRecord.i10Index)
 
                         print("Loaded historical data for \(profile.name): \(latestRecord.citationCount) citations")
@@ -443,8 +447,10 @@ import SwiftSoup
                         if let i10Index = latestRecord.i10Index {
                             print("Historical i10-index for \(profile.name): \(i10Index)")
                         }
-                        if let growth = growth {
-                            print("Historical growth for \(profile.name): \(growth > 0 ? "+\(growth)" : "\(growth)") in last 30 days")
+                        if let growthSummary = growthSummary {
+                            let growth = growthSummary.growth
+                            let dayLabel = growthSummary.baselineDays == 1 ? "day" : "days"
+                            print("Historical growth for \(profile.name): \(growth > 0 ? "+\(growth)" : "\(growth)") in last \(growthSummary.baselineDays) \(dayLabel)")
                         }
                     }
                 }

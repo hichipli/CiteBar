@@ -6,6 +6,7 @@ struct ScholarProfile: Hashable, Codable {
     let url: String
     var isEnabled: Bool = true
     var recentGrowth: Int?
+    var recentGrowthDays: Int?
     var sortOrder: Int = 0
     
     init(id: String, name: String, sortOrder: Int = 0) {

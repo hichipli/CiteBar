@@ -5,6 +5,21 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-03-08
+
+### Added
+- **i10-index Support**: Added i10-index extraction and display alongside citations and h-index
+- **Richer Metrics Pipeline**: Extended storage and model types to persist i10-index values end-to-end
+
+### Changed
+- **Dynamic Growth Window**: Growth text now shows the actual baseline window (e.g., `+X in last Y days`) instead of always showing 30 days
+- **New Profile Accuracy**: Newly added profiles now show a smaller, accurate day window when historical data is limited
+
+### Technical
+- Added `calculateRecentGrowthSummary` in `StorageManager` to return both growth delta and baseline day count
+- Extended `ScholarProfile` with optional `recentGrowthDays` for UI display
+- Updated `CitationManager`, `MenuBarManager`, and `SettingsView` to propagate and render growth window metadata
+
 ## [1.3.3] - 2025-06-26
 
 ### Added

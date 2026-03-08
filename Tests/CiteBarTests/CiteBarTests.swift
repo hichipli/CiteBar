@@ -62,6 +62,51 @@ final class CiteBarTests: XCTestCase {
         XCTAssertEqual(record.i10Index, 12)
         XCTAssertNotNil(record.timestamp)
     }
+
+    func testComputeGrowthSummary_UsesActualBaselineDays() {
+        let now = Date()
+        let oldest = CitationRecord(profileId: "test", citationCount: 100, timestamp: Calendar.current.date(byAdding: .day, value: -5, to: now)!)
+        let newest = CitationRecord(profileId: "test", citationCount: 112, timestamp: Calendar.current.date(byAdding: .day, value: -2, to: now)!)
+
+        let summary = StorageManager.computeGrowthSummary(from: [oldest, newest])
+
+        XCTAssertEqual(summary?.growth, 12)
+        XCTAssertEqual(summary?.baselineDays, 3)
+    }
+
+    func testComputeGrowthSummary_SameDayRecordsClampToOneDay() {
+        let now = Date()
+        let first = CitationRecord(profileId: "test", citationCount: 100, timestamp: now)
+        let second = CitationRecord(profileId: "test", citationCount: 103, timestamp: now)
+
+        let summary = StorageManager.computeGrowthSummary(from: [first, second])
+
+        XCTAssertEqual(summary?.growth, 3)
+        XCTAssertEqual(summary?.baselineDays, 1)
+    }
+
+    func testComputeRecentGrowthSummary_ShowsFullWindowWhenHistoryIsLongEnough() {
+        let now = Date()
+        let oldRecord = CitationRecord(profileId: "test", citationCount: 80, timestamp: Calendar.current.date(byAdding: .day, value: -40, to: now)!)
+        let nearWindowStart = CitationRecord(profileId: "test", citationCount: 100, timestamp: Calendar.current.date(byAdding: .day, value: -29, to: now)!)
+        let latest = CitationRecord(profileId: "test", citationCount: 130, timestamp: now)
+
+        let summary = StorageManager.computeRecentGrowthSummary(from: [oldRecord, nearWindowStart, latest], days: 30)
+
+        XCTAssertEqual(summary?.growth, 30)
+        XCTAssertEqual(summary?.baselineDays, 30)
+    }
+
+    func testComputeRecentGrowthSummary_UsesActualDaysForNewProfiles() {
+        let now = Date()
+        let first = CitationRecord(profileId: "test", citationCount: 100, timestamp: Calendar.current.date(byAdding: .day, value: -5, to: now)!)
+        let second = CitationRecord(profileId: "test", citationCount: 112, timestamp: now)
+
+        let summary = StorageManager.computeRecentGrowthSummary(from: [first, second], days: 30)
+
+        XCTAssertEqual(summary?.growth, 12)
+        XCTAssertEqual(summary?.baselineDays, 5)
+    }
     
     func testAppSettingsDefaults() {
         let settings = AppSettings()

@@ -92,16 +92,69 @@ actor StorageManager {
             .sorted { $0.timestamp < $1.timestamp }
     }
     
-    func calculateRecentGrowth(for profileId: String, days: Int = 30) async -> Int? {
-        let records = await getCitationHistory(for: profileId, days: days)
-        
-        guard let oldest = records.first,
-              let newest = records.last,
-              records.count > 1 else {
+    func calculateRecentGrowthSummary(for profileId: String, days: Int = 30) async -> (growth: Int, baselineDays: Int)? {
+        await ensureInitialized()
+        let profileRecords = citationHistory.filter { $0.profileId == profileId }
+        return StorageManager.computeRecentGrowthSummary(from: profileRecords, days: days)
+    }
+
+    static func computeRecentGrowthSummary(from records: [CitationRecord], days: Int = 30) -> (growth: Int, baselineDays: Int)? {
+        guard records.count > 1 else {
             return nil
         }
-        
-        return newest.citationCount - oldest.citationCount
+
+        let sortedRecords = records.enumerated().sorted { lhs, rhs in
+            if lhs.element.timestamp == rhs.element.timestamp {
+                return lhs.offset < rhs.offset
+            }
+            return lhs.element.timestamp < rhs.element.timestamp
+        }.map(\.element)
+
+        guard let oldestOverall = sortedRecords.first,
+              let newest = sortedRecords.last else {
+            return nil
+        }
+
+        let cutoffDate = Calendar.current.date(byAdding: .day, value: -days, to: newest.timestamp) ?? newest.timestamp
+        let windowRecords = sortedRecords.filter { $0.timestamp >= cutoffDate }
+
+        guard let summary = computeGrowthSummary(from: windowRecords) else {
+            return nil
+        }
+
+        let hasFullWindowCoverage = oldestOverall.timestamp <= cutoffDate
+        let baselineDays = hasFullWindowCoverage ? days : summary.baselineDays
+
+        return (summary.growth, baselineDays)
+    }
+
+    static func computeGrowthSummary(from records: [CitationRecord]) -> (growth: Int, baselineDays: Int)? {
+        guard records.count > 1 else {
+            return nil
+        }
+
+        // Keep deterministic ordering when multiple records share the same timestamp.
+        let sortedRecords = records.enumerated().sorted { lhs, rhs in
+            if lhs.element.timestamp == rhs.element.timestamp {
+                return lhs.offset < rhs.offset
+            }
+            return lhs.element.timestamp < rhs.element.timestamp
+        }
+
+        guard let oldest = sortedRecords.first?.element,
+              let newest = sortedRecords.last?.element else {
+            return nil
+        }
+
+        let growth = newest.citationCount - oldest.citationCount
+        let dayDifference = Calendar.current.dateComponents([.day], from: oldest.timestamp, to: newest.timestamp).day ?? 0
+        let baselineDays = max(1, dayDifference)
+
+        return (growth, baselineDays)
+    }
+
+    func calculateRecentGrowth(for profileId: String, days: Int = 30) async -> Int? {
+        await calculateRecentGrowthSummary(for: profileId, days: days)?.growth
     }
     
     func getLatestCitationCount(for profileId: String) async -> Int? {
