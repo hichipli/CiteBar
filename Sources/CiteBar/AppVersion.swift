@@ -3,10 +3,10 @@ import Foundation
 /// Centralized version management for CiteBar
 struct AppVersion {
     /// Current application version
-    static let current: String = "1.4.0"
+    static let current: String = "1.4.1"
     
     /// Current build number
-    static let build: String = "8"
+    static let build: String = "9"
     
     /// Version display string for UI
     static let displayString: String = "Version \(current)"
@@ -34,17 +34,17 @@ extension AppVersion {
     static let releaseNotes = ReleaseNotes(
         version: current,
         highlights: [
-            "Added i10-index support across parsing, storage, and menu display",
-            "Menu growth now shows the real baseline window (e.g. +X in last Y days)",
-            "Improved growth context for newly added profiles with fewer than 30 days of history",
-            "Extended profile model to carry growth baseline day count through the UI data flow"
+            "Fixed Sparkle update discovery for users on older installed builds",
+            "Corrected appcast version fields to use build version for update comparison",
+            "Improved no-update dialog to provide a version history/release fallback action",
+            "Stabilized updater delegate wiring to ensure custom Sparkle UI callbacks are retained"
         ],
-        description: "This release expands Scholar metrics with i10-index and makes trend messaging more accurate by showing actual baseline days instead of always assuming 30 days.",
+        description: "This patch release fixes update-check behavior so existing users can reliably discover new versions and access release history from the no-update flow.",
         technicalNotes: [
-            "Extended ScholarMetrics, CitationRecord, and ProfileMetrics with optional i10-index support",
-            "Added StorageManager growth summary API returning both growth delta and baseline day span",
-            "Updated CitationManager and MenuBarManager to display dynamic growth windows",
-            "Kept data compatibility by using optional fields for newly added metrics and growth metadata"
+            "Updated release workflow to publish appcast with sparkle:version=CFBundleVersion and sparkle:shortVersionString=marketing version",
+            "Kept strong references to SPUUpdaterDelegate and SPUStandardUserDriverDelegate in AppDelegate",
+            "Replaced non-effective no-update override with Sparkle 2 compatible version history delegate hooks",
+            "Added URL fallback to GitHub Releases when appcast version-history links are unavailable"
         ]
     )
     
