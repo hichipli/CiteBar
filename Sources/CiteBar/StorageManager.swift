@@ -98,9 +98,20 @@ actor StorageManager {
     }
 
     static func computeGrowthSummary(from records: [CitationRecord]) -> (growth: Int, baselineDays: Int)? {
-        guard records.count > 1,
-              let oldest = records.min(by: { $0.timestamp < $1.timestamp }),
-              let newest = records.max(by: { $0.timestamp < $1.timestamp }) else {
+        guard records.count > 1 else {
+            return nil
+        }
+
+        // Keep deterministic ordering when multiple records share the same timestamp.
+        let sortedRecords = records.enumerated().sorted { lhs, rhs in
+            if lhs.element.timestamp == rhs.element.timestamp {
+                return lhs.offset < rhs.offset
+            }
+            return lhs.element.timestamp < rhs.element.timestamp
+        }
+
+        guard let oldest = sortedRecords.first?.element,
+              let newest = sortedRecords.last?.element else {
             return nil
         }
 
