@@ -93,8 +93,39 @@ actor StorageManager {
     }
     
     func calculateRecentGrowthSummary(for profileId: String, days: Int = 30) async -> (growth: Int, baselineDays: Int)? {
-        let records = await getCitationHistory(for: profileId, days: days)
-        return StorageManager.computeGrowthSummary(from: records)
+        await ensureInitialized()
+        let profileRecords = citationHistory.filter { $0.profileId == profileId }
+        return StorageManager.computeRecentGrowthSummary(from: profileRecords, days: days)
+    }
+
+    static func computeRecentGrowthSummary(from records: [CitationRecord], days: Int = 30) -> (growth: Int, baselineDays: Int)? {
+        guard records.count > 1 else {
+            return nil
+        }
+
+        let sortedRecords = records.enumerated().sorted { lhs, rhs in
+            if lhs.element.timestamp == rhs.element.timestamp {
+                return lhs.offset < rhs.offset
+            }
+            return lhs.element.timestamp < rhs.element.timestamp
+        }.map(\.element)
+
+        guard let oldestOverall = sortedRecords.first,
+              let newest = sortedRecords.last else {
+            return nil
+        }
+
+        let cutoffDate = Calendar.current.date(byAdding: .day, value: -days, to: newest.timestamp) ?? newest.timestamp
+        let windowRecords = sortedRecords.filter { $0.timestamp >= cutoffDate }
+
+        guard let summary = computeGrowthSummary(from: windowRecords) else {
+            return nil
+        }
+
+        let hasFullWindowCoverage = oldestOverall.timestamp <= cutoffDate
+        let baselineDays = hasFullWindowCoverage ? days : summary.baselineDays
+
+        return (summary.growth, baselineDays)
     }
 
     static func computeGrowthSummary(from records: [CitationRecord]) -> (growth: Int, baselineDays: Int)? {
