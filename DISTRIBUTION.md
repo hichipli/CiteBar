@@ -41,6 +41,15 @@ sudo xattr -cr /Applications/CiteBar.app
 sudo chmod -R 755 /Applications/CiteBar.app
 ```
 
+### Issue 4: Older versions fail during in-app update
+If you are on `1.3.x` or `1.4.1`, automatic install may fail during signature validation.  
+Please manually install the latest DMG from [Releases](https://github.com/hichipli/CiteBar/releases/latest) once, then automatic updates should work normally on `1.4.3+`.
+
+If macOS blocks launch after manual install, run:
+```bash
+xattr -cr /Applications/CiteBar.app
+```
+
 ## Security Information
 
 - This application uses **ad-hoc signing** (self-signing), which is standard practice for temporary distribution
