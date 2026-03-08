@@ -31,7 +31,7 @@ Because refreshing your Google Scholar profile every 20 minutes isn't productive
 
 1. **Download** the latest release:
    - **[Click here to download CiteBar](https://github.com/hichipli/CiteBar/releases)**
-   - Choose the latest `CiteBar-x.x.x-arm64-[date].dmg` file (Apple Silicon only)
+   - Choose the latest `CiteBar-x.x.x-universal-[date].dmg` file (works on Apple Silicon + Intel, no chip-specific download needed)
    - Double-click the DMG file when downloaded
    - Drag CiteBar.app to the Applications folder
 
@@ -54,12 +54,12 @@ Because refreshing your Google Scholar profile every 20 minutes isn't productive
    - Click **"Open Anyway"** button next to the message
 
 > **Legacy Upgrade Note:** If you're on `1.3.x` or `1.4.1`, you may need one manual upgrade first.  
-> Install the latest DMG from [Releases](https://github.com/hichipli/CiteBar/releases/latest), and after you're on `1.4.3+`, in-app automatic updates should work normally.
+> Install the latest DMG from [Releases](https://github.com/hichipli/CiteBar/releases/latest), and after you're on `1.4.4+`, in-app automatic updates should work normally.
 
 3. **Set up your profile**:
    - Click the CiteBar icon in menu bar
    - Add your Google Scholar ID (from your profile URL)
-   - Choose refresh interval (1 hour recommended)
+   - Choose refresh interval (24 hours recommended)
    - Done!
 
 **Having Issues?** Check our [troubleshooting guide](DISTRIBUTION.md) for common macOS security dialogs.
@@ -85,7 +85,7 @@ make install
 **Real-time Citation Tracking**
 - Live citation counts in your menu bar
 - Historical trend tracking with growth indicators
-- Configurable refresh intervals (15 min to 24 hours)
+- Configurable refresh intervals (1 hour to 2 days)
 
 **Multi-Profile Management**
 - Track multiple scholars (yourself, collaborators, competitors)
@@ -186,7 +186,7 @@ History:  ~/Library/Application Support/CiteBar/citation_history.json
 We use a Makefile for consistency across environments:
 
 ```bash
-make build      # Release build (.build/release/CiteBar)
+make build      # Release build (.build/apple/Products/Release/CiteBar)
 make debug      # Debug build with logging
 make test       # Run unit tests
 make xcode      # Open Xcode project
@@ -285,7 +285,7 @@ We take research ethics seriously:
 
 **Rate Limiting**
 - Built-in delays respect Google's servers
-- Default 1-hour refresh intervals
+- Default 24-hour refresh intervals
 - Exponential backoff on errors
 - Professional User-Agent headers
 
@@ -312,10 +312,8 @@ We take research ethics seriously:
 
 **System Requirements:**
 - macOS 13.0 (Ventura) or later
-- Apple Silicon Mac (M1, M2, M3, M4 series)
+- Apple Silicon or Intel Mac
 - 50MB free disk space
-
-**Note:** Currently supports Apple Silicon Macs only. Intel Mac support coming soon!
 
 **Dependencies:**
 - SwiftSoup (HTML parsing)

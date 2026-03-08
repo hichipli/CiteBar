@@ -38,9 +38,24 @@ final class CiteBarTests: XCTestCase {
     }
     
     func testRefreshIntervalSeconds() {
-        XCTAssertEqual(AppSettings.RefreshInterval.fifteenMinutes.seconds, 15 * 60)
         XCTAssertEqual(AppSettings.RefreshInterval.hourly.seconds, 60 * 60)
+        XCTAssertEqual(AppSettings.RefreshInterval.sixHours.seconds, 6 * 60 * 60)
         XCTAssertEqual(AppSettings.RefreshInterval.daily.seconds, 24 * 60 * 60)
+        XCTAssertEqual(AppSettings.RefreshInterval.twoDays.seconds, 48 * 60 * 60)
+    }
+
+    func testRefreshIntervalBackwardCompatibilityDecoding() throws {
+        struct Wrapper: Codable {
+            let refreshInterval: AppSettings.RefreshInterval
+        }
+
+        let oldFifteenMinutes = try JSONEncoder().encode(["refreshInterval": "15min"])
+        let oldThreeHours = try JSONEncoder().encode(["refreshInterval": "3hours"])
+        let unknownValue = try JSONEncoder().encode(["refreshInterval": "legacy-value"])
+
+        XCTAssertEqual(try JSONDecoder().decode(Wrapper.self, from: oldFifteenMinutes).refreshInterval, .hourly)
+        XCTAssertEqual(try JSONDecoder().decode(Wrapper.self, from: oldThreeHours).refreshInterval, .sixHours)
+        XCTAssertEqual(try JSONDecoder().decode(Wrapper.self, from: unknownValue).refreshInterval, .daily)
     }
     
     func testCitationRecordCreation() {
@@ -112,7 +127,7 @@ final class CiteBarTests: XCTestCase {
         let settings = AppSettings()
         
         XCTAssertTrue(settings.profiles.isEmpty)
-        XCTAssertEqual(settings.refreshInterval, .hourly)
+        XCTAssertEqual(settings.refreshInterval, .daily)
         XCTAssertTrue(settings.showNotifications)
         XCTAssertTrue(settings.autoLaunch)
     }

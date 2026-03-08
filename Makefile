@@ -9,15 +9,12 @@ BUILD_DIR = .build
 VERSION = $(shell grep 'static let current' Sources/CiteBar/AppVersion.swift | cut -d'"' -f2)
 BUILD_VERSION = $(shell grep 'static let build' Sources/CiteBar/AppVersion.swift | cut -d'"' -f2)
 
-# Detect architecture
-ARCH = $(shell uname -m)
-ifeq ($(ARCH),x86_64)
-    ARCH_NAME = intel
-else ifeq ($(ARCH),arm64)
-    ARCH_NAME = arm64
-else
-    ARCH_NAME = $(ARCH)
-endif
+# Build architecture configuration (release artifacts are universal binaries)
+ARCH_NAME = universal
+RELEASE_ARCH_FLAGS = --arch arm64 --arch x86_64
+RELEASE_PRODUCTS_DIR = $(BUILD_DIR)/apple/Products/Release
+RELEASE_BINARY = $(RELEASE_PRODUCTS_DIR)/$(PRODUCT_NAME)
+RELEASE_SPARKLE_FRAMEWORK = $(RELEASE_PRODUCTS_DIR)/Sparkle.framework
 
 # Date for unique builds
 BUILD_DATE = $(shell date +%Y%m%d)
@@ -34,8 +31,8 @@ ICON_1024 = $(RESOURCES_DIR)/1024.png
 ICON_512 = $(RESOURCES_DIR)/512.png
 
 build:
-	@echo "Building $(PRODUCT_NAME) v$(VERSION) ($(ARCH_NAME))..."
-	swift build -c release
+	@echo "Building $(PRODUCT_NAME) v$(VERSION) ($(ARCH_NAME): arm64 + x86_64)..."
+	swift build -c release $(RELEASE_ARCH_FLAGS)
 
 debug:
 	@echo "Building $(PRODUCT_NAME) (debug)..."
@@ -43,7 +40,7 @@ debug:
 
 run: build
 	@echo "Running $(PRODUCT_NAME)..."
-	./$(BUILD_DIR)/release/$(PRODUCT_NAME)
+	./$(RELEASE_BINARY)
 
 run-debug: debug
 	@echo "Running $(PRODUCT_NAME) (debug with console output)..."
@@ -64,12 +61,12 @@ install: build
 	@echo "Installing $(PRODUCT_NAME) to /Applications..."
 	mkdir -p "$(PRODUCT_NAME).app/Contents/MacOS"
 	mkdir -p "$(PRODUCT_NAME).app/Contents/Resources"
-	cp ./.build/release/$(PRODUCT_NAME) "$(PRODUCT_NAME).app/Contents/MacOS/"
+	cp "$(RELEASE_BINARY)" "$(PRODUCT_NAME).app/Contents/MacOS/"
 	./scripts/create-info-plist.sh "$(PRODUCT_NAME).app/Contents/Info.plist"
 	# Copy Sparkle framework if it exists
-	@if [ -d ".build/release/Sparkle.framework" ]; then \
+	@if [ -d "$(RELEASE_SPARKLE_FRAMEWORK)" ]; then \
 		mkdir -p "$(PRODUCT_NAME).app/Contents/Frameworks"; \
-		cp -R ".build/release/Sparkle.framework" "$(PRODUCT_NAME).app/Contents/Frameworks/"; \
+		cp -R "$(RELEASE_SPARKLE_FRAMEWORK)" "$(PRODUCT_NAME).app/Contents/Frameworks/"; \
 		echo "✅ Copied Sparkle framework"; \
 	else \
 		echo "⚠️  Warning: Sparkle framework not found"; \
@@ -98,12 +95,12 @@ install-sudo: build
 	@echo "Installing $(PRODUCT_NAME) to /Applications with sudo..."
 	mkdir -p "$(PRODUCT_NAME).app/Contents/MacOS"
 	mkdir -p "$(PRODUCT_NAME).app/Contents/Resources"
-	cp ./.build/release/$(PRODUCT_NAME) "$(PRODUCT_NAME).app/Contents/MacOS/"
+	cp "$(RELEASE_BINARY)" "$(PRODUCT_NAME).app/Contents/MacOS/"
 	./scripts/create-info-plist.sh "$(PRODUCT_NAME).app/Contents/Info.plist"
 	# Copy Sparkle framework if it exists
-	@if [ -d ".build/release/Sparkle.framework" ]; then \
+	@if [ -d "$(RELEASE_SPARKLE_FRAMEWORK)" ]; then \
 		mkdir -p "$(PRODUCT_NAME).app/Contents/Frameworks"; \
-		cp -R ".build/release/Sparkle.framework" "$(PRODUCT_NAME).app/Contents/Frameworks/"; \
+		cp -R "$(RELEASE_SPARKLE_FRAMEWORK)" "$(PRODUCT_NAME).app/Contents/Frameworks/"; \
 		echo "✅ Copied Sparkle framework"; \
 	else \
 		echo "⚠️  Warning: Sparkle framework not found"; \
@@ -131,12 +128,12 @@ package: build
 	@mkdir -p "$(DIST_DIR)"
 	@mkdir -p "$(APP_BUNDLE)/Contents/MacOS"
 	@mkdir -p "$(APP_BUNDLE)/Contents/Resources"
-	@cp ./.build/release/$(PRODUCT_NAME) "$(APP_BUNDLE)/Contents/MacOS/" || { echo "❌ Failed to copy executable"; exit 1; }
+	@cp "$(RELEASE_BINARY)" "$(APP_BUNDLE)/Contents/MacOS/" || { echo "❌ Failed to copy executable"; exit 1; }
 	@./scripts/create-info-plist.sh "$(APP_BUNDLE)/Contents/Info.plist" || { echo "❌ Failed to create Info.plist"; exit 1; }
 	@# Copy Sparkle framework if it exists
-	@if [ -d ".build/release/Sparkle.framework" ]; then \
+	@if [ -d "$(RELEASE_SPARKLE_FRAMEWORK)" ]; then \
 		mkdir -p "$(APP_BUNDLE)/Contents/Frameworks"; \
-		cp -R ".build/release/Sparkle.framework" "$(APP_BUNDLE)/Contents/Frameworks/"; \
+		cp -R "$(RELEASE_SPARKLE_FRAMEWORK)" "$(APP_BUNDLE)/Contents/Frameworks/"; \
 		echo "✅ Copied Sparkle framework"; \
 	else \
 		echo "⚠️  Warning: Sparkle framework not found"; \
@@ -212,7 +209,7 @@ help:
 	@echo "Configuration:"
 	@echo "  PRODUCT_NAME: $(PRODUCT_NAME)"
 	@echo "  VERSION:      $(VERSION) (build $(BUILD_VERSION))"
-	@echo "  ARCHITECTURE: $(ARCH_NAME)"
+	@echo "  ARCHITECTURE: $(ARCH_NAME) (arm64 + x86_64)"
 	@echo "  DMG_NAME:     $(DMG_NAME)"
 	@echo ""
 	@echo "Code Signing:"

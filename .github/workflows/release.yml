@@ -82,15 +82,8 @@ jobs:
         BUILD_VERSION=$(grep 'static let build' Sources/CiteBar/AppVersion.swift | cut -d'"' -f2)
         MANUAL_UPGRADE_BASELINE_BUILD=$(grep 'static let sparkleManualUpgradeBaselineBuild' Sources/CiteBar/AppVersion.swift | cut -d'"' -f2)
         
-        # Get architecture and date for DMG naming (match Makefile format exactly)
-        ARCH=$(uname -m)
-        if [ "$ARCH" = "x86_64" ]; then
-          ARCH_NAME="intel"
-        elif [ "$ARCH" = "arm64" ]; then
-          ARCH_NAME="arm64"
-        else
-          ARCH_NAME="$ARCH"
-        fi
+        # Release artifacts are universal binaries (arm64 + x86_64)
+        ARCH_NAME="universal"
         BUILD_DATE=$(date +%Y%m%d)
         DMG_NAME="CiteBar-${VERSION}-${ARCH_NAME}-${BUILD_DATE}"
         

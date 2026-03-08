@@ -82,7 +82,7 @@ if format == "html" {
     markdown += """
     ## Installation
     
-    1. Download the DMG file below
+    1. Download the `CiteBar-\(version)-universal-YYYYMMDD.dmg` file below (single installer for Intel + Apple Silicon)
     2. Open the DMG and drag CiteBar to your Applications folder
     3. Launch CiteBar from Applications
     4. Configure your Google Scholar profiles in Settings

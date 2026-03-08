@@ -49,40 +49,57 @@ struct CitationRecord: Codable {
 
 struct AppSettings: Codable {
     var profiles: [ScholarProfile] = []
-    var refreshInterval: RefreshInterval = .hourly
+    var refreshInterval: RefreshInterval = .daily
     var showNotifications: Bool = true
     var autoLaunch: Bool = true
     var lastUpdateTime: Date?
     var isRefreshing: Bool = false
     
     enum RefreshInterval: String, CaseIterable, Codable {
-        case fifteenMinutes = "15min"
-        case thirtyMinutes = "30min"
         case hourly = "1hour"
-        case threeHours = "3hours"
         case sixHours = "6hours"
         case daily = "24hours"
+        case twoDays = "48hours"
         
         var displayName: String {
             switch self {
-            case .fifteenMinutes: return "Every 15 minutes"
-            case .thirtyMinutes: return "Every 30 minutes"
             case .hourly: return "Every hour"
-            case .threeHours: return "Every 3 hours"
             case .sixHours: return "Every 6 hours"
             case .daily: return "Once daily"
+            case .twoDays: return "Every 2 days"
             }
         }
         
         var seconds: TimeInterval {
             switch self {
-            case .fifteenMinutes: return 15 * 60
-            case .thirtyMinutes: return 30 * 60
             case .hourly: return 60 * 60
-            case .threeHours: return 3 * 60 * 60
             case .sixHours: return 6 * 60 * 60
             case .daily: return 24 * 60 * 60
+            case .twoDays: return 48 * 60 * 60
             }
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            let rawValue = try container.decode(String.self)
+
+            switch rawValue {
+            case Self.hourly.rawValue, "15min", "30min":
+                self = .hourly
+            case Self.sixHours.rawValue, "3hours":
+                self = .sixHours
+            case Self.daily.rawValue:
+                self = .daily
+            case Self.twoDays.rawValue:
+                self = .twoDays
+            default:
+                self = .daily
+            }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode(rawValue)
         }
     }
 }

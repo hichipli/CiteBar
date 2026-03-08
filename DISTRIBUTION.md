@@ -3,12 +3,13 @@
 ## Download and Installation
 
 ### DMG Installation (Only Distribution Method)
-1. Download the latest `CiteBar-x.x.x-[arch]-[date].dmg` file from [Releases](https://github.com/hichipli/CiteBar/releases)
+1. Download the latest `CiteBar-x.x.x-universal-[date].dmg` file from [Releases](https://github.com/hichipli/CiteBar/releases)
 2. Double-click the DMG file to open it
 3. Drag `CiteBar.app` to the `Applications` folder
 4. Find CiteBar in Applications and run it
 
-**Note**: CiteBar is only distributed as DMG files. No standalone .app files are provided in releases.
+**Note**: CiteBar is only distributed as DMG files. No standalone .app files are provided in releases.  
+The `universal` DMG supports both Apple Silicon and Intel Macs, so there is no separate chip-specific download.
 
 ## Troubleshooting Common Issues
 
@@ -43,7 +44,7 @@ sudo chmod -R 755 /Applications/CiteBar.app
 
 ### Issue 4: Older versions fail during in-app update
 If you are on `1.3.x` or `1.4.1`, automatic install may fail during signature validation.  
-Please manually install the latest DMG from [Releases](https://github.com/hichipli/CiteBar/releases/latest) once, then automatic updates should work normally on `1.4.3+`.
+Please manually install the latest DMG from [Releases](https://github.com/hichipli/CiteBar/releases/latest) once, then automatic updates should work normally on `1.4.4+`.
 
 If macOS blocks launch after manual install, run:
 ```bash
