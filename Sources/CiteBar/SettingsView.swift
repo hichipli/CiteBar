@@ -355,9 +355,14 @@ struct GeneralTab: View {
                     Text("Refresh Interval")
                         .font(.headline)
                     
-                    Text("How often to check for citation updates")
+                    Text("Recommended: Once daily. Use \"Refresh Now\" when you need an immediate update.")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                    
+                    Text("Short intervals (for example hourly) increase request frequency and may trigger temporary Google Scholar rate limits, including reduced access to profiles or search.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     
                     Picker("Refresh Interval", selection: Binding(
                         get: { settingsManager.settings.refreshInterval },
