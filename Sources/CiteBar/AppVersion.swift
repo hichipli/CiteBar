@@ -3,10 +3,10 @@ import Foundation
 /// Centralized version management for CiteBar
 struct AppVersion {
     /// Current application version
-    static let current: String = "1.4.5"
+    static let current: String = "1.4.6"
     
     /// Current build number
-    static let build: String = "13"
+    static let build: String = "14"
     
     /// Version display string for UI
     static let displayString: String = "Version \(current)"
@@ -38,21 +38,15 @@ extension AppVersion {
     static let releaseNotes = ReleaseNotes(
         version: current,
         highlights: [
-            "Added refresh-complete desktop notifications with per-cycle citation summary",
-            "Added a gentle notification-permission onboarding prompt for new versions when notifications are enabled",
-            "Added menu display controls for h-index, i10-index, and trend metrics (citation count always shown)",
-            "Improved General settings UX with scrolling support for longer option lists",
-            "Metric visibility toggles now apply immediately when opening the menu bar"
+            "Added a gentle notification-permission onboarding prompt for users who enable refresh notifications",
+            "General settings now shows macOS notification authorization status and provides direct permission actions",
+            "Notification permission requests now happen only in explicit user-facing flows"
         ],
-        description: "This patch release improves day-to-day usability by adding optional refresh notifications and flexible metric visibility controls in the menu bar.",
+        description: "This patch release refines notification onboarding and permission guidance so users can enable alerts intentionally and recover quickly when access is blocked.",
         technicalNotes: [
-            "Implemented UserNotifications-based refresh completion alerts gated by Show Notifications",
             "Notification permission prompts now run in explicit user-facing flows instead of background refresh completion",
-            "Startup refresh runs in silent mode to avoid noisy first-launch notifications",
-            "AppSettings now includes showHIndexInMenu, showI10IndexInMenu, and showTrendInMenu with backward-compatible defaults",
-            "Menu rendering now respects metric visibility toggles for each profile row",
-            "Menu now rebuilds on open so settings changes are reflected without waiting for a data refresh",
-            "Added tests for new AppSettings defaults and backward compatibility decoding"
+            "One-time per-version onboarding prompt is tracked in UserDefaults to avoid repeated interruption",
+            "Settings UI now refreshes notification authorization state on view appear and app reactivation"
         ]
     )
     
