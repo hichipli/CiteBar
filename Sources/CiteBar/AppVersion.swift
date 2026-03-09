@@ -3,10 +3,10 @@ import Foundation
 /// Centralized version management for CiteBar
 struct AppVersion {
     /// Current application version
-    static let current: String = "1.4.7"
+    static let current: String = "1.4.8"
     
     /// Current build number
-    static let build: String = "15"
+    static let build: String = "16"
     
     /// Version display string for UI
     static let displayString: String = "Version \(current)"
@@ -38,18 +38,18 @@ extension AppVersion {
     static let releaseNotes = ReleaseNotes(
         version: current,
         highlights: [
-            "Redesigned Settings with a stable sidebar + adaptive detail layout for clearer navigation",
-            "Improved menu bar startup reliability with better launch-state feedback and settings visibility behavior",
-            "Added clearer refresh-interval guidance to help avoid Google Scholar rate-limit issues",
-            "Reduced idle runtime overhead with targeted storage lookups and lower-noise logging"
+            "Added current-year citations support from Google Scholar yearly histogram data",
+            "Added a primary metric selector to show either total citations or current-year citations in the menu bar",
+            "Improved settings action placement: Refresh Now, Check for Updates, and Quit are now organized by usage frequency",
+            "Menu rendering now gracefully falls back to total citations when yearly data is unavailable"
         ],
-        description: "This release focuses on reliability and polish: startup behavior is more consistent, settings are easier to use, and idle resource usage is leaner.",
+        description: "This release introduces current-year citation visibility and refines settings ergonomics so key actions are easier to find and use.",
         technicalNotes: [
-            "Reworked settings shell to a sidebar-driven section model with more stable selection behavior",
-            "Added bounded retry handling for delayed status item initialization during app launch",
-            "Introduced AppLog debug-only logging to reduce production log noise",
-            "CitationManager now uses an ephemeral URLSession with disabled shared caching for lower idle memory pressure",
-            "Startup and fallback paths now use targeted StorageManager helpers instead of broad history scans"
+            "CitationManager now parses and propagates yearly citation histogram pairs into ScholarMetrics/ProfileMetrics",
+            "CitationRecord persistence now includes optional citationsByYear data for historical reuse",
+            "AppSettings adds a backward-compatible menuBarPrimaryMetric option defaulting to total citations",
+            "Menu bar display logic now supports metric-mode-aware icon/title updates and profile-row summaries",
+            "Unit tests now assert yearly citation parsing and new settings compatibility defaults"
         ]
     )
     

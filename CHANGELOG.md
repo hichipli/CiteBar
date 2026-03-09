@@ -5,6 +5,24 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.8] - 2026-03-09
+
+### Added
+- **Current-Year Citations Support**: Added parsing and persistence of Google Scholar yearly citation histogram data (`citationsByYear`)
+- **Primary Metric Selection**: Added a new menu-bar setting to choose `Total citations` or `Current year citations` as the primary displayed metric
+
+### Changed
+- **Menu Bar Metric Rendering**: Menu bar and profile rows now follow the selected primary metric, with total citations shown as a secondary summary when current-year mode is enabled
+- **Settings Action Layout**: Moved `Refresh Now` into Refresh Schedule, moved `Check for Updates...` into About near version info, and moved `Quit CiteBar` into a lower-priority App section
+
+### Improved
+- **Graceful Metric Fallback**: If yearly histogram data is unavailable for a profile, the app automatically falls back to total citations instead of showing empty primary data
+
+### Technical
+- Extended `ScholarMetrics`, `ProfileMetrics`, and `CitationRecord` models with optional yearly citation data
+- Added backward-compatible `menuBarPrimaryMetric` decoding in `AppSettings` (defaults to total citations for existing installs)
+- Added test coverage for new settings defaults/backward compatibility and yearly citation parsing in sample Scholar HTML
+
 ## [1.4.7] - 2026-03-09
 
 ### Changed
