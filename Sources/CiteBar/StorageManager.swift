@@ -5,6 +5,8 @@ actor StorageManager {
     private var citationHistory: [CitationRecord] = []
     private var isInitialized = false
     
+    private static let maxRecordsPerProfile = 1000
+    
     init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let appFolder = appSupport.appendingPathComponent("CiteBar")
@@ -25,10 +27,15 @@ actor StorageManager {
             let history = try decoder.decode([CitationRecord].self, from: data)
             Task {
                 await self.setCitationHistory(history)
-                print("Successfully loaded \(history.count) citation records from storage")
+                AppLog.debug("Successfully loaded \(history.count) citation records from storage")
+            }
+        } catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError {
+            Task {
+                await self.setCitationHistory([])
+                AppLog.debug("No citation history file found yet; starting with empty storage")
             }
         } catch {
-            print("Failed to load citation history: \(error)")
+            AppLog.error("Failed to load citation history: \(error)")
             // Initialize with empty history if loading fails
             Task {
                 await self.setCitationHistory([])
@@ -60,9 +67,9 @@ actor StorageManager {
             try data.write(to: tempURL)
             _ = try FileManager.default.replaceItem(at: citationHistoryURL, withItemAt: tempURL, backupItemName: nil, options: [], resultingItemURL: nil)
             
-            print("Successfully saved \(citationHistory.count) citation records to storage")
+            AppLog.debug("Successfully saved \(citationHistory.count) citation records to storage")
         } catch {
-            print("Failed to save citation history: \(error)")
+            AppLog.error("Failed to save citation history: \(error)")
         }
     }
     
@@ -71,12 +78,11 @@ actor StorageManager {
         citationHistory.append(record)
         
         // Keep only the last 1000 records per profile to manage storage
-        let recordsPerProfile = 1000
         let profileRecords = citationHistory.filter { $0.profileId == record.profileId }
         
-        if profileRecords.count > recordsPerProfile {
+        if profileRecords.count > Self.maxRecordsPerProfile {
             citationHistory.removeAll { $0.profileId == record.profileId }
-            let recentRecords = profileRecords.suffix(recordsPerProfile)
+            let recentRecords = profileRecords.suffix(Self.maxRecordsPerProfile)
             citationHistory.append(contentsOf: recentRecords)
         }
         
@@ -157,31 +163,38 @@ actor StorageManager {
         await calculateRecentGrowthSummary(for: profileId, days: days)?.growth
     }
     
-    func getLatestCitationCount(for profileId: String) async -> Int? {
+    private func latestRecord(for profileId: String) -> CitationRecord? {
+        var latest: CitationRecord?
+
+        for record in citationHistory where record.profileId == profileId {
+            guard let currentLatest = latest else {
+                latest = record
+                continue
+            }
+
+            if record.timestamp > currentLatest.timestamp {
+                latest = record
+            }
+        }
+
+        return latest
+    }
+    
+    func getLatestRecord(for profileId: String) async -> CitationRecord? {
         await ensureInitialized()
-        return citationHistory
-            .filter { $0.profileId == profileId }
-            .sorted { $0.timestamp > $1.timestamp }
-            .first?
-            .citationCount
+        return latestRecord(for: profileId)
+    }
+    
+    func getLatestCitationCount(for profileId: String) async -> Int? {
+        await getLatestRecord(for: profileId)?.citationCount
     }
     
     func getLatestHIndex(for profileId: String) async -> Int? {
-        await ensureInitialized()
-        return citationHistory
-            .filter { $0.profileId == profileId }
-            .sorted { $0.timestamp > $1.timestamp }
-            .first?
-            .hIndex
+        await getLatestRecord(for: profileId)?.hIndex
     }
 
     func getLatestI10Index(for profileId: String) async -> Int? {
-        await ensureInitialized()
-        return citationHistory
-            .filter { $0.profileId == profileId }
-            .sorted { $0.timestamp > $1.timestamp }
-            .first?
-            .i10Index
+        await getLatestRecord(for: profileId)?.i10Index
     }
     
     func getCitationTrend(for profileId: String, days: Int = 30) async -> [(Date, Int)] {
@@ -192,6 +205,22 @@ actor StorageManager {
     func getAllRecords() async -> [CitationRecord] {
         await ensureInitialized()
         return citationHistory
+    }
+    
+    func getProfileIDsWithHistory() async -> Set<String> {
+        await ensureInitialized()
+        return Set(citationHistory.map(\.profileId))
+    }
+    
+    func hasHistoricalData(for profileIDs: Set<String>) async -> Bool {
+        await ensureInitialized()
+        guard !profileIDs.isEmpty else { return false }
+        
+        for record in citationHistory where profileIDs.contains(record.profileId) {
+            return true
+        }
+        
+        return false
     }
     
     func cleanupOldRecords(olderThan days: Int = 365) async {
@@ -209,7 +238,7 @@ actor StorageManager {
     }
     
     func forceReload() {
-        print("Force reloading citation history from disk...")
+        AppLog.debug("Force reloading citation history from disk...")
         loadCitationHistory()
     }
 }

@@ -8,23 +8,34 @@ import UserNotifications
     private let storageManager = StorageManager()
     private var refreshTimer: Timer?
     private let urlSession: URLSession
+    
+    private static func makeURLSession() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.urlCache = nil
+        configuration.timeoutIntervalForRequest = 30
+        configuration.timeoutIntervalForResource = 30
+        return URLSession(configuration: configuration)
+    }
 
-    init(urlSession: URLSession = .shared) {
+    init(urlSession: URLSession = CitationManager.makeURLSession()) {
         self.urlSession = urlSession
         setupTimer()
+        
         // Debug storage status at startup
+#if DEBUG
         Task {
             let info = await storageManager.getStorageInfo()
-            print("Storage status: \(info.recordCount) records, file exists: \(info.fileExists)")
-            print("Storage path: \(info.filePath)")
+            AppLog.debug("Storage status: \(info.recordCount) records, file exists: \(info.fileExists)")
+            AppLog.debug("Storage path: \(info.filePath)")
             
             // If we have historical data, log which profiles have data
             if info.recordCount > 0 {
-                let records = await storageManager.getAllRecords()
-                let profileIds = Set(records.map { $0.profileId })
-                print("Historical data available for profile IDs: \(profileIds)")
+                let profileIDs = await storageManager.getProfileIDsWithHistory()
+                AppLog.debug("Historical data available for profile IDs: \(profileIDs)")
             }
         }
+#endif
     }
     
     deinit {
@@ -103,27 +114,27 @@ import UserNotifications
                 // Only add the updated profile with growth data to results
                 results[updatedProfile] = ProfileMetrics(citationCount: metrics.citationCount, hIndex: metrics.hIndex, i10Index: metrics.i10Index)
 
-                print("Successfully fetched \(metrics.citationCount) citations for \(profile.name)")
+                AppLog.debug("Successfully fetched \(metrics.citationCount) citations for \(profile.name)")
                 if let hIndex = metrics.hIndex {
-                    print("h-index for \(profile.name): \(hIndex)")
+                    AppLog.debug("h-index for \(profile.name): \(hIndex)")
                 }
                 if let i10Index = metrics.i10Index {
-                    print("i10-index for \(profile.name): \(i10Index)")
+                    AppLog.debug("i10-index for \(profile.name): \(i10Index)")
                 }
                 if let growthSummary = growthSummary {
                     let growth = growthSummary.growth
                     let dayLabel = growthSummary.baselineDays == 1 ? "day" : "days"
-                    print("Recent growth for \(profile.name): \(growth > 0 ? "+\(growth)" : "\(growth)") in last \(growthSummary.baselineDays) \(dayLabel)")
+                    AppLog.debug("Recent growth for \(profile.name): \(growth > 0 ? "+\(growth)" : "\(growth)") in last \(growthSummary.baselineDays) \(dayLabel)")
                 } else {
-                    print("No recent growth data available for \(profile.name) (insufficient historical data)")
+                    AppLog.debug("No recent growth data available for \(profile.name) (insufficient historical data)")
                 }
                 
                 // Add delay to be respectful to Google's servers
                 try await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
                 
             } catch {
-                print("Failed to fetch citations for \(profile.name): \(error)")
-                print("Error details: \(error.localizedDescription)")
+                AppLog.error("Failed to fetch citations for \(profile.name): \(error)")
+                AppLog.debug("Error details: \(error.localizedDescription)")
                 
                 // Don't let one profile failure stop the whole process
                 // Continue with other profiles
@@ -154,16 +165,13 @@ import UserNotifications
                 // If network request failed but we might have historical data showing,
                 // don't call citationCheckFailed as it would show error and hide historical data
                 // Instead, just log the issue
-                print("Network request completed but no new data retrieved")
+                AppLog.debug("Network request completed but no new data retrieved")
                 
                 // Only show error if we have no historical data available
                 // Check if we have any stored data for current profiles
+                let activeProfileIDs = Set(profiles.map(\.id))
                 Task {
-                    let profiles = settingsManager.settings.profiles.filter { $0.isEnabled }
-                    let records = await storageManager.getAllRecords()
-                    let hasHistoricalData = profiles.contains { profile in
-                        records.contains { $0.profileId == profile.id }
-                    }
+                    let hasHistoricalData = await storageManager.hasHistoricalData(for: activeProfileIDs)
                     
                     if !hasHistoricalData {
                         await MainActor.run {
@@ -243,7 +251,7 @@ import UserNotifications
         do {
             try await UNUserNotificationCenter.current().add(request)
         } catch {
-            print("Failed to post refresh notification: \(error)")
+            AppLog.error("Failed to post refresh notification: \(error)")
         }
     }
     
@@ -266,7 +274,7 @@ import UserNotifications
             throw CitationError.networkError
         }
         
-        print("HTTP Status Code: \(httpResponse.statusCode)")
+        AppLog.debug("HTTP Status Code: \(httpResponse.statusCode)")
         
         guard httpResponse.statusCode == 200 else {
             throw CitationError.networkError
@@ -277,7 +285,7 @@ import UserNotifications
         }
         
         // Debug: Print first 500 characters of HTML
-        print("HTML Preview: \(String(html.prefix(500)))")
+        AppLog.debug("HTML Preview: \(String(html.prefix(500)))")
         
         return try parseScholarMetrics(from: html)
     }
@@ -299,7 +307,7 @@ import UserNotifications
                     if let table = tables.first() {
                         let metrics = try parseScholarTable(table)
                         if metrics.citationCount > 0 {
-                            print("Successfully parsed from table - Citations: \(metrics.citationCount), h-index: \(metrics.hIndex ?? -1), i10-index: \(metrics.i10Index ?? -1)")
+                            AppLog.debug("Successfully parsed from table - Citations: \(metrics.citationCount), h-index: \(metrics.hIndex ?? -1), i10-index: \(metrics.i10Index ?? -1)")
                             return metrics
                         }
                     }
@@ -315,25 +323,25 @@ import UserNotifications
             
             for selector in cellSelectors {
                 let elements = try doc.select(selector)
-                print("Selector '\(selector)' found \(elements.count) elements")
+                AppLog.debug("Selector '\(selector)' found \(elements.count) elements")
                 
                 if elements.count >= 2 {
                     // Debug: Print all table cell values to understand the structure
                     let elementsArray = Array(elements)
-                    print("=== Table Cell Contents ===")
+                    AppLog.debug("=== Table Cell Contents ===")
                     for (index, element) in elementsArray.enumerated() {
                         do {
                             let text = try element.text()
-                            print("Cell \(index): '\(text)'")
+                            AppLog.debug("Cell \(index): '\(text)'")
                         } catch {
-                            print("Cell \(index): Error reading text")
+                            AppLog.debug("Cell \(index): Error reading text")
                         }
                     }
-                    print("=== End Table Cells ===")
+                    AppLog.debug("=== End Table Cells ===")
                     
                     let metrics = parseScholarCellArray(elementsArray)
                     if metrics.citationCount > 0 {
-                        print("Successfully parsed from cells - Citations: \(metrics.citationCount), h-index: \(metrics.hIndex ?? -1), i10-index: \(metrics.i10Index ?? -1)")
+                        AppLog.debug("Successfully parsed from cells - Citations: \(metrics.citationCount), h-index: \(metrics.hIndex ?? -1), i10-index: \(metrics.i10Index ?? -1)")
                         return metrics
                     }
                 }
@@ -344,16 +352,16 @@ import UserNotifications
             for element in allElements {
                 let text = try element.text()
                 if let number = extractValidCitationCount(from: text) {
-                    print("Found potential citation count in fallback: \(text) -> \(number)")
+                    AppLog.debug("Found potential citation count in fallback: \(text) -> \(number)")
                     return ScholarMetrics(citationCount: number, hIndex: nil, i10Index: nil)
                 }
             }
             
-            print("Could not find citation count in HTML")
+            AppLog.debug("Could not find citation count in HTML")
             throw CitationError.citationCountNotFound
             
         } catch let error as Exception {
-            print("HTML parsing error: \(error)")
+            AppLog.error("HTML parsing error: \(error)")
             throw CitationError.parsingError
         }
     }
@@ -369,7 +377,7 @@ import UserNotifications
             let cells = try row.select("td")
             if cells.count >= 2 {
                 let rowLabel = try cells.first()?.text() ?? ""
-                print("Row label: '\(rowLabel)'")
+                AppLog.debug("Row label: '\(rowLabel)'")
 
                 if rowLabel.lowercased().contains("citations") {
                     // This is the citations row, get the "All" value (second cell)
@@ -377,7 +385,7 @@ import UserNotifications
                         let allCell = cells[1]
                         let text = try allCell.text()
                         citationCount = extractValidCitationCount(from: text)
-                        print("Found citations row: \(text) -> \(citationCount ?? -1)")
+                        AppLog.debug("Found citations row: \(text) -> \(citationCount ?? -1)")
                     }
                 } else if rowLabel.lowercased().contains("h-index") {
                     // This is the h-index row, get the "All" value (second cell)
@@ -385,7 +393,7 @@ import UserNotifications
                         let allCell = cells[1]
                         let text = try allCell.text()
                         hIndex = extractNumber(from: text)
-                        print("Found h-index row: \(text) -> \(hIndex ?? -1)")
+                        AppLog.debug("Found h-index row: \(text) -> \(hIndex ?? -1)")
                     }
                 } else if rowLabel.lowercased().contains("i10-index") {
                     // This is the i10-index row, get the "All" value (second cell)
@@ -393,7 +401,7 @@ import UserNotifications
                         let allCell = cells[1]
                         let text = try allCell.text()
                         i10Index = extractNumber(from: text)
-                        print("Found i10-index row: \(text) -> \(i10Index ?? -1)")
+                        AppLog.debug("Found i10-index row: \(text) -> \(i10Index ?? -1)")
                     }
                 }
             }
@@ -420,7 +428,7 @@ import UserNotifications
                     let nextElement = elements[index + 1]
                     let nextText = try nextElement.text()
                     citationCount = extractValidCitationCount(from: nextText)
-                    print("Found citations after label at index \(index + 1): \(nextText) -> \(citationCount ?? -1)")
+                    AppLog.debug("Found citations after label at index \(index + 1): \(nextText) -> \(citationCount ?? -1)")
                 }
 
                 // If we find a cell that says "h-index", the next numeric cell should be h-index
@@ -428,7 +436,7 @@ import UserNotifications
                     let nextElement = elements[index + 1]
                     let nextText = try nextElement.text()
                     hIndex = extractNumber(from: nextText)
-                    print("Found h-index after label at index \(index + 1): \(nextText) -> \(hIndex ?? -1)")
+                    AppLog.debug("Found h-index after label at index \(index + 1): \(nextText) -> \(hIndex ?? -1)")
                 }
 
                 // If we find a cell that says "i10-index", the next numeric cell should be i10-index
@@ -436,7 +444,7 @@ import UserNotifications
                     let nextElement = elements[index + 1]
                     let nextText = try nextElement.text()
                     i10Index = extractNumber(from: nextText)
-                    print("Found i10-index after label at index \(index + 1): \(nextText) -> \(i10Index ?? -1)")
+                    AppLog.debug("Found i10-index after label at index \(index + 1): \(nextText) -> \(i10Index ?? -1)")
                 }
             } catch {
                 continue
@@ -522,13 +530,10 @@ import UserNotifications
         if !profiles.isEmpty {
             // Get last known citation data for these profiles
             Task {
-                let records = await storageManager.getAllRecords()
                 var currentData: [ScholarProfile: ProfileMetrics] = [:]
                 
                 for profile in profiles {
-                    // Find the most recent record for this profile
-                    let profileRecords = records.filter { $0.profileId == profile.id }
-                    if let latestRecord = profileRecords.max(by: { $0.timestamp < $1.timestamp }) {
+                    if let latestRecord = await storageManager.getLatestRecord(for: profile.id) {
                         // Calculate recent growth for historical data
                         let growthSummary = await storageManager.calculateRecentGrowthSummary(for: profile.id)
                         var updatedProfile = profile
@@ -536,27 +541,27 @@ import UserNotifications
                         updatedProfile.recentGrowthDays = growthSummary?.baselineDays
                         currentData[updatedProfile] = ProfileMetrics(citationCount: latestRecord.citationCount, hIndex: latestRecord.hIndex, i10Index: latestRecord.i10Index)
 
-                        print("Loaded historical data for \(profile.name): \(latestRecord.citationCount) citations")
+                        AppLog.debug("Loaded historical data for \(profile.name): \(latestRecord.citationCount) citations")
                         if let hIndex = latestRecord.hIndex {
-                            print("Historical h-index for \(profile.name): \(hIndex)")
+                            AppLog.debug("Historical h-index for \(profile.name): \(hIndex)")
                         }
                         if let i10Index = latestRecord.i10Index {
-                            print("Historical i10-index for \(profile.name): \(i10Index)")
+                            AppLog.debug("Historical i10-index for \(profile.name): \(i10Index)")
                         }
                         if let growthSummary = growthSummary {
                             let growth = growthSummary.growth
                             let dayLabel = growthSummary.baselineDays == 1 ? "day" : "days"
-                            print("Historical growth for \(profile.name): \(growth > 0 ? "+\(growth)" : "\(growth)") in last \(growthSummary.baselineDays) \(dayLabel)")
+                            AppLog.debug("Historical growth for \(profile.name): \(growth > 0 ? "+\(growth)" : "\(growth)") in last \(growthSummary.baselineDays) \(dayLabel)")
                         }
                     }
                 }
                 
                 await MainActor.run {
                     if !currentData.isEmpty {
-                        print("Loaded historical data for \(currentData.count) profiles")
+                        AppLog.debug("Loaded historical data for \(currentData.count) profiles")
                         delegate?.citationsUpdated(currentData)
                     } else {
-                        print("No historical data found, showing empty state")
+                        AppLog.debug("No historical data found, showing empty state")
                         // Show empty state with helpful message
                         delegate?.citationsUpdated([:])
                     }

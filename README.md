@@ -187,12 +187,12 @@ We use a Makefile for consistency across environments:
 
 ```bash
 make build      # Release build (.build/apple/Products/Release/CiteBar)
-make debug      # Debug build with logging
+make debug      # Debug build (.build/debug/CiteBar)
 make test       # Run unit tests
-make xcode      # Open Xcode project
 make clean      # Clean build artifacts
-make install    # Install to /Applications
-make package    # Create distribution DMG
+make install    # Create CiteBar.app locally (copy to /Applications manually)
+make package    # Create dist/CiteBar.app
+make dmg        # Create distribution DMG in dist/
 ```
 
 ### Code Organization
@@ -248,7 +248,7 @@ We love contributions! Whether you're fixing bugs, adding features, or improving
 ```bash
 git clone https://github.com/hichipli/CiteBar.git
 cd CiteBar
-make xcode  # Opens Xcode project
+open Package.swift  # Opens Swift package in Xcode
 ```
 
 ### Code Style
@@ -321,7 +321,9 @@ We take research ethics seriously:
 - Foundation, AppKit, SwiftUI (system frameworks)
 
 **Performance:**
-- Memory usage: ~15-25MB
+- Memory usage: Typically ~90-150MB physical footprint in Activity Monitor (native AppKit/SwiftUI framework overhead included)
+- Active working set: Commonly ~25-70MB resident when idle
+- Thread count: Usually 4-8 threads at idle (main run loop, event, networking, and system worker threads)
 - CPU usage: Near zero when idle
 - Network: Minimal, user-configurable intervals
 

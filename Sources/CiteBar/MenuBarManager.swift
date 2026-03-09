@@ -6,6 +6,19 @@ import Cocoa
     private var lastError: String?
     private let settingsManager = SettingsManager.shared
     
+    private static let specificTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter
+    }()
+    
+    private static let relativeTimeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.dateTimeStyle = .named
+        return formatter
+    }()
+    
     init(statusItem: NSStatusItem) {
         self.statusItem = statusItem
     }
@@ -125,18 +138,13 @@ import Cocoa
             menu.insertItem(refreshingItem, at: insertIndex)
             insertIndex += 1
         } else if let lastUpdate = settingsManager.settings.lastUpdateTime {
-            // Format specific time with user's timezone
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateStyle = .short
-            dateFormatter.timeStyle = .short
-            dateFormatter.locale = Locale.current
-            let specificTime = dateFormatter.string(from: lastUpdate)
+            // Reuse formatters to avoid repeated heavyweight formatter allocations.
+            Self.specificTimeFormatter.locale = Locale.current
+            Self.specificTimeFormatter.timeZone = .current
+            let specificTime = Self.specificTimeFormatter.string(from: lastUpdate)
             
-            // Format relative time
-            let relativeFormatter = RelativeDateTimeFormatter()
-            relativeFormatter.dateTimeStyle = .named
-            relativeFormatter.locale = Locale.current
-            let relativeTime = relativeFormatter.localizedString(for: lastUpdate, relativeTo: Date())
+            Self.relativeTimeFormatter.locale = Locale.current
+            let relativeTime = Self.relativeTimeFormatter.localizedString(for: lastUpdate, relativeTo: Date())
             
             // Add specific time item
             let specificTimeItem = NSMenuItem(title: "Last updated: \(specificTime)", action: nil, keyEquivalent: "")
