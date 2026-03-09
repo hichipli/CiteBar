@@ -29,6 +29,14 @@ struct ScholarMetrics {
     let citationCount: Int
     let hIndex: Int?
     let i10Index: Int?
+    let citationsByYear: [Int: Int]?
+
+    init(citationCount: Int, hIndex: Int? = nil, i10Index: Int? = nil, citationsByYear: [Int: Int]? = nil) {
+        self.citationCount = citationCount
+        self.hIndex = hIndex
+        self.i10Index = i10Index
+        self.citationsByYear = citationsByYear
+    }
 }
 
 struct CitationRecord: Codable {
@@ -36,13 +44,15 @@ struct CitationRecord: Codable {
     let citationCount: Int
     let hIndex: Int?
     let i10Index: Int?
+    let citationsByYear: [Int: Int]?
     let timestamp: Date
 
-    init(profileId: String, citationCount: Int, hIndex: Int? = nil, i10Index: Int? = nil, timestamp: Date = Date()) {
+    init(profileId: String, citationCount: Int, hIndex: Int? = nil, i10Index: Int? = nil, citationsByYear: [Int: Int]? = nil, timestamp: Date = Date()) {
         self.profileId = profileId
         self.citationCount = citationCount
         self.hIndex = hIndex
         self.i10Index = i10Index
+        self.citationsByYear = citationsByYear
         self.timestamp = timestamp
     }
 }
@@ -57,6 +67,7 @@ struct AppSettings: Codable {
     var showHIndexInMenu: Bool = true
     var showI10IndexInMenu: Bool = true
     var showTrendInMenu: Bool = true
+    var menuBarPrimaryMetric: MenuBarPrimaryMetric = .totalCitations
 
     enum CodingKeys: String, CodingKey {
         case profiles
@@ -68,6 +79,32 @@ struct AppSettings: Codable {
         case showHIndexInMenu
         case showI10IndexInMenu
         case showTrendInMenu
+        case menuBarPrimaryMetric
+    }
+
+    enum MenuBarPrimaryMetric: String, CaseIterable, Codable {
+        case totalCitations = "totalCitations"
+        case currentYearCitations = "currentYearCitations"
+
+        var displayName: String {
+            switch self {
+            case .totalCitations:
+                return "Total citations"
+            case .currentYearCitations:
+                return "Current year citations"
+            }
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            let rawValue = try container.decode(String.self)
+            self = MenuBarPrimaryMetric(rawValue: rawValue) ?? .totalCitations
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode(rawValue)
+        }
     }
 
     init() {}
@@ -83,6 +120,7 @@ struct AppSettings: Codable {
         showHIndexInMenu = try container.decodeIfPresent(Bool.self, forKey: .showHIndexInMenu) ?? true
         showI10IndexInMenu = try container.decodeIfPresent(Bool.self, forKey: .showI10IndexInMenu) ?? true
         showTrendInMenu = try container.decodeIfPresent(Bool.self, forKey: .showTrendInMenu) ?? true
+        menuBarPrimaryMetric = try container.decodeIfPresent(MenuBarPrimaryMetric.self, forKey: .menuBarPrimaryMetric) ?? .totalCitations
     }
     
     enum RefreshInterval: String, CaseIterable, Codable {
@@ -138,6 +176,20 @@ struct ProfileMetrics {
     let citationCount: Int
     let hIndex: Int?
     let i10Index: Int?
+    let citationsByYear: [Int: Int]?
+
+    init(citationCount: Int, hIndex: Int? = nil, i10Index: Int? = nil, citationsByYear: [Int: Int]? = nil) {
+        self.citationCount = citationCount
+        self.hIndex = hIndex
+        self.i10Index = i10Index
+        self.citationsByYear = citationsByYear
+    }
+
+    var currentYearCitations: Int? {
+        guard let citationsByYear else { return nil }
+        let currentYear = Calendar.current.component(.year, from: Date())
+        return citationsByYear[currentYear] ?? 0
+    }
 }
 
 @MainActor protocol CitationManagerDelegate: AnyObject {

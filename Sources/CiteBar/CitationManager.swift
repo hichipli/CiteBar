@@ -102,7 +102,13 @@ import UserNotifications
                 }
                 
                 // Store the record
-                let record = CitationRecord(profileId: profile.id, citationCount: metrics.citationCount, hIndex: metrics.hIndex, i10Index: metrics.i10Index)
+                let record = CitationRecord(
+                    profileId: profile.id,
+                    citationCount: metrics.citationCount,
+                    hIndex: metrics.hIndex,
+                    i10Index: metrics.i10Index,
+                    citationsByYear: metrics.citationsByYear
+                )
                 await storageManager.saveCitationRecord(record)
                 
                 // Calculate recent growth and baseline days
@@ -112,7 +118,12 @@ import UserNotifications
                 updatedProfile.recentGrowthDays = growthSummary?.baselineDays
                 
                 // Only add the updated profile with growth data to results
-                results[updatedProfile] = ProfileMetrics(citationCount: metrics.citationCount, hIndex: metrics.hIndex, i10Index: metrics.i10Index)
+                results[updatedProfile] = ProfileMetrics(
+                    citationCount: metrics.citationCount,
+                    hIndex: metrics.hIndex,
+                    i10Index: metrics.i10Index,
+                    citationsByYear: metrics.citationsByYear
+                )
 
                 AppLog.debug("Successfully fetched \(metrics.citationCount) citations for \(profile.name)")
                 if let hIndex = metrics.hIndex {
@@ -120,6 +131,13 @@ import UserNotifications
                 }
                 if let i10Index = metrics.i10Index {
                     AppLog.debug("i10-index for \(profile.name): \(i10Index)")
+                }
+                if let citationsByYear = metrics.citationsByYear {
+                    let currentYear = Calendar.current.component(.year, from: Date())
+                    let currentYearCitations = citationsByYear[currentYear] ?? 0
+                    AppLog.debug("Current-year citations for \(profile.name) (\(currentYear)): \(currentYearCitations)")
+                } else {
+                    AppLog.debug("Current-year citations unavailable for \(profile.name) (yearly histogram parse failed)")
                 }
                 if let growthSummary = growthSummary {
                     let growth = growthSummary.growth
@@ -293,6 +311,7 @@ import UserNotifications
     private func parseScholarMetrics(from html: String) throws -> ScholarMetrics {
         do {
             let doc = try SwiftSoup.parse(html)
+            let citationsByYear = parseCitationsByYear(from: doc)
             
             // Try multiple selectors for the statistics table
             let possibleSelectors = [
@@ -308,7 +327,12 @@ import UserNotifications
                         let metrics = try parseScholarTable(table)
                         if metrics.citationCount > 0 {
                             AppLog.debug("Successfully parsed from table - Citations: \(metrics.citationCount), h-index: \(metrics.hIndex ?? -1), i10-index: \(metrics.i10Index ?? -1)")
-                            return metrics
+                            return ScholarMetrics(
+                                citationCount: metrics.citationCount,
+                                hIndex: metrics.hIndex,
+                                i10Index: metrics.i10Index,
+                                citationsByYear: citationsByYear
+                            )
                         }
                     }
                 }
@@ -342,7 +366,12 @@ import UserNotifications
                     let metrics = parseScholarCellArray(elementsArray)
                     if metrics.citationCount > 0 {
                         AppLog.debug("Successfully parsed from cells - Citations: \(metrics.citationCount), h-index: \(metrics.hIndex ?? -1), i10-index: \(metrics.i10Index ?? -1)")
-                        return metrics
+                        return ScholarMetrics(
+                            citationCount: metrics.citationCount,
+                            hIndex: metrics.hIndex,
+                            i10Index: metrics.i10Index,
+                            citationsByYear: citationsByYear
+                        )
                     }
                 }
             }
@@ -353,7 +382,7 @@ import UserNotifications
                 let text = try element.text()
                 if let number = extractValidCitationCount(from: text) {
                     AppLog.debug("Found potential citation count in fallback: \(text) -> \(number)")
-                    return ScholarMetrics(citationCount: number, hIndex: nil, i10Index: nil)
+                    return ScholarMetrics(citationCount: number, hIndex: nil, i10Index: nil, citationsByYear: citationsByYear)
                 }
             }
             
@@ -364,6 +393,50 @@ import UserNotifications
             AppLog.error("HTML parsing error: \(error)")
             throw CitationError.parsingError
         }
+    }
+
+    private func parseCitationsByYear(from doc: Document) -> [Int: Int]? {
+        do {
+            let yearElements = Array(try doc.select(".gsc_g_t"))
+            let barValueElements = Array(try doc.select(".gsc_g_a .gsc_g_al"))
+            let pairCount = min(yearElements.count, barValueElements.count)
+
+            guard pairCount > 0 else {
+                return nil
+            }
+
+            var citationsByYear: [Int: Int] = [:]
+            for index in 0..<pairCount {
+                let yearText = try yearElements[index].text()
+                let valueText = try barValueElements[index].text()
+
+                guard let year = parseYearLabel(from: yearText),
+                      let citations = extractNumber(from: valueText) else {
+                    continue
+                }
+
+                citationsByYear[year] = max(0, citations)
+            }
+
+            if citationsByYear.isEmpty {
+                return nil
+            }
+
+            AppLog.debug("Parsed citation histogram for \(citationsByYear.count) years")
+            return citationsByYear
+        } catch let error as Exception {
+            AppLog.debug("Citation histogram parsing failed: \(error)")
+            return nil
+        } catch {
+            AppLog.debug("Citation histogram parsing failed: \(error)")
+            return nil
+        }
+    }
+
+    private func parseYearLabel(from text: String) -> Int? {
+        guard let year = extractNumber(from: text) else { return nil }
+        guard year >= 1900 && year <= 2100 else { return nil }
+        return year
     }
     
     private func parseScholarTable(_ table: Element) throws -> ScholarMetrics {
@@ -539,7 +612,12 @@ import UserNotifications
                         var updatedProfile = profile
                         updatedProfile.recentGrowth = growthSummary?.growth
                         updatedProfile.recentGrowthDays = growthSummary?.baselineDays
-                        currentData[updatedProfile] = ProfileMetrics(citationCount: latestRecord.citationCount, hIndex: latestRecord.hIndex, i10Index: latestRecord.i10Index)
+                        currentData[updatedProfile] = ProfileMetrics(
+                            citationCount: latestRecord.citationCount,
+                            hIndex: latestRecord.hIndex,
+                            i10Index: latestRecord.i10Index,
+                            citationsByYear: latestRecord.citationsByYear
+                        )
 
                         AppLog.debug("Loaded historical data for \(profile.name): \(latestRecord.citationCount) citations")
                         if let hIndex = latestRecord.hIndex {
@@ -547,6 +625,11 @@ import UserNotifications
                         }
                         if let i10Index = latestRecord.i10Index {
                             AppLog.debug("Historical i10-index for \(profile.name): \(i10Index)")
+                        }
+                        if let citationsByYear = latestRecord.citationsByYear {
+                            let currentYear = Calendar.current.component(.year, from: Date())
+                            let currentYearCitations = citationsByYear[currentYear] ?? 0
+                            AppLog.debug("Historical current-year citations for \(profile.name) (\(currentYear)): \(currentYearCitations)")
                         }
                         if let growthSummary = growthSummary {
                             let growth = growthSummary.growth
