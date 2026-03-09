@@ -5,6 +5,38 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.5] - 2026-03-08
+
+### Added
+- **Refresh Completion Notifications**: Added optional desktop notifications when citation refresh cycles finish
+- **Metric Visibility Controls**: Added per-metric menu display toggles for h-index, i10-index, and trend details (citation count remains always visible)
+
+### Improved
+- **General Settings UX**: Added scrolling to the General tab so all settings remain accessible in smaller windows
+- **Immediate Menu Sync**: Metric visibility toggles now apply as soon as the menu opens, without waiting for a new citation refresh
+- **Settings Copy Clarity**: Updated Menu Bar Display guidance to separate metric visibility controls from profile ordering actions
+
+### Technical
+- Added `showHIndexInMenu`, `showI10IndexInMenu`, and `showTrendInMenu` to `AppSettings` with backward-compatible default decoding
+- Implemented notification authorization + delivery via `UserNotifications` framework
+- Added startup-silent refresh behavior to avoid noisy notifications on app launch
+- Added test coverage for new settings defaults and legacy settings migration behavior
+
+## [1.4.4] - 2026-03-08
+
+### Changed
+- **Safer Refresh Defaults**: Default citation refresh interval changed from hourly to once daily
+- **Refresh Option Simplification**: Settings now expose only 1 hour, 6 hours, 24 hours, and 48 hours refresh intervals
+- **Universal Distribution**: Release packaging now produces a single universal DMG for both Intel and Apple Silicon Macs
+
+### Improved
+- **Documentation Accuracy**: Updated install and distribution docs to reflect universal DMG naming and dual-architecture support
+
+### Technical
+- Added backward-compatible interval migration (`15min`/`30min` -> `1hour`, `3hours` -> `6hours`)
+- Updated Makefile release pipeline to build universal binaries with `--arch arm64 --arch x86_64`
+- Updated release workflow DMG naming to `universal` to match packaging output
+
 ## [1.4.3] - 2026-03-08
 
 ### Fixed
