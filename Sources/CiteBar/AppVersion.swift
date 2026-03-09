@@ -39,6 +39,7 @@ extension AppVersion {
         version: current,
         highlights: [
             "Added refresh-complete desktop notifications with per-cycle citation summary",
+            "Added a gentle notification-permission onboarding prompt for new versions when notifications are enabled",
             "Added menu display controls for h-index, i10-index, and trend metrics (citation count always shown)",
             "Improved General settings UX with scrolling support for longer option lists",
             "Metric visibility toggles now apply immediately when opening the menu bar"
@@ -46,6 +47,7 @@ extension AppVersion {
         description: "This patch release improves day-to-day usability by adding optional refresh notifications and flexible metric visibility controls in the menu bar.",
         technicalNotes: [
             "Implemented UserNotifications-based refresh completion alerts gated by Show Notifications",
+            "Notification permission prompts now run in explicit user-facing flows instead of background refresh completion",
             "Startup refresh runs in silent mode to avoid noisy first-launch notifications",
             "AppSettings now includes showHIndexInMenu, showI10IndexInMenu, and showTrendInMenu with backward-compatible defaults",
             "Menu rendering now respects metric visibility toggles for each profile row",

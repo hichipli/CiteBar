@@ -1,5 +1,6 @@
 import SwiftUI
 import ServiceManagement
+import UserNotifications
 
 struct SettingsView: View {
     @ObservedObject private var settingsManager = SettingsManager.shared
@@ -295,6 +296,7 @@ struct ProfileRow: View {
 
 struct GeneralTab: View {
     @ObservedObject var settingsManager: SettingsManager
+    @State private var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
     
     private func getAutoLaunchStatus() -> String {
         switch SMAppService.mainApp.status {
@@ -308,6 +310,41 @@ struct GeneralTab: View {
             return "⚠️ Waiting for user approval in System Settings"
         @unknown default:
             return "Unknown status"
+        }
+    }
+
+    private func refreshNotificationAuthorizationStatus() {
+        Task { @MainActor in
+            let center = UNUserNotificationCenter.current()
+            let settings = await center.notificationSettings()
+            notificationAuthorizationStatus = settings.authorizationStatus
+        }
+    }
+
+    private func requestNotificationPermissionIfNeeded() {
+        Task { @MainActor in
+            let center = UNUserNotificationCenter.current()
+            let settings = await center.notificationSettings()
+            notificationAuthorizationStatus = settings.authorizationStatus
+
+            guard settings.authorizationStatus == .notDetermined else { return }
+
+            _ = (try? await center.requestAuthorization(options: [.alert, .badge])) ?? false
+            let updated = await center.notificationSettings()
+            notificationAuthorizationStatus = updated.authorizationStatus
+        }
+    }
+
+    private func openNotificationSettings() {
+        let candidates = [
+            "x-apple.systempreferences:com.apple.preference.notifications",
+            "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+        ]
+
+        for candidate in candidates {
+            if let url = URL(string: candidate), NSWorkspace.shared.open(url) {
+                return
+            }
         }
     }
     
@@ -342,12 +379,43 @@ struct GeneralTab: View {
                         get: { settingsManager.settings.showNotifications },
                         set: { enabled in
                             settingsManager.setNotifications(enabled)
+                            if enabled {
+                                requestNotificationPermissionIfNeeded()
+                            }
                         }
                     ))
                     
                     Text("Get notified when refresh completes with citation summary")
                         .font(.caption)
                         .foregroundColor(.secondary)
+
+                    if settingsManager.settings.showNotifications {
+                        switch notificationAuthorizationStatus {
+                        case .authorized, .provisional:
+                            Text("System notification permission is enabled.")
+                                .font(.caption)
+                                .foregroundColor(.green)
+                        case .notDetermined:
+                            Button("Enable Notifications in macOS") {
+                                requestNotificationPermissionIfNeeded()
+                            }
+                            .font(.caption)
+                        case .denied:
+                            Text("System notification permission is currently blocked for CiteBar.")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                            Button("Open Notification Settings") {
+                                openNotificationSettings()
+                            }
+                            .font(.caption)
+                        case .ephemeral:
+                            Text("System notification permission is temporarily available.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        @unknown default:
+                            EmptyView()
+                        }
+                    }
                 }
                 
                 VStack(alignment: .leading, spacing: 8) {
@@ -413,6 +481,12 @@ struct GeneralTab: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
+        }
+        .onAppear {
+            refreshNotificationAuthorizationStatus()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshNotificationAuthorizationStatus()
         }
     }
 }

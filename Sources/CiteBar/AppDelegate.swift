@@ -1,6 +1,7 @@
 import Cocoa
 import SwiftUI
 import Sparkle
+import UserNotifications
 
 @MainActor class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
@@ -18,6 +19,7 @@ import Sparkle
     private static let releasesURL = URL(string: "https://github.com/hichipli/CiteBar/releases")
     private static let latestReleaseURL = URL(string: "https://github.com/hichipli/CiteBar/releases/latest")
     private static let minimumManualUpdateVersion = "1.4.2"
+    private static let notificationPromptedVersionDefaultsKey = "com.hichipli.citebar.notificationPromptedVersion"
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         setupMenuBar()
@@ -41,6 +43,8 @@ import Sparkle
                 self.citationManager?.checkCitations(isStartup: true)
             }
         }
+        
+        maybePromptForNotificationPermission()
     }
     
     private func setupMenuBar() {
@@ -93,6 +97,33 @@ import Sparkle
         }
         
         print("Sparkle updater initialized successfully")
+    }
+
+    private func maybePromptForNotificationPermission() {
+        guard settingsManager.settings.showNotifications else { return }
+
+        let defaults = UserDefaults.standard
+        let promptedVersion = defaults.string(forKey: Self.notificationPromptedVersionDefaultsKey)
+        guard promptedVersion != AppVersion.current else { return }
+        defaults.set(AppVersion.current, forKey: Self.notificationPromptedVersionDefaultsKey)
+
+        Task { @MainActor in
+            let center = UNUserNotificationCenter.current()
+            let status = await center.notificationSettings().authorizationStatus
+            guard status == .notDetermined else { return }
+
+            let alert = NSAlert()
+            alert.messageText = "Enable Refresh Notifications?"
+            alert.informativeText = "CiteBar can notify you when citation refresh cycles complete. You can change this any time in Settings > General."
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "Enable Notifications")
+            alert.addButton(withTitle: "Not Now")
+
+            let response = alert.runModal()
+            guard response == .alertFirstButtonReturn else { return }
+
+            _ = (try? await center.requestAuthorization(options: [.alert, .badge])) ?? false
+        }
     }
     
     @objc private func menuBarClicked() {

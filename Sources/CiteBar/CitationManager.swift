@@ -198,14 +198,9 @@ import UserNotifications
                     totalCitationDelta: totalCitationDelta
                 )
             case .notDetermined:
-                let granted = (try? await center.requestAuthorization(options: [.alert, .badge])) ?? false
-                guard granted else { return }
-                await self.postRefreshCompletionNotification(
-                    attemptedProfiles: attemptedProfiles,
-                    successfulProfiles: successfulProfiles,
-                    changedProfiles: changedProfiles,
-                    totalCitationDelta: totalCitationDelta
-                )
+                // Permission is requested from a user-facing flow (Settings / onboarding prompt),
+                // not during background refresh completion.
+                return
             case .denied:
                 return
             @unknown default:

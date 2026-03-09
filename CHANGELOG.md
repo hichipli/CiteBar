@@ -10,11 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Refresh Completion Notifications**: Added optional desktop notifications when citation refresh cycles finish
 - **Metric Visibility Controls**: Added per-metric menu display toggles for h-index, i10-index, and trend details (citation count remains always visible)
+- **Notification Permission Onboarding**: Added a gentle one-time prompt after update/startup to let users explicitly enable notification access
 
 ### Improved
 - **General Settings UX**: Added scrolling to the General tab so all settings remain accessible in smaller windows
 - **Immediate Menu Sync**: Metric visibility toggles now apply as soon as the menu opens, without waiting for a new citation refresh
 - **Settings Copy Clarity**: Updated Menu Bar Display guidance to separate metric visibility controls from profile ordering actions
+- **Permission Transparency**: General settings now surfaces system notification status and provides a direct path to macOS notification settings
 
 ### Technical
 - Added `showHIndexInMenu`, `showI10IndexInMenu`, and `showTrendInMenu` to `AppSettings` with backward-compatible default decoding
