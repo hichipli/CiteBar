@@ -379,12 +379,6 @@ h3 {
   text-decoration: underline;
 }
 
-.release-status {
-  margin-top: 0.82rem;
-  color: var(--text-700);
-  font-size: 0.83rem;
-}
-
 .section-head {
   display: grid;
   gap: 0.65rem;

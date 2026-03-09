@@ -8,10 +8,9 @@
   const releaseArtifactEl = document.getElementById("release-artifact");
   const releaseSizeEl = document.getElementById("release-size");
   const releaseDownloadCountEl = document.getElementById("release-download-count");
-  const releaseStatusEl = document.getElementById("release-status");
   const releaseHighlightsEl = document.getElementById("release-highlights");
   const releaseNotesLinkEl = document.getElementById("release-notes-link");
-  const releaseDirectLinkEl = document.getElementById("release-direct-link");
+  const releaseHistoryLinkEl = document.getElementById("release-history-link");
 
   const primaryDownloadEl = document.getElementById("download-button");
   const secondaryDownloadEl = document.getElementById("download-button-secondary");
@@ -27,6 +26,7 @@
   const releaseApiUrl = "https://api.github.com/repos/" + owner + "/" + repo + "/releases/latest";
   const repoApiUrl = "https://api.github.com/repos/" + owner + "/" + repo;
   const fallbackReleaseUrl = "https://github.com/" + owner + "/" + repo + "/releases/latest";
+  const fallbackReleaseHistoryUrl = "https://github.com/" + owner + "/" + repo + "/releases";
   const fallbackRepoUrl = "https://github.com/" + owner + "/" + repo;
 
   const releaseCacheKey = "citebar.latestRelease.v3";
@@ -203,7 +203,6 @@
     const safeUrl = url || fallbackReleaseUrl;
     setHref(primaryDownloadEl, safeUrl);
     setHref(secondaryDownloadEl, safeUrl);
-    setHref(releaseDirectLinkEl, safeUrl);
   }
 
   function applyReleaseData(releaseData, sourceLabel) {
@@ -228,17 +227,16 @@
       setText(releaseSizeEl, formatFileSize(asset.size));
       setText(releaseDownloadCountEl, formatNumber(asset.download_count || 0));
       applyDownloadUrl(asset.browser_download_url);
-      setText(releaseDirectLinkEl, "Direct DMG: " + asset.name);
     } else {
       setText(releaseArtifactEl, "No DMG asset detected");
       setText(releaseSizeEl, "-");
       setText(releaseDownloadCountEl, "-");
       applyDownloadUrl(releaseData ? releaseData.html_url : fallbackReleaseUrl);
-      setText(releaseDirectLinkEl, "Open latest release page");
     }
 
     renderHighlights(extractHighlights(releaseData ? releaseData.body : ""));
     setHref(releaseNotesLinkEl, releaseData && releaseData.html_url ? releaseData.html_url : fallbackReleaseUrl);
+    setHref(releaseHistoryLinkEl, fallbackReleaseHistoryUrl);
 
     if (version && primaryDownloadEl) {
       primaryDownloadEl.textContent = "Download " + version;
@@ -249,11 +247,8 @@
     }
 
     if (sourceLabel === "cache") {
-      setText(releaseStatusEl, "Using cached release info while refreshing live data...");
       return;
     }
-
-    setText(releaseStatusEl, "Release data synced from GitHub.");
   }
 
   function applyRepoStats(repoData, sourceLabel) {
@@ -344,10 +339,8 @@
         setText(releaseArtifactEl, "Open release page");
         setText(releaseSizeEl, "-");
         setText(releaseDownloadCountEl, "-");
-        setText(releaseStatusEl, "Live release lookup failed. Using fallback link.");
         renderHighlights([]);
       } else {
-        setText(releaseStatusEl, "Live lookup failed. Cached release data kept.");
       }
 
       if (error && error.message) {
