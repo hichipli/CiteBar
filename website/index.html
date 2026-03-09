@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CiteBar | Google Scholar Citation Tracker for macOS</title>
+  <meta name="description" content="CiteBar is a native macOS menu bar app for tracking Google Scholar citations in real time. Download the latest universal DMG directly.">
+  <meta name="keywords" content="CiteBar, Google Scholar, citation tracker, h-index, i10-index, macOS menu bar app, academic tool">
+  <meta name="author" content="CiteBar Contributors">
+  <meta name="robots" content="index,follow,max-image-preview:large">
+  <link rel="canonical" href="https://www.citebar.org/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="CiteBar | Google Scholar Citation Tracker for macOS">
+  <meta property="og:description" content="Track your Google Scholar impact from your menu bar. Direct download, zero telemetry, native macOS experience.">
+  <meta property="og:url" content="https://www.citebar.org/">
+  <meta property="og:image" content="https://www.citebar.org/assets/logo-512.png">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="CiteBar | Google Scholar Citation Tracker for macOS">
+  <meta name="twitter:description" content="Native macOS citation tracking with direct download and local-first privacy.">
+  <meta name="twitter:image" content="https://www.citebar.org/assets/logo-512.png">
+
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/logo-128.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/logo-256.png">
+  <link rel="manifest" href="site.webmanifest">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "CiteBar",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "macOS 13.0+",
+    "description": "A native macOS menu bar application that tracks Google Scholar citation metrics in real time.",
+    "softwareVersion": "Dynamic (latest release)",
+    "downloadUrl": "https://github.com/hichipli/CiteBar/releases/latest",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "url": "https://www.citebar.org/",
+    "sameAs": [
+      "https://github.com/hichipli/CiteBar"
+    ]
+  }
+  </script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Why does macOS show 'CiteBar is damaged and can't be opened'?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "This is usually a Gatekeeper quarantine prompt for non-notarized downloads. Run xattr -cr /Applications/CiteBar.app or allow the app in Privacy & Security."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What if I am on 1.3.x or 1.4.1 and auto-update fails?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Manually install the latest DMG once. After moving to 1.4.4 or later, automatic updates should work normally."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does CiteBar provide standalone .app downloads?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. CiteBar is distributed as universal DMG installers only."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does CiteBar upload my local data?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. Citation history and settings are stored locally on your Mac. No telemetry or cloud tracking is included."
+        }
+      }
+    ]
+  }
+  </script>
+</head>
+<body data-owner="hichipli" data-repo="CiteBar">
+  <div class="bg-orb bg-orb-a" aria-hidden="true"></div>
+  <div class="bg-orb bg-orb-b" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="CiteBar home">
+      <img src="assets/logo-128.png" alt="CiteBar logo" width="48" height="48">
+      <span>CiteBar</span>
+    </a>
+    <nav class="site-nav" aria-label="Primary">
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="#faq">FAQ</a>
+      <a id="github-stars" class="github-stars" href="https://github.com/hichipli/CiteBar" target="_blank" rel="noreferrer" aria-label="GitHub stars">
+        <svg class="github-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M12 .3C5.5.3.3 5.6.3 12.1c0 5.2 3.4 9.6 8.1 11.2.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.6-4-1.6-.5-1.4-1.3-1.7-1.3-1.7-1.1-.8.1-.8.1-.8 1.2.1 1.9 1.3 1.9 1.3 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.6-1.4-5.6-6.2 0-1.4.5-2.5 1.3-3.4-.1-.3-.6-1.6.1-3.3 0 0 1.1-.4 3.5 1.3 1-.3 2.1-.4 3.2-.4s2.1.1 3.2.4c2.4-1.7 3.5-1.3 3.5-1.3.7 1.7.2 3 .1 3.3.8.9 1.3 2 1.3 3.4 0 4.8-2.9 5.9-5.6 6.2.4.4.8 1.1.8 2.2v3.2c0 .3.2.7.8.6 4.7-1.6 8.1-6 8.1-11.2C23.7 5.6 18.4.3 12 .3z"></path>
+        </svg>
+        <span class="github-label">GitHub</span>
+        <span class="stars-pill" aria-hidden="true">
+          <svg class="star-icon" viewBox="0 0 24 24" focusable="false">
+            <path d="M12 2.25l2.92 5.92 6.54.95-4.73 4.61 1.12 6.52L12 17.17l-5.85 3.08 1.12-6.52L2.54 9.12l6.54-.95L12 2.25z"></path>
+          </svg>
+          <strong id="github-stars-count">...</strong>
+        </span>
+      </a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero section">
+      <div class="hero-copy reveal">
+        <p class="eyebrow">Native macOS Utility</p>
+        <h1>Track Google Scholar citations without living in your browser.</h1>
+        <p class="subhead">
+          CiteBar keeps citations, h-index, and i10-index in your menu bar with a local-first, lightweight workflow.
+        </p>
+        <div class="hero-actions">
+          <a id="download-button" class="btn btn-primary" href="https://github.com/hichipli/CiteBar/releases/latest">Download for macOS</a>
+          <a class="btn btn-ghost" href="#install">Install Guide</a>
+        </div>
+        <ul class="meta-list" aria-label="Product highlights">
+          <li>macOS 13.0+</li>
+          <li>Universal DMG (Intel + Apple Silicon)</li>
+          <li>No telemetry, local data only</li>
+        </ul>
+      </div>
+
+      <aside class="release-card reveal" aria-live="polite">
+        <p class="card-label">Latest Release</p>
+        <p id="release-version" class="release-version">Loading...</p>
+        <p id="release-title" class="release-title">Fetching latest release notes...</p>
+
+        <div class="release-grid">
+          <p class="release-row"><span>Published</span><time id="release-date">Checking...</time></p>
+          <p class="release-row"><span>Installer</span><span id="release-artifact">Resolving DMG...</span></p>
+          <p class="release-row"><span>Size</span><span id="release-size">-</span></p>
+          <p class="release-row"><span>Downloads</span><span id="release-download-count">-</span></p>
+        </div>
+
+        <p class="card-subtitle">What's New</p>
+        <ul id="release-highlights" class="release-highlights">
+          <li>Loading release highlights...</li>
+        </ul>
+
+        <div class="release-links">
+          <a id="release-notes-link" class="btn btn-ghost btn-small" href="https://github.com/hichipli/CiteBar/releases/latest" target="_blank" rel="noreferrer">Read full release notes</a>
+          <a id="release-direct-link" class="inline-link" href="https://github.com/hichipli/CiteBar/releases/latest">Direct DMG link</a>
+        </div>
+
+        <p id="release-status" class="release-status">Connecting to GitHub Releases...</p>
+      </aside>
+    </section>
+
+    <section id="features" class="section">
+      <div class="section-head reveal">
+        <p class="eyebrow">Why Researchers Use CiteBar</p>
+        <h2>Practical features, zero noise.</h2>
+      </div>
+      <div class="grid-3">
+        <article class="feature-card reveal">
+          <h3>Live Menu Bar Metrics</h3>
+          <p>See citations instantly in your menu bar without repeated browser refreshes.</p>
+        </article>
+        <article class="feature-card reveal">
+          <h3>Multi-Profile Support</h3>
+          <p>Track multiple scholars, reorder profiles, and switch focus in one click.</p>
+        </article>
+        <article class="feature-card reveal">
+          <h3>Respectful & Reliable</h3>
+          <p>Built-in pacing and resilient parsing keep updates stable over time.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="install" class="section">
+      <div class="section-head reveal">
+        <p class="eyebrow">Install</p>
+        <h2>Quick install and first-launch fixes</h2>
+      </div>
+
+      <div class="install-layout">
+        <article class="panel reveal">
+          <h3>Install in 4 steps</h3>
+          <ol class="steps">
+            <li>Download the latest universal DMG (DMG is the only distribution format).</li>
+            <li>Open the DMG and drag <code>CiteBar.app</code> into <code>/Applications</code>.</li>
+            <li>Press <code>Cmd + Space</code>, open <code>Terminal</code>, then run:</li>
+            <li>Launch CiteBar from Applications and add your Scholar user ID.</li>
+          </ol>
+
+          <div class="command-box" aria-label="Terminal command">
+            <p class="command-label">Terminal command</p>
+            <div class="command-row">
+              <code id="quarantine-command">xattr -cr /Applications/CiteBar.app</code>
+              <button id="copy-command-btn" class="copy-btn" type="button" aria-label="Copy command">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M9 9h11v13H9V9zm-5-7h11v2H6v11H4V2zm2 4h11v2H8v11H6V6z"></path>
+                </svg>
+                <span>Copy</span>
+              </button>
+            </div>
+            <p id="copy-status" class="copy-status" aria-live="polite"></p>
+          </div>
+
+          <p class="micro-note">Legacy upgrade rule: if you are on <code>1.3.x</code> or <code>1.4.1</code>, install the latest DMG manually once. After you are on <code>1.4.4+</code>, automatic updates should work normally.</p>
+        </article>
+
+        <article class="panel reveal">
+          <h3>When macOS blocks launch</h3>
+          <ul class="system-list">
+            <li>"CiteBar is damaged" usually means Gatekeeper quarantine, not actual corruption.</li>
+            <li>"Cannot verify developer": right-click <code>CiteBar.app</code> -> <code>Open</code> -> <code>Open</code>.</li>
+            <li>If needed, run <code>sudo xattr -cr /Applications/CiteBar.app</code>.</li>
+            <li>If it still fails, run <code>sudo chmod -R 755 /Applications/CiteBar.app</code>.</li>
+            <li>System requirement: macOS 13.0+ on Intel or Apple Silicon.</li>
+          </ul>
+          <a class="inline-link" href="https://github.com/hichipli/CiteBar/blob/main/DISTRIBUTION.md" target="_blank" rel="noreferrer">Open full distribution guide</a>
+        </article>
+      </div>
+    </section>
+
+    <section id="faq" class="section">
+      <div class="section-head reveal">
+        <p class="eyebrow">FAQ</p>
+        <h2>High-frequency install questions</h2>
+      </div>
+      <div class="faq-list">
+        <details class="faq-item reveal">
+          <summary>Why does macOS say "CiteBar is damaged and can't be opened"?</summary>
+          <p>This is usually a quarantine warning for non-notarized downloads. Run <code>xattr -cr /Applications/CiteBar.app</code>, then open the app again.</p>
+        </details>
+        <details class="faq-item reveal">
+          <summary>What if macOS says "Cannot verify developer"?</summary>
+          <p>In Applications, right-click <code>CiteBar.app</code>, choose <code>Open</code>, then click <code>Open</code> in the dialog.</p>
+        </details>
+        <details class="faq-item reveal">
+          <summary>I am on 1.3.x or 1.4.1 and auto-update fails. What should I do?</summary>
+          <p>Manually install the latest DMG once. After upgrading to <code>1.4.4+</code>, in-app automatic updates should work normally.</p>
+        </details>
+        <details class="faq-item reveal">
+          <summary>Is there a standalone .app download?</summary>
+          <p>No. CiteBar release assets are DMG installers only (universal for Intel + Apple Silicon).</p>
+        </details>
+        <details class="faq-item reveal">
+          <summary>Does CiteBar upload my citation history?</summary>
+          <p>No. Settings and history are local on your Mac; telemetry and cloud tracking are not included.</p>
+        </details>
+      </div>
+    </section>
+
+    <section class="section cta reveal">
+      <h2>Ready to track your academic impact in real time?</h2>
+      <a id="download-button-secondary" class="btn btn-primary" href="https://github.com/hichipli/CiteBar/releases/latest">Download CiteBar</a>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>© <span id="year"></span> CiteBar Contributors</p>
+    <p>
+      <a href="https://github.com/hichipli/CiteBar" target="_blank" rel="noreferrer">GitHub</a>
+      <span>·</span>
+      <a href="https://github.com/hichipli/CiteBar/releases" target="_blank" rel="noreferrer">Releases</a>
+      <span>·</span>
+      <a href="https://github.com/hichipli/CiteBar/blob/main/DISTRIBUTION.md" target="_blank" rel="noreferrer">Distribution Guide</a>
+    </p>
+  </footer>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
