@@ -183,7 +183,7 @@ struct ProfilesTab: View {
             } else {
                 SettingsCard(
                     title: "Profile Order",
-                    subtitle: "Drag rows to reorder. The first profile appears first in the menu bar.",
+                    subtitle: "Drag rows to reorder. The top profile is shown in the menu bar.",
                     expandContent: true
                 ) {
                     List {
@@ -618,7 +618,7 @@ struct GeneralTab: View {
 
                 SettingsCard(
                     title: "App",
-                    subtitle: "Lower-frequency app controls."
+                    subtitle: "Advanced app controls."
                 ) {
                     SettingsActionRow(
                         text: "Quit CiteBar and stop background refresh until the app is opened again.",
