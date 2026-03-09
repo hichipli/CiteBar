@@ -333,6 +333,17 @@ MIT License - Use CiteBar however you want, build amazing things on top of it, m
 
 See [LICENSE](LICENSE) for the boring legal details.
 
+## Community
+
+Thanks to everyone who helps make CiteBar better.
+
+<div>
+  <a href="https://github.com/CassWang1"><img src="https://github.com/CassWang1.png?size=48" width="48" alt="CassWang1" /></a>
+  <a href="https://github.com/lukestein"><img src="https://github.com/lukestein.png?size=48" width="48" alt="lukestein" /></a>
+  <a href="https://github.com/DABH"><img src="https://github.com/DABH.png?size=48" width="48" alt="DABH" /></a>
+  <a href="https://github.com/yizirui"><img src="https://github.com/yizirui.png?size=48" width="48" alt="yizirui" /></a>
+</div>
+
 ---
 
 <div align="center">
