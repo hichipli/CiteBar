@@ -111,7 +111,7 @@ import Cocoa
             let sortedProfiles = citations.keys.sorted { $0.sortOrder < $1.sortOrder }
             if let primaryProfile = sortedProfiles.first,
                let metrics = citations[primaryProfile] {
-                updateMenuBarWithCount(metrics.citationCount)
+                updateMenuBarWithMetrics(metrics)
             } else {
                 applyStatusIcon(
                     symbolName: "book.circle",
@@ -222,13 +222,31 @@ import Cocoa
             // Add citation count as sub-item
             let countText: String
             let countIcon: String
+            var totalSummaryText: String?
             if metrics.citationCount == -1 {
                 countText = "    Loading citations..."
                 countIcon = "arrow.clockwise"
             } else {
-                let formattedCount = NumberFormatter.localizedString(from: NSNumber(value: metrics.citationCount), number: .decimal)
-                countText = "    \(formattedCount) citations"
-                countIcon = "book.closed"
+                let formattedTotal = NumberFormatter.localizedString(from: NSNumber(value: metrics.citationCount), number: .decimal)
+                let currentYear = Calendar.current.component(.year, from: Date())
+                switch settingsManager.settings.menuBarPrimaryMetric {
+                case .totalCitations:
+                    countText = "    \(formattedTotal) citations"
+                    countIcon = "book.closed"
+                case .currentYearCitations:
+                    if let currentYearCitations = metrics.currentYearCitations {
+                        let formattedCurrentYear = NumberFormatter.localizedString(
+                            from: NSNumber(value: currentYearCitations),
+                            number: .decimal
+                        )
+                        countText = "    \(formattedCurrentYear) citations in \(currentYear)"
+                        countIcon = "calendar"
+                    } else {
+                        countText = "    Current-year citations unavailable"
+                        countIcon = "calendar.badge.exclamationmark"
+                    }
+                    totalSummaryText = "    \(formattedTotal) total citations"
+                }
             }
             
             let countItem = NSMenuItem(title: countText, action: nil, keyEquivalent: "")
@@ -237,6 +255,15 @@ import Cocoa
             countItem.image = NSImage(systemSymbolName: countIcon, accessibilityDescription: "Citations")
             menu.insertItem(countItem, at: insertIndex)
             insertIndex += 1
+
+            if let totalSummaryText {
+                let totalItem = NSMenuItem(title: totalSummaryText, action: nil, keyEquivalent: "")
+                totalItem.tag = 100
+                totalItem.isEnabled = false
+                totalItem.image = NSImage(systemSymbolName: "book.closed", accessibilityDescription: "Total citations")
+                menu.insertItem(totalItem, at: insertIndex)
+                insertIndex += 1
+            }
             
             // Add h-index if available
             if settingsManager.settings.showHIndexInMenu, let hIndex = metrics.hIndex {
@@ -340,13 +367,42 @@ import Cocoa
         updateDisplayWith(currentCitations)
     }
     
-    private func updateMenuBarWithCount(_ count: Int) {
+    private func updateMenuBarWithMetrics(_ metrics: ProfileMetrics) {
         // Display count as text next to icon. If the SF Symbol fails to render,
         // keep the title visible so users still see launch/refresh progress.
-        let title = count > 0 ? " \(count)" : " --"
+        let displayValue: Int
+        let symbolName: String
+        let accessibilityDescription: String
+
+        switch settingsManager.settings.menuBarPrimaryMetric {
+        case .totalCitations:
+            displayValue = metrics.citationCount
+            symbolName = "book.circle.fill"
+            accessibilityDescription = "CiteBar"
+        case .currentYearCitations:
+            if let currentYearCitations = metrics.currentYearCitations {
+                displayValue = currentYearCitations
+                symbolName = "calendar.circle.fill"
+                accessibilityDescription = "CiteBar - Current year citations"
+            } else {
+                // Fall back to the total count when yearly histogram data is unavailable.
+                displayValue = metrics.citationCount
+                symbolName = "book.circle.fill"
+                accessibilityDescription = "CiteBar"
+            }
+        }
+
+        let title: String
+        if displayValue >= 0 {
+            let formattedValue = NumberFormatter.localizedString(from: NSNumber(value: displayValue), number: .decimal)
+            title = " \(formattedValue)"
+        } else {
+            title = " --"
+        }
+
         applyStatusIcon(
-            symbolName: "book.circle.fill",
-            accessibilityDescription: "CiteBar",
+            symbolName: symbolName,
+            accessibilityDescription: accessibilityDescription,
             preferredTitle: title,
             fallbackTitle: title
         )

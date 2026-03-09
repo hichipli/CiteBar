@@ -79,6 +79,11 @@ import ServiceManagement
         settings.showTrendInMenu = enabled
         save()
     }
+
+    func setMenuBarPrimaryMetric(_ metric: AppSettings.MenuBarPrimaryMetric) {
+        settings.menuBarPrimaryMetric = metric
+        save()
+    }
     
     func setAutoLaunch(_ enabled: Bool) {
         settings.autoLaunch = enabled

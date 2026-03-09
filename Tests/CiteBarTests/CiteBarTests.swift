@@ -133,6 +133,7 @@ final class CiteBarTests: XCTestCase {
         XCTAssertTrue(settings.showHIndexInMenu)
         XCTAssertTrue(settings.showI10IndexInMenu)
         XCTAssertTrue(settings.showTrendInMenu)
+        XCTAssertEqual(settings.menuBarPrimaryMetric, .totalCitations)
     }
 
     func testAppSettingsBackwardCompatibilityDecodingDefaultsNewDisplayOptions() throws {
@@ -150,6 +151,7 @@ final class CiteBarTests: XCTestCase {
         XCTAssertTrue(decoded.showHIndexInMenu)
         XCTAssertTrue(decoded.showI10IndexInMenu)
         XCTAssertTrue(decoded.showTrendInMenu)
+        XCTAssertEqual(decoded.menuBarPrimaryMetric, .totalCitations)
     }
 
     // New tests for CitationManager
@@ -174,6 +176,10 @@ final class CiteBarTests: XCTestCase {
         XCTAssertEqual(metrics.citationCount, 98, "Citation count should be parsed correctly from the sample HTML.")
         XCTAssertEqual(metrics.hIndex, 4, "h-index should be parsed correctly from the sample HTML.")
         XCTAssertEqual(metrics.i10Index, 2, "i10-index should be parsed correctly from the sample HTML.")
+        XCTAssertEqual(metrics.citationsByYear?[2022], 3, "2022 yearly citations should be parsed from the citation graph.")
+        XCTAssertEqual(metrics.citationsByYear?[2023], 10, "2023 yearly citations should be parsed from the citation graph.")
+        XCTAssertEqual(metrics.citationsByYear?[2024], 59, "2024 yearly citations should be parsed from the citation graph.")
+        XCTAssertEqual(metrics.citationsByYear?[2025], 25, "2025 yearly citations should be parsed from the citation graph.")
     }
     
     @MainActor

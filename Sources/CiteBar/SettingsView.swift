@@ -451,6 +451,17 @@ struct GeneralTab: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
+
+                        Divider()
+
+                        SettingsActionRow(
+                            text: "Need immediate data? Trigger a refresh now.",
+                            buttonTitle: "Refresh Now"
+                        ) {
+                            if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+                                appDelegate.refreshCitations()
+                            }
+                        }
                     }
                 }
 
@@ -539,13 +550,34 @@ struct GeneralTab: View {
 
                 SettingsCard(
                     title: "Menu Bar Display",
-                    subtitle: "Citation count is always shown. Toggle optional metrics below."
+                    subtitle: "Choose which citation metric appears in the menu bar, then toggle optional details below."
                 ) {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("To change profile order (and which profile appears first), use the Profiles section and drag rows.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
+
+                        Divider()
+
+                        SettingsControlRow("Primary citation metric") {
+                            Picker("Primary citation metric", selection: Binding(
+                                get: { settingsManager.settings.menuBarPrimaryMetric },
+                                set: { metric in
+                                    settingsManager.setMenuBarPrimaryMetric(metric)
+                                    if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+                                        appDelegate.updateMenuBarDisplay()
+                                    }
+                                }
+                            )) {
+                                ForEach(AppSettings.MenuBarPrimaryMetric.allCases, id: \.self) { metric in
+                                    Text(metric.displayName).tag(metric)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .fixedSize(horizontal: true, vertical: false)
+                        }
 
                         Divider()
 
@@ -581,6 +613,20 @@ struct GeneralTab: View {
                                 }
                             )
                         )
+                    }
+                }
+
+                SettingsCard(
+                    title: "App",
+                    subtitle: "Lower-frequency app controls."
+                ) {
+                    SettingsActionRow(
+                        text: "Quit CiteBar and stop background refresh until the app is opened again.",
+                        buttonTitle: "Quit CiteBar"
+                    ) {
+                        if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+                            appDelegate.quitApp()
+                        }
                     }
                 }
             }
@@ -630,6 +676,17 @@ struct AboutTab: View {
                                     .background(Color.accentColor.opacity(0.14))
                                     .clipShape(Capsule())
                             }
+
+                            Button {
+                                if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+                                    appDelegate.checkForUpdates()
+                                }
+                            } label: {
+                                Label("Check for Updates...", systemImage: "arrow.down.circle")
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .padding(.top, 2)
                         }
 
                         Spacer()
