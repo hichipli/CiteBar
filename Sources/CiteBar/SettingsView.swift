@@ -2,6 +2,38 @@ import SwiftUI
 import ServiceManagement
 import UserNotifications
 
+private enum SettingsSection: String, CaseIterable, Identifiable {
+    case profiles
+    case general
+    case about
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .profiles: return "Profiles"
+        case .general: return "General"
+        case .about: return "About"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .profiles: return "Manage Scholar accounts"
+        case .general: return "Refresh and display options"
+        case .about: return "Version, features, and support"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .profiles: return "person.2.fill"
+        case .general: return "gearshape.fill"
+        case .about: return "info.circle.fill"
+        }
+    }
+}
+
 struct SettingsView: View {
     @ObservedObject private var settingsManager = SettingsManager.shared
     @State private var newProfileId = ""
@@ -9,63 +41,79 @@ struct SettingsView: View {
     @State private var showingAddProfile = false
     @State private var showingError = false
     @State private var errorMessage = ""
-    @State private var selectedTab = 0
-    
+    @State private var selectedSection: SettingsSection = .profiles
+
     var body: some View {
-        VStack(spacing: 20) {
-            // Header
-            HStack {
-                AppIconView(size: 40)
-                
-                VStack(alignment: .leading) {
+        // A fixed split layout is more predictable here than NavigationSplitView
+        // for this app's settings window sizing and section switching behavior.
+        HStack(spacing: 0) {
+            SettingsSidebar(selectedSection: $selectedSection)
+                .frame(width: 260)
+
+            Divider()
+
+            Group {
+                switch selectedSection {
+                case .profiles:
+                    ProfilesTab(
+                        settingsManager: settingsManager,
+                        newProfileId: $newProfileId,
+                        newProfileName: $newProfileName,
+                        showingAddProfile: $showingAddProfile,
+                        showingError: $showingError,
+                        errorMessage: $errorMessage
+                    )
+                case .general:
+                    GeneralTab(settingsManager: settingsManager)
+                case .about:
+                    AboutTab()
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(Color(nsColor: .windowBackgroundColor))
+        }
+        .frame(minWidth: 900, minHeight: 620)
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowSupportSection"))) { _ in
+            selectedSection = .about
+        }
+    }
+}
+
+private struct SettingsSidebar: View {
+    @Binding var selectedSection: SettingsSection
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                AppIconView(size: 20)
+
+                VStack(alignment: .leading, spacing: 1) {
                     Text("CiteBar Settings")
-                        .font(.title2)
-                        .bold()
-                    Text("Manage your Google Scholar profiles and preferences")
+                        .font(.headline)
+                    Text("Preferences")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                
+
                 Spacer()
             }
-            .padding()
-            
-            TabView(selection: $selectedTab) {
-                // Profiles Tab
-                ProfilesTab(
-                    settingsManager: settingsManager,
-                    newProfileId: $newProfileId,
-                    newProfileName: $newProfileName,
-                    showingAddProfile: $showingAddProfile,
-                    showingError: $showingError,
-                    errorMessage: $errorMessage
-                )
-                .tabItem {
-                    Label("Profiles", systemImage: "person.2.fill")
-                }
-                .tag(0)
-                
-                // General Tab
-                GeneralTab(settingsManager: settingsManager)
-                    .tabItem {
-                        Label("General", systemImage: "gear")
-                    }
-                    .tag(1)
-                
-                // About Tab
-                AboutTab()
-                    .tabItem {
-                        Label("About", systemImage: "info.circle")
-                    }
-                    .tag(2)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+
+            Divider()
+
+            // Keep native List selection for reliable macOS row hit-testing.
+            List(SettingsSection.allCases, selection: $selectedSection) { section in
+                Label(section.title, systemImage: section.icon)
+                    .tag(section)
+                    .help(section.subtitle)
             }
-            .frame(height: 300)
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .background(Color.white)
         }
-        .padding()
-        .frame(width: 500, height: 400)
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowSupportSection"))) { _ in
-            selectedTab = 2 // Switch to About tab
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color.white)
     }
 }
 
@@ -76,90 +124,89 @@ struct ProfilesTab: View {
     @Binding var showingAddProfile: Bool
     @Binding var showingError: Bool
     @Binding var errorMessage: String
-    
+
+    private var sortedProfiles: [ScholarProfile] {
+        settingsManager.settings.profiles.sorted { $0.sortOrder < $1.sortOrder }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Google Scholar Profiles")
-                    .font(.headline)
-                
-                Spacer()
-                
-                Button("Add Profile") {
-                    showingAddProfile = true
-                }
-            }
-            
-            if settingsManager.settings.profiles.isEmpty {
-                VStack {
-                    Image(systemName: "person.badge.plus")
-                        .font(.system(size: 40))
-                        .foregroundColor(.secondary)
-                    
-                    Text("No profiles configured")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                    
-                    Text("Add your Google Scholar profile to start tracking citations")
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Google Scholar Profiles")
+                        .font(.title3)
+                        .fontWeight(.semibold)
+
+                    Text("Add, reorder, and maintain the profiles shown in your menu bar.")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                VStack(alignment: .leading, spacing: 12) {
-                    // Header with guidance
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("Profile Order")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                            
-                            Spacer()
-                            
-                            Text("First profile shows in menu bar")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+
+                Spacer()
+
+                Button {
+                    showingAddProfile = true
+                } label: {
+                    Label("Add Profile", systemImage: "plus")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            }
+
+            if sortedProfiles.isEmpty {
+                SettingsCard {
+                    VStack(spacing: 14) {
+                        Image(systemName: "person.badge.plus")
+                            .font(.system(size: 34, weight: .regular))
+                            .foregroundColor(.secondary)
+
+                        Text("No profiles configured")
+                            .font(.headline)
+
+                        Text("Add your Google Scholar profile to start tracking citations.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+
+                        Button {
+                            showingAddProfile = true
+                        } label: {
+                            Label("Add First Profile", systemImage: "plus.circle.fill")
                         }
-                        
-                        // Drag-and-drop guidance
-                        HStack {
-                            Image(systemName: "hand.point.up.left")
-                                .foregroundColor(.blue)
-                                .font(.caption)
-                            
-                            Text("Drag profiles to reorder • Click profile names in menu to open Scholar pages")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .italic()
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.blue.opacity(0.1))
-                        .cornerRadius(6)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .padding(.top, 4)
                     }
-                    
+                    .frame(maxWidth: .infinity, minHeight: 240)
+                    .padding(.vertical, 12)
+                }
+            } else {
+                SettingsCard(
+                    title: "Profile Order",
+                    subtitle: "Drag rows to reorder. The first profile appears first in the menu bar.",
+                    expandContent: true
+                ) {
                     List {
-                        ForEach(settingsManager.settings.profiles.sorted(by: { $0.sortOrder < $1.sortOrder }), id: \.id) { profile in
+                        ForEach(sortedProfiles, id: \.id) { profile in
                             ProfileRow(profile: profile) { updatedProfile in
                                 settingsManager.updateProfile(updatedProfile)
                             } onDelete: {
                                 settingsManager.removeProfile(profile)
-                                
-                                // Trigger immediate refresh when deleting profile
+
+                                // Trigger immediate refresh when deleting profile.
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                     if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
                                         appDelegate.updateMenuBarDisplay()
                                     }
                                 }
                             } onMakePrimary: {
-                                // Move this profile to first position
+                                // Move this profile to first position.
                                 var profiles = settingsManager.settings.profiles
                                 profiles.removeAll { $0.id == profile.id }
                                 profiles.insert(profile, at: 0)
                                 settingsManager.reorderProfiles(profiles)
-                                
-                                // Trigger immediate refresh when making primary
+
+                                // Trigger immediate refresh when making primary.
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                     if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
                                         appDelegate.updateMenuBarDisplay()
@@ -169,10 +216,25 @@ struct ProfilesTab: View {
                         }
                         .onMove(perform: moveProfiles)
                     }
+                    .listStyle(.inset)
+                    .frame(maxHeight: .infinity)
+                }
+                .frame(maxHeight: .infinity)
+                .layoutPriority(1)
+
+                SettingsCard {
+                    HStack(spacing: 10) {
+                        Image(systemName: "info.circle")
+                            .foregroundColor(.secondary)
+                        Text("Click profile names in the menu to open each Scholar page quickly.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
         }
-        .padding()
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .sheet(isPresented: $showingAddProfile) {
             AddProfileSheet(
                 profileId: $newProfileId,
@@ -185,25 +247,25 @@ struct ProfilesTab: View {
                 newProfileId = ""
                 newProfileName = ""
                 showingAddProfile = false
-                
-                // Immediately show new profile in menu with "Loading..." status
+
+                // Immediately show new profile in menu with "Loading..." status.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
                         appDelegate.showNewProfileLoading(profile)
-                        // Then trigger actual data fetch
+                        // Then trigger actual data fetch.
                         appDelegate.refreshCitations()
                     }
                 }
             }
         }
     }
-    
+
     private func moveProfiles(from source: IndexSet, to destination: Int) {
-        var sortedProfiles = settingsManager.settings.profiles.sorted(by: { $0.sortOrder < $1.sortOrder })
-        sortedProfiles.move(fromOffsets: source, toOffset: destination)
-        settingsManager.reorderProfiles(sortedProfiles)
-        
-        // Immediately update menu bar display after reordering
+        var updatedProfiles = settingsManager.settings.profiles.sorted(by: { $0.sortOrder < $1.sortOrder })
+        updatedProfiles.move(fromOffsets: source, toOffset: destination)
+        settingsManager.reorderProfiles(updatedProfiles)
+
+        // Immediately update menu bar display after reordering.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
                 appDelegate.updateMenuBarDisplay()
@@ -217,39 +279,39 @@ struct ProfileRow: View {
     let onUpdate: (ScholarProfile) -> Void
     let onDelete: () -> Void
     let onMakePrimary: () -> Void
-    
+
     @State private var showingEditSheet = false
-    
+
     var body: some View {
         HStack(spacing: 12) {
-            // Drag handle
             Image(systemName: "line.3.horizontal")
                 .foregroundColor(.secondary)
                 .font(.caption)
                 .help("Drag to reorder profiles")
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(profile.name)
-                        .font(.headline)
-                    
+                        .font(.body)
+                        .fontWeight(.semibold)
+
                     if profile.sortOrder == 0 {
                         Text("Primary")
                             .font(.caption)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.blue.opacity(0.2))
-                            .foregroundColor(.blue)
-                            .cornerRadius(4)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color.accentColor.opacity(0.15))
+                            .foregroundColor(.accentColor)
+                            .clipShape(Capsule())
                     }
-                    
+
                     Spacer()
                 }
-                
+
                 Text("ID: \(profile.id)")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                
+
                 if let growth = profile.recentGrowth {
                     let growthText = growth > 0 ? "+\(growth)" : "\(growth)"
                     if let growthDays = profile.recentGrowthDays {
@@ -264,26 +326,37 @@ struct ProfileRow: View {
                     }
                 }
             }
-            
+
             Spacer()
-            
-            // Make Primary button (only show for non-primary profiles)
-            if profile.sortOrder != 0 {
-                Button("Set Primary") {
-                    onMakePrimary()
+
+            HStack(spacing: 10) {
+                if profile.sortOrder != 0 {
+                    Button("Set Primary") {
+                        onMakePrimary()
+                    }
+                    .frame(width: 124)
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
+                    .help("Make this the primary profile")
+                } else {
+                    Color.clear
+                        .frame(width: 124, height: 0)
                 }
-                .font(.caption)
-                .foregroundColor(.orange)
-                .help("Make this the primary profile")
+
+                Button {
+                    showingEditSheet = true
+                } label: {
+                    Label("Edit", systemImage: "slider.horizontal.3")
+                }
+                .frame(width: 112)
+                .buttonStyle(.bordered)
+                .labelStyle(.titleAndIcon)
+                .controlSize(.regular)
+                .help("Edit or delete this profile")
             }
-            
-            Button("Edit") {
-                showingEditSheet = true
-            }
-            .foregroundColor(.blue)
-            .help("Edit or delete this profile")
+            .frame(width: 246, alignment: .trailing)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
         .sheet(isPresented: $showingEditSheet) {
             EditProfileSheet(profile: profile, onUpdate: { updatedProfile in
                 onUpdate(updatedProfile)
@@ -297,7 +370,7 @@ struct ProfileRow: View {
 struct GeneralTab: View {
     @ObservedObject var settingsManager: SettingsManager
     @State private var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
-    
+
     private func getAutoLaunchStatus() -> String {
         switch SMAppService.mainApp.status {
         case .enabled:
@@ -347,145 +420,172 @@ struct GeneralTab: View {
             }
         }
     }
-    
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Refresh Interval")
-                        .font(.headline)
-                    
-                    Text("Recommended: Once daily. Use \"Refresh Now\" when you need an immediate update.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Text("Short intervals (for example hourly) increase request frequency and may trigger temporary Google Scholar rate limits, including reduced access to profiles or search.")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    
-                    Picker("Refresh Interval", selection: Binding(
-                        get: { settingsManager.settings.refreshInterval },
-                        set: { interval in
-                            settingsManager.setRefreshInterval(interval)
-                        }
-                    )) {
-                        ForEach(AppSettings.RefreshInterval.allCases, id: \.self) { interval in
-                            Text(interval.displayName).tag(interval)
-                        }
-                    }
-                    .pickerStyle(MenuPickerStyle())
-                }
-                
-                Divider()
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Show Notifications", isOn: Binding(
-                        get: { settingsManager.settings.showNotifications },
-                        set: { enabled in
-                            settingsManager.setNotifications(enabled)
-                            if enabled {
-                                requestNotificationPermissionIfNeeded()
+                SettingsCard(
+                    title: "Refresh Schedule",
+                    subtitle: "Recommended: Once daily. Use \"Refresh Now\" when you need an immediate update."
+                ) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        SettingsControlRow("Refresh Interval") {
+                            Picker("Refresh Interval", selection: Binding(
+                                get: { settingsManager.settings.refreshInterval },
+                                set: { interval in
+                                    settingsManager.setRefreshInterval(interval)
+                                }
+                            )) {
+                                ForEach(AppSettings.RefreshInterval.allCases, id: \.self) { interval in
+                                    Text(interval.displayName).tag(interval)
+                                }
                             }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .fixedSize(horizontal: true, vertical: false)
                         }
-                    ))
-                    
-                    Text("Get notified when refresh completes with citation summary")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+
+                        Divider()
+
+                        Text("Short intervals (for example hourly) increase request frequency and may trigger temporary Google Scholar rate limits, including reduced access to profiles or search.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                SettingsCard(
+                    title: "Notifications",
+                    subtitle: "Get notified when refresh completes with a citation summary."
+                ) {
+                    SettingsToggleRow(
+                        "Show Notifications",
+                        subtitle: "Use macOS notifications for refresh completion.",
+                        isOn: Binding(
+                            get: { settingsManager.settings.showNotifications },
+                            set: { enabled in
+                                settingsManager.setNotifications(enabled)
+                                if enabled {
+                                    requestNotificationPermissionIfNeeded()
+                                }
+                            }
+                        )
+                    )
 
                     if settingsManager.settings.showNotifications {
+                        Divider()
                         switch notificationAuthorizationStatus {
                         case .authorized, .provisional:
-                            Text("System notification permission is enabled.")
-                                .font(.caption)
-                                .foregroundColor(.green)
+                            SettingsStatusRow(
+                                icon: "checkmark.seal.fill",
+                                text: "System notification permission is enabled.",
+                                tint: .green
+                            )
                         case .notDetermined:
-                            Button("Enable Notifications in macOS") {
+                            SettingsActionRow(
+                                text: "Notification permission has not been requested yet.",
+                                buttonTitle: "Enable Notifications"
+                            ) {
                                 requestNotificationPermissionIfNeeded()
                             }
-                            .font(.caption)
                         case .denied:
-                            Text("System notification permission is currently blocked for CiteBar.")
-                                .font(.caption)
-                                .foregroundColor(.orange)
-                            Button("Open Notification Settings") {
+                            SettingsStatusRow(
+                                icon: "exclamationmark.triangle.fill",
+                                text: "System notification permission is currently blocked for CiteBar.",
+                                tint: .orange
+                            )
+                            SettingsActionRow(
+                                text: "Permission is blocked in macOS settings.",
+                                buttonTitle: "Open Notification Settings"
+                            ) {
                                 openNotificationSettings()
                             }
-                            .font(.caption)
                         case .ephemeral:
-                            Text("System notification permission is temporarily available.")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                            SettingsStatusRow(
+                                icon: "clock.arrow.trianglehead.counterclockwise.rotate.90",
+                                text: "System notification permission is temporarily available.",
+                                tint: .secondary
+                            )
                         @unknown default:
                             EmptyView()
                         }
                     }
                 }
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Toggle("Launch at Login", isOn: Binding(
-                        get: { settingsManager.settings.autoLaunch },
-                        set: { enabled in
-                            settingsManager.setAutoLaunch(enabled)
-                        }
-                    ))
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Automatically start CiteBar when you log in")
+
+                SettingsCard(
+                    title: "Startup",
+                    subtitle: "Control whether CiteBar starts automatically when you sign in."
+                ) {
+                    SettingsToggleRow(
+                        "Launch at Login",
+                        subtitle: "Automatically start CiteBar when you log in.",
+                        isOn: Binding(
+                            get: { settingsManager.settings.autoLaunch },
+                            set: { enabled in
+                                settingsManager.setAutoLaunch(enabled)
+                            }
+                        )
+                    )
+
+                    Divider()
+
+                    let status = getAutoLaunchStatus()
+                    SettingsStatusRow(
+                        icon: status.contains("enabled") ? "checkmark.circle.fill" : "gearshape.2.fill",
+                        text: status,
+                        tint: status.contains("enabled") ? .green : (status.contains("approval") ? .orange : .secondary)
+                    )
+                }
+
+                SettingsCard(
+                    title: "Menu Bar Display",
+                    subtitle: "Citation count is always shown. Toggle optional metrics below."
+                ) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("To change profile order (and which profile appears first), use the Profiles section and drag rows.")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        
-                        // Show current SMAppService status
-                        let status = getAutoLaunchStatus()
-                        if !status.isEmpty {
-                            Text(status)
-                                .font(.caption)
-                                .foregroundColor(status.contains("enabled") ? .green : (status.contains("approval") ? .orange : .secondary))
-                        }
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Divider()
+
+                        SettingsToggleRow(
+                            "Show h-index",
+                            subtitle: "Display h-index under each profile.",
+                            isOn: Binding(
+                                get: { settingsManager.settings.showHIndexInMenu },
+                                set: { enabled in
+                                    settingsManager.setShowHIndexInMenu(enabled)
+                                }
+                            )
+                        )
+
+                        SettingsToggleRow(
+                            "Show i10-index",
+                            subtitle: "Display i10-index under each profile.",
+                            isOn: Binding(
+                                get: { settingsManager.settings.showI10IndexInMenu },
+                                set: { enabled in
+                                    settingsManager.setShowI10IndexInMenu(enabled)
+                                }
+                            )
+                        )
+
+                        SettingsToggleRow(
+                            "Show trend (+X in last Y days)",
+                            subtitle: "Display recent growth information when available.",
+                            isOn: Binding(
+                                get: { settingsManager.settings.showTrendInMenu },
+                                set: { enabled in
+                                    settingsManager.setShowTrendInMenu(enabled)
+                                }
+                            )
+                        )
                     }
                 }
-                
-                Divider()
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Menu Bar Display")
-                        .font(.headline)
-                    
-                    Text("Choose which optional metrics appear under each profile in the menu bar. Citation count is always shown.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-
-                    Text("To change profile order (and which profile appears first), go to the Profiles tab and drag to reorder.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Toggle("Show h-index", isOn: Binding(
-                        get: { settingsManager.settings.showHIndexInMenu },
-                        set: { enabled in
-                            settingsManager.setShowHIndexInMenu(enabled)
-                        }
-                    ))
-                    
-                    Toggle("Show i10-index", isOn: Binding(
-                        get: { settingsManager.settings.showI10IndexInMenu },
-                        set: { enabled in
-                            settingsManager.setShowI10IndexInMenu(enabled)
-                        }
-                    ))
-                    
-                    Toggle("Show trend (+X in last Y days)", isOn: Binding(
-                        get: { settingsManager.settings.showTrendInMenu },
-                        set: { enabled in
-                            settingsManager.setShowTrendInMenu(enabled)
-                        }
-                    ))
-                }
-                
-                Spacer(minLength: 8)
             }
+            .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
         }
         .onAppear {
             refreshNotificationAuthorizationStatus()
@@ -498,101 +598,80 @@ struct GeneralTab: View {
 
 struct AboutTab: View {
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 24) {
-                // App header section
-                VStack(spacing: 16) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                SettingsCard {
                     HStack(spacing: 16) {
                         AppIconView(size: 56)
-                        
+
                         VStack(alignment: .leading, spacing: 6) {
                             Text("CiteBar")
-                                .font(.title)
+                                .font(.title2)
                                 .fontWeight(.bold)
-                            
+
                             Text("Citation Tracking for Academics")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
-                            
+
                             HStack(spacing: 8) {
                                 Text(AppVersion.displayString)
                                     .font(.caption)
                                     .foregroundColor(.secondary)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.secondary.opacity(0.1))
-                                    .cornerRadius(3)
-                                
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.secondary.opacity(0.12))
+                                    .clipShape(Capsule())
+
                                 Text("macOS")
                                     .font(.caption)
-                                    .foregroundColor(.blue)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.blue.opacity(0.1))
-                                    .cornerRadius(3)
+                                    .foregroundColor(.accentColor)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.accentColor.opacity(0.14))
+                                    .clipShape(Capsule())
                             }
                         }
-                        
+
                         Spacer()
                     }
                 }
-                
-                Divider()
-                
-                // Key features section
-                VStack(spacing: 16) {
-                    HStack {
-                        Text("Key Features")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                        Spacer()
-                    }
-                    
+
+                SettingsCard(title: "Key Features") {
                     VStack(alignment: .leading, spacing: 12) {
                         FeatureRow(
                             icon: "chart.line.uptrend.xyaxis",
                             iconColor: .blue,
                             title: "Real-time Citation Tracking",
-                            description: "Monitor Google Scholar metrics directly from your menu bar"
+                            description: "Monitor Google Scholar metrics directly from your menu bar."
                         )
-                        
+
                         FeatureRow(
                             icon: "person.2",
                             iconColor: .green,
                             title: "Multiple Profile Support",
-                            description: "Track citations for multiple researchers and collaborators"
+                            description: "Track citations for multiple researchers and collaborators."
                         )
-                        
+
                         FeatureRow(
                             icon: "clock.arrow.circlepath",
                             iconColor: .orange,
                             title: "Configurable Updates",
-                            description: "Set custom refresh intervals to respect rate limits"
+                            description: "Set refresh intervals that balance freshness and rate-limit safety."
                         )
-                        
+
                         FeatureRow(
                             icon: "chart.xyaxis.line",
                             iconColor: .purple,
                             title: "Historical Data",
-                            description: "View citation growth trends over time"
+                            description: "View citation growth trends over time."
                         )
                     }
                 }
-                
-                Divider()
-                
-                // Support section
-                VStack(spacing: 16) {
-                    HStack {
-                        Text("Support & Feedback")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                        Spacer()
-                    }
-                    
+
+                SettingsCard(title: "Support & Feedback") {
                     VStack(alignment: .leading, spacing: 10) {
                         SupportRow(
-                            icon: "envelope",
+                            icon: "envelope.fill",
                             iconColor: .blue,
                             title: "Email Support",
                             subtitle: "info@hichipli.com",
@@ -602,12 +681,12 @@ struct AboutTab: View {
                                 }
                             }
                         )
-                        
+
                         SupportRow(
-                            icon: "globe",
+                            icon: "chevron.left.forwardslash.chevron.right",
                             iconColor: .purple,
                             title: "GitHub Repository",
-                            subtitle: "Report issues & contribute",
+                            subtitle: "Report issues and contribute",
                             action: {
                                 if let url = URL(string: "https://github.com/hichipli/CiteBar") {
                                     NSWorkspace.shared.open(url)
@@ -616,42 +695,28 @@ struct AboutTab: View {
                         )
                     }
                 }
-                
-                Divider()
-                
-                // Footer section
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Built with passion for the academic community.")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                            
-                            Text("Helping researchers focus on what matters most.")
+
+                SettingsCard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Built with passion for the academic community.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+
+                        HStack {
+                            Text("© 2026 CiteBar")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.secondary.opacity(0.75))
+                            Spacer()
+                            Text("Made for macOS")
+                                .font(.caption)
+                                .foregroundColor(.secondary.opacity(0.75))
                         }
-                        Spacer()
-                    }
-                    
-                    HStack {
-                        Text("© 2025 CiteBar")
-                            .font(.caption)
-                            .foregroundColor(.secondary.opacity(0.7))
-                        
-                        Spacer()
-                        
-                        Text("Made for macOS")
-                            .font(.caption)
-                            .foregroundColor(.secondary.opacity(0.7))
                     }
                 }
-                
-                Spacer(minLength: 16)
             }
-            .padding(20)
+            .padding(24)
+            .frame(maxWidth: 760, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -660,28 +725,31 @@ struct FeatureRow: View {
     let iconColor: Color
     let title: String
     let description: String
-    
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: icon)
-                .foregroundColor(iconColor)
-                .font(.system(size: 16, weight: .medium))
-                .frame(width: 20, height: 20)
-            
+            ZStack {
+                Circle()
+                    .fill(iconColor.opacity(0.14))
+                    .frame(width: 30, height: 30)
+                Image(systemName: icon)
+                    .foregroundColor(iconColor)
+                    .font(.system(size: 14, weight: .semibold))
+            }
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.subheadline)
                     .fontWeight(.medium)
-                
+
                 Text(description)
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            
+
             Spacer()
         }
-        .padding(.vertical, 2)
     }
 }
 
@@ -691,33 +759,37 @@ struct SupportRow: View {
     let title: String
     let subtitle: String
     let action: () -> Void
-    
+
     var body: some View {
         Button(action: action) {
             HStack(alignment: .center, spacing: 12) {
-                Image(systemName: icon)
-                    .foregroundColor(iconColor)
-                    .font(.system(size: 16, weight: .medium))
-                    .frame(width: 20, height: 20)
-                
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(iconColor.opacity(0.14))
+                        .frame(width: 30, height: 30)
+                    Image(systemName: icon)
+                        .foregroundColor(iconColor)
+                        .font(.system(size: 14, weight: .semibold))
+                }
+
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .foregroundColor(.primary)
-                    
+
                     Text(subtitle)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                
+
                 Spacer()
-                
+
                 Image(systemName: "chevron.right")
                     .foregroundColor(.secondary)
                     .font(.caption)
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, 2)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -726,6 +798,168 @@ struct SupportRow: View {
             } else {
                 NSCursor.arrow.set()
             }
+        }
+    }
+}
+
+private struct SettingsCard<Content: View>: View {
+    let title: String?
+    let subtitle: String?
+    let expandContent: Bool
+    let content: Content
+
+    init(
+        title: String? = nil,
+        subtitle: String? = nil,
+        expandContent: Bool = false,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.expandContent = expandContent
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let title {
+                Text(title)
+                    .font(.headline)
+            }
+
+            if let subtitle {
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if expandContent {
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+                content
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxHeight: expandContent ? .infinity : nil, alignment: .topLeading)
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color(nsColor: .separatorColor).opacity(0.35), lineWidth: 1)
+        )
+    }
+}
+
+private struct SettingsToggleRow: View {
+    let title: String
+    let subtitle: String?
+    @Binding var isOn: Bool
+
+    init(_ title: String, subtitle: String? = nil, isOn: Binding<Bool>) {
+        self.title = title
+        self.subtitle = subtitle
+        self._isOn = isOn
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.body)
+                    .fontWeight(.medium)
+
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            Spacer()
+
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct SettingsControlRow<Control: View>: View {
+    let title: String
+    let subtitle: String?
+    let control: Control
+
+    init(
+        _ title: String,
+        subtitle: String? = nil,
+        @ViewBuilder control: () -> Control
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.control = control()
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.body)
+                    .fontWeight(.medium)
+
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            Spacer()
+            control
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct SettingsActionRow: View {
+    let text: String
+    let buttonTitle: String
+    let action: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(text)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Button(buttonTitle, action: action)
+                .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct SettingsStatusRow: View {
+    let icon: String
+    let text: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .foregroundColor(tint)
+
+            Text(text)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer()
         }
     }
 }

@@ -309,13 +309,18 @@ import Carbon
         
         let settingsView = SettingsView()
         settingsWindow = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 400),
+            contentRect: NSRect(x: 0, y: 0, width: 920, height: 620),
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
         )
         settingsWindow?.title = "CiteBar Settings"
-        settingsWindow?.contentView = NSHostingView(rootView: settingsView)
+        settingsWindow?.titleVisibility = .visible
+        settingsWindow?.titlebarAppearsTransparent = false
+        settingsWindow?.isOpaque = true
+        settingsWindow?.backgroundColor = .windowBackgroundColor
+        settingsWindow?.toolbarStyle = .automatic
+        settingsWindow?.contentViewController = NSHostingController(rootView: settingsView)
         settingsWindow?.center()
         settingsWindow?.delegate = self
         
