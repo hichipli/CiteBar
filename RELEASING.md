@@ -44,6 +44,32 @@ After setup, release workflow will:
 - sign DMG via `sign_update`
 - publish `sparkle:edSignature` into `appcast.xml`
 
+## Pre-Release Checklist (Every Version)
+
+Before tagging `v1.x.y`, run this checklist:
+
+1. Review all commits since the last tag and decide what must be included in release notes.
+2. Update `CHANGELOG.md` with a new top section (`[1.x.y] - YYYY-MM-DD`).
+3. Update `Sources/CiteBar/AppVersion.swift`:
+   - `current`
+   - `build`
+   - `releaseNotes` highlights/description/technical notes
+4. Run validation locally:
+
+```bash
+make test
+make build
+make package
+```
+
+5. Confirm Git is clean and synced:
+
+```bash
+git status
+git switch main
+git pull --ff-only
+```
+
 ## Publish a Release
 
 ```bash

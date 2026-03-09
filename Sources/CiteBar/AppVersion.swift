@@ -3,10 +3,10 @@ import Foundation
 /// Centralized version management for CiteBar
 struct AppVersion {
     /// Current application version
-    static let current: String = "1.4.6"
+    static let current: String = "1.4.7"
     
     /// Current build number
-    static let build: String = "14"
+    static let build: String = "15"
     
     /// Version display string for UI
     static let displayString: String = "Version \(current)"
@@ -38,15 +38,18 @@ extension AppVersion {
     static let releaseNotes = ReleaseNotes(
         version: current,
         highlights: [
-            "Added a gentle notification-permission onboarding prompt for users who enable refresh notifications",
-            "General settings now shows macOS notification authorization status and provides direct permission actions",
-            "Notification permission requests now happen only in explicit user-facing flows"
+            "Redesigned Settings with a stable sidebar + adaptive detail layout for clearer navigation",
+            "Improved menu bar startup reliability with better launch-state feedback and settings visibility behavior",
+            "Added clearer refresh-interval guidance to help avoid Google Scholar rate-limit issues",
+            "Reduced idle runtime overhead with targeted storage lookups and lower-noise logging"
         ],
-        description: "This patch release refines notification onboarding and permission guidance so users can enable alerts intentionally and recover quickly when access is blocked.",
+        description: "This release focuses on reliability and polish: startup behavior is more consistent, settings are easier to use, and idle resource usage is leaner.",
         technicalNotes: [
-            "Notification permission prompts now run in explicit user-facing flows instead of background refresh completion",
-            "One-time per-version onboarding prompt is tracked in UserDefaults to avoid repeated interruption",
-            "Settings UI now refreshes notification authorization state on view appear and app reactivation"
+            "Reworked settings shell to a sidebar-driven section model with more stable selection behavior",
+            "Added bounded retry handling for delayed status item initialization during app launch",
+            "Introduced AppLog debug-only logging to reduce production log noise",
+            "CitationManager now uses an ephemeral URLSession with disabled shared caching for lower idle memory pressure",
+            "Startup and fallback paths now use targeted StorageManager helpers instead of broad history scans"
         ]
     )
     

@@ -5,6 +5,23 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.7] - 2026-03-09
+
+### Changed
+- **Settings Window Redesign**: Replaced tab navigation with a stable sidebar + detail layout for clearer structure and more predictable resizing
+- **Refresh Guidance Copy**: General settings now explicitly recommends daily refresh and warns that short intervals can trigger Google Scholar rate limits
+
+### Improved
+- **Startup Visibility Reliability**: Menu bar launches now show immediate startup feedback and better recovery when status item initialization is delayed
+- **Settings Launch Feedback**: Open/reopen actions now surface Settings more reliably, with smoother Dock visibility transitions while Settings is open
+- **Runtime Efficiency**: Reduced idle memory pressure by avoiding shared URL cache growth, reusing formatters, and replacing broad history scans with targeted lookups
+
+### Technical
+- Added bounded retry logic for `NSStatusItem` creation and centralized icon/title fallback rendering for startup states
+- Introduced debug-only `AppLog` wrappers to reduce release log noise while keeping diagnostics in debug builds
+- Optimized startup/error-path storage access using latest-record and profile-id presence helpers in `StorageManager`
+- Updated README build/performance guidance to match current Makefile targets and realistic runtime expectations
+
 ## [1.4.6] - 2026-03-08
 
 ### Added
