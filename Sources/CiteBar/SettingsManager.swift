@@ -64,6 +64,21 @@ import ServiceManagement
         settings.showNotifications = enabled
         save()
     }
+
+    func setShowHIndexInMenu(_ enabled: Bool) {
+        settings.showHIndexInMenu = enabled
+        save()
+    }
+
+    func setShowI10IndexInMenu(_ enabled: Bool) {
+        settings.showI10IndexInMenu = enabled
+        save()
+    }
+
+    func setShowTrendInMenu(_ enabled: Bool) {
+        settings.showTrendInMenu = enabled
+        save()
+    }
     
     func setAutoLaunch(_ enabled: Bool) {
         settings.autoLaunch = enabled

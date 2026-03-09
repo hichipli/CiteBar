@@ -38,7 +38,7 @@ import Sparkle
             // Then start network request to get fresh data
             // Add a small delay to allow historical data to load first
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                self.citationManager?.checkCitations()
+                self.citationManager?.checkCitations(isStartup: true)
             }
         }
     }

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftSoup
+import UserNotifications
 
 @MainActor class CitationManager {
     weak var delegate: CitationManagerDelegate?
@@ -50,7 +51,7 @@ import SwiftSoup
         }
     }
     
-    func checkCitations() {
+    func checkCitations(isStartup: Bool = false) {
         let profiles = settingsManager.settings.profiles.filter { $0.isEnabled }
         
         guard !profiles.isEmpty else {
@@ -65,16 +66,29 @@ import SwiftSoup
         delegate?.refreshingStateChanged(true)
         
         Task {
-            await performCitationCheck(for: profiles)
+            await performCitationCheck(for: profiles, isStartup: isStartup)
         }
     }
     
-    private func performCitationCheck(for profiles: [ScholarProfile]) async {
+    private func performCitationCheck(for profiles: [ScholarProfile], isStartup: Bool) async {
         var results: [ScholarProfile: ProfileMetrics] = [:]
+        var successfulProfiles = 0
+        var changedProfiles = 0
+        var totalCitationDelta = 0
         
         for profile in profiles {
             do {
                 let metrics = try await fetchScholarMetrics(for: profile)
+                let previousCitationCount = await storageManager.getLatestCitationCount(for: profile.id)
+                successfulProfiles += 1
+                
+                if let previousCitationCount = previousCitationCount {
+                    let delta = metrics.citationCount - previousCitationCount
+                    totalCitationDelta += delta
+                    if delta != 0 {
+                        changedProfiles += 1
+                    }
+                }
                 
                 // Store the record
                 let record = CitationRecord(profileId: profile.id, citationCount: metrics.citationCount, hIndex: metrics.hIndex, i10Index: metrics.i10Index)
@@ -126,6 +140,16 @@ import SwiftSoup
             
             if !results.isEmpty {
                 delegate?.citationsUpdated(results)
+                
+                // Keep startup refresh low-noise; notify only for manual/timed refreshes.
+                if !isStartup {
+                    sendRefreshCompletionNotificationIfNeeded(
+                        attemptedProfiles: profiles.count,
+                        successfulProfiles: successfulProfiles,
+                        changedProfiles: changedProfiles,
+                        totalCitationDelta: totalCitationDelta
+                    )
+                }
             } else {
                 // If network request failed but we might have historical data showing,
                 // don't call citationCheckFailed as it would show error and hide historical data
@@ -148,6 +172,83 @@ import SwiftSoup
                     }
                 }
             }
+        }
+    }
+
+    private func sendRefreshCompletionNotificationIfNeeded(
+        attemptedProfiles: Int,
+        successfulProfiles: Int,
+        changedProfiles: Int,
+        totalCitationDelta: Int
+    ) {
+        guard settingsManager.settings.showNotifications else { return }
+        guard successfulProfiles > 0 else { return }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let center = UNUserNotificationCenter.current()
+            let settings = await center.notificationSettings()
+            
+            switch settings.authorizationStatus {
+            case .authorized, .provisional:
+                await self.postRefreshCompletionNotification(
+                    attemptedProfiles: attemptedProfiles,
+                    successfulProfiles: successfulProfiles,
+                    changedProfiles: changedProfiles,
+                    totalCitationDelta: totalCitationDelta
+                )
+            case .notDetermined:
+                let granted = (try? await center.requestAuthorization(options: [.alert, .badge])) ?? false
+                guard granted else { return }
+                await self.postRefreshCompletionNotification(
+                    attemptedProfiles: attemptedProfiles,
+                    successfulProfiles: successfulProfiles,
+                    changedProfiles: changedProfiles,
+                    totalCitationDelta: totalCitationDelta
+                )
+            case .denied:
+                return
+            @unknown default:
+                return
+            }
+        }
+    }
+
+    private func postRefreshCompletionNotification(
+        attemptedProfiles: Int,
+        successfulProfiles: Int,
+        changedProfiles: Int,
+        totalCitationDelta: Int
+    ) async {
+        let profileWord = successfulProfiles == 1 ? "profile" : "profiles"
+        let changedWord = changedProfiles == 1 ? "profile" : "profiles"
+
+        let detailText: String
+        if totalCitationDelta > 0 {
+            detailText = "+\(totalCitationDelta) citations across \(changedProfiles) \(changedWord)."
+        } else if totalCitationDelta < 0 {
+            detailText = "\(totalCitationDelta) citations net across \(changedProfiles) \(changedWord)."
+        } else if changedProfiles > 0 {
+            detailText = "Citation totals changed in \(changedProfiles) \(changedWord)."
+        } else {
+            detailText = "No citation changes this cycle."
+        }
+
+        let content = UNMutableNotificationContent()
+        content.title = "CiteBar Refresh Complete"
+        content.body = "Updated \(successfulProfiles)/\(attemptedProfiles) \(profileWord). \(detailText)"
+        content.threadIdentifier = "com.hichipli.citebar.refresh"
+
+        let request = UNNotificationRequest(
+            identifier: "citebar-refresh-\(UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+
+        do {
+            try await UNUserNotificationCenter.current().add(request)
+        } catch {
+            print("Failed to post refresh notification: \(error)")
         }
     }
     

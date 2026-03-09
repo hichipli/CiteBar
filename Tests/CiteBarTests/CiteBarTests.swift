@@ -130,6 +130,26 @@ final class CiteBarTests: XCTestCase {
         XCTAssertEqual(settings.refreshInterval, .daily)
         XCTAssertTrue(settings.showNotifications)
         XCTAssertTrue(settings.autoLaunch)
+        XCTAssertTrue(settings.showHIndexInMenu)
+        XCTAssertTrue(settings.showI10IndexInMenu)
+        XCTAssertTrue(settings.showTrendInMenu)
+    }
+
+    func testAppSettingsBackwardCompatibilityDecodingDefaultsNewDisplayOptions() throws {
+        let legacyJSON = """
+        {
+          "profiles": [],
+          "refreshInterval": "1hour",
+          "showNotifications": true,
+          "autoLaunch": false,
+          "isRefreshing": false
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: legacyJSON)
+        XCTAssertTrue(decoded.showHIndexInMenu)
+        XCTAssertTrue(decoded.showI10IndexInMenu)
+        XCTAssertTrue(decoded.showTrendInMenu)
     }
 
     // New tests for CitationManager

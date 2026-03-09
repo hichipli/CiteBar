@@ -213,7 +213,7 @@ import Cocoa
             insertIndex += 1
             
             // Add h-index if available
-            if let hIndex = metrics.hIndex {
+            if settingsManager.settings.showHIndexInMenu, let hIndex = metrics.hIndex {
                 let hIndexText = "    h-index: \(hIndex)"
                 let hIndexItem = NSMenuItem(title: hIndexText, action: nil, keyEquivalent: "")
                 hIndexItem.tag = 100
@@ -224,7 +224,7 @@ import Cocoa
             }
 
             // Add i10-index if available
-            if let i10Index = metrics.i10Index {
+            if settingsManager.settings.showI10IndexInMenu, let i10Index = metrics.i10Index {
                 let i10IndexText = "    i10-index: \(i10Index)"
                 let i10IndexItem = NSMenuItem(title: i10IndexText, action: nil, keyEquivalent: "")
                 i10IndexItem.tag = 100
@@ -235,7 +235,7 @@ import Cocoa
             }
             
             // Add growth info if available
-            if let growth = profile.recentGrowth {
+            if settingsManager.settings.showTrendInMenu, let growth = profile.recentGrowth {
                 let growthSymbol = growth > 0 ? "arrow.up.right" : (growth < 0 ? "arrow.down.right" : "minus")
                 let growthText = growth > 0 ? "+\(growth)" : "\(growth)"
                 let growthDays = max(1, profile.recentGrowthDays ?? 30)
@@ -330,6 +330,8 @@ import Cocoa
     // MARK: - NSMenuDelegate
     
     func menuWillOpen(_ menu: NSMenu) {
+        // Rebuild menu on open so display toggles from Settings apply immediately.
+        updateMenu()
         // Update relative time whenever menu is about to open
         updateRelativeTime(in: menu)
     }

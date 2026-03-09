@@ -3,10 +3,10 @@ import Foundation
 /// Centralized version management for CiteBar
 struct AppVersion {
     /// Current application version
-    static let current: String = "1.4.4"
+    static let current: String = "1.4.5"
     
     /// Current build number
-    static let build: String = "12"
+    static let build: String = "13"
     
     /// Version display string for UI
     static let displayString: String = "Version \(current)"
@@ -38,19 +38,19 @@ extension AppVersion {
     static let releaseNotes = ReleaseNotes(
         version: current,
         highlights: [
-            "Default citation refresh interval is now once daily to reduce request pressure",
-            "Refresh options are simplified to Every hour, Every 6 hours, Once daily, and Every 2 days",
-            "Legacy refresh settings are automatically migrated to the nearest safe interval",
-            "Release builds now ship as a single universal DMG for both Intel and Apple Silicon Macs"
+            "Added refresh-complete desktop notifications with per-cycle citation summary",
+            "Added menu display controls for h-index, i10-index, and trend metrics (citation count always shown)",
+            "Improved General settings UX with scrolling support for longer option lists",
+            "Metric visibility toggles now apply immediately when opening the menu bar"
         ],
-        description: "This patch release reduces overly frequent Scholar polling by default and standardizes distribution as one universal installer for both Mac chip families.",
+        description: "This patch release improves day-to-day usability by adding optional refresh notifications and flexible metric visibility controls in the menu bar.",
         technicalNotes: [
-            "AppSettings default refreshInterval changed from hourly to daily",
-            "RefreshInterval now exposes only 1h, 6h, 24h, and 48h options in settings",
-            "Codable migration maps stored 15min/30min values to 1h and 3hours to 6h",
-            "Makefile release build now compiles with --arch arm64 --arch x86_64",
-            "Packaging pipeline now uses .build/apple/Products/Release universal artifacts",
-            "Release workflow DMG naming updated to universal to match packaging outputs"
+            "Implemented UserNotifications-based refresh completion alerts gated by Show Notifications",
+            "Startup refresh runs in silent mode to avoid noisy first-launch notifications",
+            "AppSettings now includes showHIndexInMenu, showI10IndexInMenu, and showTrendInMenu with backward-compatible defaults",
+            "Menu rendering now respects metric visibility toggles for each profile row",
+            "Menu now rebuilds on open so settings changes are reflected without waiting for a data refresh",
+            "Added tests for new AppSettings defaults and backward compatibility decoding"
         ]
     )
     

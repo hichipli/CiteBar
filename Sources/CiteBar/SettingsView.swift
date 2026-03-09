@@ -312,80 +312,108 @@ struct GeneralTab: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Refresh Interval")
-                    .font(.headline)
-                
-                Text("How often to check for citation updates")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                Picker("Refresh Interval", selection: Binding(
-                    get: { settingsManager.settings.refreshInterval },
-                    set: { interval in
-                        settingsManager.setRefreshInterval(interval)
-                    }
-                )) {
-                    ForEach(AppSettings.RefreshInterval.allCases, id: \.self) { interval in
-                        Text(interval.displayName).tag(interval)
-                    }
-                }
-                .pickerStyle(MenuPickerStyle())
-            }
-            
-            Divider()
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Toggle("Show Notifications", isOn: Binding(
-                    get: { settingsManager.settings.showNotifications },
-                    set: { enabled in
-                        settingsManager.setNotifications(enabled)
-                    }
-                ))
-                
-                Text("Get notified when citation counts update")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Toggle("Launch at Login", isOn: Binding(
-                    get: { settingsManager.settings.autoLaunch },
-                    set: { enabled in
-                        settingsManager.setAutoLaunch(enabled)
-                    }
-                ))
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Automatically start CiteBar when you log in")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Refresh Interval")
+                        .font(.headline)
+                    
+                    Text("How often to check for citation updates")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
-                    // Show current SMAppService status
-                    let status = getAutoLaunchStatus()
-                    if !status.isEmpty {
-                        Text(status)
+                    Picker("Refresh Interval", selection: Binding(
+                        get: { settingsManager.settings.refreshInterval },
+                        set: { interval in
+                            settingsManager.setRefreshInterval(interval)
+                        }
+                    )) {
+                        ForEach(AppSettings.RefreshInterval.allCases, id: \.self) { interval in
+                            Text(interval.displayName).tag(interval)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                }
+                
+                Divider()
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Show Notifications", isOn: Binding(
+                        get: { settingsManager.settings.showNotifications },
+                        set: { enabled in
+                            settingsManager.setNotifications(enabled)
+                        }
+                    ))
+                    
+                    Text("Get notified when refresh completes with citation summary")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Launch at Login", isOn: Binding(
+                        get: { settingsManager.settings.autoLaunch },
+                        set: { enabled in
+                            settingsManager.setAutoLaunch(enabled)
+                        }
+                    ))
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Automatically start CiteBar when you log in")
                             .font(.caption)
-                            .foregroundColor(status.contains("enabled") ? .green : (status.contains("approval") ? .orange : .secondary))
+                            .foregroundColor(.secondary)
+                        
+                        // Show current SMAppService status
+                        let status = getAutoLaunchStatus()
+                        if !status.isEmpty {
+                            Text(status)
+                                .font(.caption)
+                                .foregroundColor(status.contains("enabled") ? .green : (status.contains("approval") ? .orange : .secondary))
+                        }
                     }
                 }
-            }
-            
-            Divider()
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Menu Bar Display")
-                    .font(.headline)
                 
-                Text("The first profile in your Profiles list will be shown in the menu bar. Drag profiles to reorder them.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                Divider()
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Menu Bar Display")
+                        .font(.headline)
+                    
+                    Text("Choose which optional metrics appear under each profile in the menu bar. Citation count is always shown.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    Text("To change profile order (and which profile appears first), go to the Profiles tab and drag to reorder.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Toggle("Show h-index", isOn: Binding(
+                        get: { settingsManager.settings.showHIndexInMenu },
+                        set: { enabled in
+                            settingsManager.setShowHIndexInMenu(enabled)
+                        }
+                    ))
+                    
+                    Toggle("Show i10-index", isOn: Binding(
+                        get: { settingsManager.settings.showI10IndexInMenu },
+                        set: { enabled in
+                            settingsManager.setShowI10IndexInMenu(enabled)
+                        }
+                    ))
+                    
+                    Toggle("Show trend (+X in last Y days)", isOn: Binding(
+                        get: { settingsManager.settings.showTrendInMenu },
+                        set: { enabled in
+                            settingsManager.setShowTrendInMenu(enabled)
+                        }
+                    ))
+                }
+                
+                Spacer(minLength: 8)
             }
-            
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
         }
-        .padding()
     }
 }
 

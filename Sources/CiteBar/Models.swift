@@ -54,6 +54,36 @@ struct AppSettings: Codable {
     var autoLaunch: Bool = true
     var lastUpdateTime: Date?
     var isRefreshing: Bool = false
+    var showHIndexInMenu: Bool = true
+    var showI10IndexInMenu: Bool = true
+    var showTrendInMenu: Bool = true
+
+    enum CodingKeys: String, CodingKey {
+        case profiles
+        case refreshInterval
+        case showNotifications
+        case autoLaunch
+        case lastUpdateTime
+        case isRefreshing
+        case showHIndexInMenu
+        case showI10IndexInMenu
+        case showTrendInMenu
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        profiles = try container.decodeIfPresent([ScholarProfile].self, forKey: .profiles) ?? []
+        refreshInterval = try container.decodeIfPresent(RefreshInterval.self, forKey: .refreshInterval) ?? .daily
+        showNotifications = try container.decodeIfPresent(Bool.self, forKey: .showNotifications) ?? true
+        autoLaunch = try container.decodeIfPresent(Bool.self, forKey: .autoLaunch) ?? true
+        lastUpdateTime = try container.decodeIfPresent(Date.self, forKey: .lastUpdateTime)
+        isRefreshing = try container.decodeIfPresent(Bool.self, forKey: .isRefreshing) ?? false
+        showHIndexInMenu = try container.decodeIfPresent(Bool.self, forKey: .showHIndexInMenu) ?? true
+        showI10IndexInMenu = try container.decodeIfPresent(Bool.self, forKey: .showI10IndexInMenu) ?? true
+        showTrendInMenu = try container.decodeIfPresent(Bool.self, forKey: .showTrendInMenu) ?? true
+    }
     
     enum RefreshInterval: String, CaseIterable, Codable {
         case hourly = "1hour"
