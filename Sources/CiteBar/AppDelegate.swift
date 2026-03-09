@@ -2,6 +2,7 @@ import Cocoa
 import SwiftUI
 import Sparkle
 import UserNotifications
+import Carbon
 
 @MainActor class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
@@ -16,60 +17,224 @@ import UserNotifications
     private var updaterController: SPUStandardUpdaterController?
     private var updaterDelegate: UpdaterDelegate?
     private var userDriverDelegate: CustomUserDriverDelegate?
+    private var launchFeedbackWorkItem: DispatchWorkItem?
+    private var hasPresentedLaunchFeedback = false
+    private var launchedFromUserInteraction = AppDelegate.didLaunchWithProcessSerialNumberArgument()
+    private var receivedOpenApplicationEvent = false
     private static let releasesURL = URL(string: "https://github.com/hichipli/CiteBar/releases")
     private static let latestReleaseURL = URL(string: "https://github.com/hichipli/CiteBar/releases/latest")
     private static let minimumManualUpdateVersion = "1.4.2"
     private static let notificationPromptedVersionDefaultsKey = "com.hichipli.citebar.notificationPromptedVersion"
+    private static let maxStatusItemSetupRetries = 5
+    
+    private static func didLaunchWithProcessSerialNumberArgument() -> Bool {
+        // Finder/LaunchServices launches typically include a -psn_* argument.
+        ProcessInfo.processInfo.arguments.contains { $0.hasPrefix("-psn_") }
+    }
+    
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        registerAppleEventHandlers()
+    }
+    
+    private func registerAppleEventHandlers() {
+        let eventManager = NSAppleEventManager.shared()
+        eventManager.setEventHandler(
+            self,
+            andSelector: #selector(handleOpenApplicationEvent(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kCoreEventClass),
+            andEventID: AEEventID(kAEOpenApplication)
+        )
+        eventManager.setEventHandler(
+            self,
+            andSelector: #selector(handleReopenApplicationEvent(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kCoreEventClass),
+            andEventID: AEEventID(kAEReopenApplication)
+        )
+    }
+    
+    @objc private func handleOpenApplicationEvent(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
+        launchedFromUserInteraction = true
+        receivedOpenApplicationEvent = true
+    }
+    
+    @objc private func handleReopenApplicationEvent(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
+        launchedFromUserInteraction = true
+        receivedOpenApplicationEvent = true
+        
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if !self.settingsManager.settings.profiles.isEmpty {
+                self.showSettings()
+            }
+        }
+    }
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        setupMenuBar()
-        setupManagers()
-        setupUpdater()
+        ensureSingleInstance()
         
+        // Initialize menu bar on the next main-runloop turn to avoid occasional
+        // status-item timing races at launch for packaged app bundles.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            _ = NSApp.setActivationPolicy(.accessory)
+            self.setupMenuBar()
+            self.setupManagers()
+            self.setupUpdater()
+            self.finishStartupFlow()
+            self.scheduleLaunchFeedbackIfNeeded()
+            self.maybePromptForNotificationPermission()
+        }
+    }
+    
+    private func finishStartupFlow() {
         // Check if this is first launch (no profiles configured)
         if settingsManager.settings.profiles.isEmpty {
             // Show settings window for first-time setup
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.showSettings()
             }
-        } else {
-            // For existing users, first load historical data to show immediately
-            // This ensures users see data even if network is unavailable
-            citationManager?.updateMenuBarWithCurrentData()
-            
-            // Then start network request to get fresh data
-            // Add a small delay to allow historical data to load first
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                self.citationManager?.checkCitations(isStartup: true)
-            }
+            return
         }
         
-        maybePromptForNotificationPermission()
+        // For existing users, first load historical data to show immediately
+        // This ensures users see data even if network is unavailable
+        citationManager?.updateMenuBarWithCurrentData()
+        
+        // Then start network request to get fresh data
+        // Add a small delay to allow historical data to load first
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.citationManager?.checkCitations(isStartup: true)
+        }
     }
     
-    private func setupMenuBar() {
+    private func scheduleLaunchFeedbackIfNeeded() {
+        guard !settingsManager.settings.profiles.isEmpty else { return }
+        
+        launchFeedbackWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.presentLaunchFeedbackIfNeeded()
+        }
+        launchFeedbackWorkItem = workItem
+        
+        // If the app was manually opened (typically active), show a visible window
+        // so users get immediate feedback even when menu-bar visibility is delayed.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: workItem)
+    }
+    
+    private func presentLaunchFeedbackIfNeeded() {
+        guard !hasPresentedLaunchFeedback else { return }
+        guard settingsWindow == nil else {
+            hasPresentedLaunchFeedback = true
+            return
+        }
+        guard launchedFromUserInteraction || NSApp.isActive else { return }
+        
+        // Avoid surprising popups for non-interactive launches unless we observed
+        // an explicit user-triggered open/reopen event.
+        if !NSApp.isActive && !receivedOpenApplicationEvent {
+            return
+        }
+        
+        hasPresentedLaunchFeedback = true
+        showSettings()
+    }
+    
+    private func setupMenuBar(retryCount: Int = 0) {
         guard statusItem == nil else { return } // Prevent duplicate setup
         
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         
         guard let statusItem = statusItem else {
-            print("Failed to create status item")
+            AppLog.error("Failed to create status item")
+            scheduleMenuBarSetupRetry(after: 0.2, retryCount: retryCount)
             return
         }
         
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "book.circle.fill", accessibilityDescription: "CiteBar")
+            // Keep startup state visible immediately, even before first network/storage refresh.
+            if let image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "CiteBar - Launching") {
+                button.image = image
+            }
+            button.title = " ..."
             button.action = #selector(menuBarClicked)
             button.target = self
+        } else {
+            AppLog.error("Status item button is unavailable during startup")
+            NSStatusBar.system.removeStatusItem(statusItem)
+            self.statusItem = nil
+            scheduleMenuBarSetupRetry(after: 0.2, retryCount: retryCount)
+            return
         }
         
         menuBarManager = MenuBarManager(statusItem: statusItem)
         statusItem.menu = menuBarManager?.createMenu()
+        menuBarManager?.showLaunchingState()
+    }
+    
+    private func scheduleMenuBarSetupRetry(after delay: TimeInterval, retryCount: Int) {
+        guard retryCount < Self.maxStatusItemSetupRetries else {
+            AppLog.error("Exceeded status item setup retries; menu bar icon may not appear")
+            return
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.setupMenuBar(retryCount: retryCount + 1)
+        }
+    }
+    
+    private func ensureSingleInstance() {
+        guard let bundleIdentifier = Bundle.main.bundleIdentifier else { return }
+        
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+        let duplicateApps = NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleIdentifier)
+            .filter { $0.processIdentifier != currentPID }
+        
+        guard !duplicateApps.isEmpty else { return }
+        
+        AppLog.error("Detected \(duplicateApps.count) existing CiteBar instance(s). Terminating duplicates to prevent menu bar conflicts.")
+        
+        for app in duplicateApps {
+            _ = app.terminate()
+        }
+        
+        let timeout = Date().addingTimeInterval(1.0)
+        while Date() < timeout {
+            let stillRunning = NSRunningApplication
+                .runningApplications(withBundleIdentifier: bundleIdentifier)
+                .contains { $0.processIdentifier != currentPID }
+            
+            if !stillRunning { break }
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+        }
+        
+        let stubbornApps = NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleIdentifier)
+            .filter { $0.processIdentifier != currentPID }
+        
+        for app in stubbornApps {
+            _ = app.forceTerminate()
+        }
     }
     
     private func setupManagers() {
         citationManager = CitationManager()
         citationManager?.delegate = self
+    }
+    
+    private func enableDockIconForSettingsWindow() {
+        guard NSApp.activationPolicy() != .regular else { return }
+        if !NSApp.setActivationPolicy(.regular) {
+            AppLog.error("Failed to switch activation policy to regular for settings window")
+        }
+    }
+    
+    private func disableDockIconForMenuBarModeIfNeeded() {
+        guard settingsWindow == nil else { return }
+        guard NSApp.activationPolicy() != .accessory else { return }
+        if !NSApp.setActivationPolicy(.accessory) {
+            AppLog.error("Failed to restore accessory activation policy after closing settings")
+        }
     }
     
     private func setupUpdater() {
@@ -131,6 +296,11 @@ import UserNotifications
     }
     
     @objc func showSettings() {
+        hasPresentedLaunchFeedback = true
+        launchFeedbackWorkItem?.cancel()
+        launchFeedbackWorkItem = nil
+        enableDockIconForSettingsWindow()
+        
         // Always create a fresh settings window to avoid state issues
         if settingsWindow != nil {
             settingsWindow?.close()
@@ -260,6 +430,20 @@ import UserNotifications
     }
 }
 
+extension AppDelegate {
+    func applicationDidBecomeActive(_ notification: Notification) {
+        // Retry launch feedback when the app transitions to active after startup.
+        presentLaunchFeedbackIfNeeded()
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            showSettings()
+        }
+        return true
+    }
+}
+
 extension AppDelegate: CitationManagerDelegate {
     func citationsUpdated(_ citations: [ScholarProfile: ProfileMetrics]) {
         DispatchQueue.main.async { [weak self] in
@@ -380,6 +564,11 @@ extension AppDelegate: NSWindowDelegate {
         
         // Clear the window reference to ensure proper cleanup
         settingsWindow = nil
+        
+        // Return to menu-bar-only behavior once settings window is closed.
+        DispatchQueue.main.async { [weak self] in
+            self?.disableDockIconForMenuBarModeIfNeeded()
+        }
     }
     
     func windowShouldClose(_ sender: NSWindow) -> Bool {

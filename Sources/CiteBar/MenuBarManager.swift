@@ -23,6 +23,16 @@ import Cocoa
         self.statusItem = statusItem
     }
     
+    /// Show an immediate, visible startup state so users know the app launched.
+    func showLaunchingState() {
+        applyStatusIcon(
+            symbolName: "arrow.clockwise",
+            accessibilityDescription: "CiteBar - Launching",
+            preferredTitle: " ...",
+            fallbackTitle: " ..."
+        )
+    }
+    
     func createMenu() -> NSMenu {
         let menu = NSMenu()
         
@@ -90,8 +100,12 @@ import Cocoa
         
         // Check if refreshing to show appropriate icon
         if settingsManager.settings.isRefreshing {
-            statusItem.button?.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "CiteBar - Refreshing")
-            statusItem.button?.title = ""
+            applyStatusIcon(
+                symbolName: "arrow.clockwise",
+                accessibilityDescription: "CiteBar - Refreshing",
+                preferredTitle: " ...",
+                fallbackTitle: " ..."
+            )
         } else {
             // Update menu bar display - show first profile by sort order
             let sortedProfiles = citations.keys.sorted { $0.sortOrder < $1.sortOrder }
@@ -99,8 +113,12 @@ import Cocoa
                let metrics = citations[primaryProfile] {
                 updateMenuBarWithCount(metrics.citationCount)
             } else {
-                statusItem.button?.image = NSImage(systemSymbolName: "book.circle", accessibilityDescription: "CiteBar - No data")
-                statusItem.button?.title = ""
+                applyStatusIcon(
+                    symbolName: "book.circle",
+                    accessibilityDescription: "CiteBar - No data",
+                    preferredTitle: " --",
+                    fallbackTitle: " --"
+                )
             }
         }
         
@@ -304,8 +322,12 @@ import Cocoa
     
     func updateError(_ error: String) {
         lastError = error
-        statusItem.button?.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: "CiteBar - Error")
-        statusItem.button?.title = ""
+        applyStatusIcon(
+            symbolName: "exclamationmark.triangle.fill",
+            accessibilityDescription: "CiteBar - Error",
+            preferredTitle: " !",
+            fallbackTitle: " !"
+        )
         updateMenu()
     }
     
@@ -319,20 +341,47 @@ import Cocoa
     }
     
     private func updateMenuBarWithCount(_ count: Int) {
-        statusItem.button?.image = NSImage(systemSymbolName: "book.circle.fill", accessibilityDescription: "CiteBar")
-        
-        // Display count as text next to icon
-        if count > 0 {
-            statusItem.button?.title = " \(count)"
-        } else {
-            statusItem.button?.title = " --"
-        }
+        // Display count as text next to icon. If the SF Symbol fails to render,
+        // keep the title visible so users still see launch/refresh progress.
+        let title = count > 0 ? " \(count)" : " --"
+        applyStatusIcon(
+            symbolName: "book.circle.fill",
+            accessibilityDescription: "CiteBar",
+            preferredTitle: title,
+            fallbackTitle: title
+        )
     }
     
     func showProfileLoading(_ profile: ScholarProfile) {
         // Add the new profile to current citations with a loading indicator
         currentCitations[profile] = ProfileMetrics(citationCount: -1, hIndex: nil, i10Index: nil) // Use -1 to indicate loading
+        applyStatusIcon(
+            symbolName: "arrow.clockwise",
+            accessibilityDescription: "CiteBar - Refreshing",
+            preferredTitle: " ...",
+            fallbackTitle: " ..."
+        )
         updateMenu()
+    }
+    
+    private func applyStatusIcon(
+        symbolName: String,
+        accessibilityDescription: String,
+        preferredTitle: String,
+        fallbackTitle: String
+    ) {
+        guard let button = statusItem.button else {
+            AppLog.error("Status item button unavailable; cannot update menu bar display")
+            return
+        }
+        
+        if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: accessibilityDescription) {
+            button.image = image
+            button.title = preferredTitle
+        } else {
+            button.image = nil
+            button.title = fallbackTitle
+        }
     }
     
     // MARK: - NSMenuDelegate
