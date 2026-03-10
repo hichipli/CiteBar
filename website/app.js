@@ -5,9 +5,6 @@
   const releaseVersionEl = document.getElementById("release-version");
   const releaseTitleEl = document.getElementById("release-title");
   const releaseDateEl = document.getElementById("release-date");
-  const releaseArtifactEl = document.getElementById("release-artifact");
-  const releaseSizeEl = document.getElementById("release-size");
-  const releaseDownloadCountEl = document.getElementById("release-download-count");
   const releaseHighlightsEl = document.getElementById("release-highlights");
   const releaseNotesLinkEl = document.getElementById("release-notes-link");
   const releaseHistoryLinkEl = document.getElementById("release-history-link");
@@ -65,15 +62,6 @@
       month: "short",
       day: "numeric"
     });
-  }
-
-  function formatFileSize(bytes) {
-    if (!Number.isFinite(bytes) || bytes <= 0) {
-      return "size unavailable";
-    }
-
-    const mb = bytes / (1024 * 1024);
-    return mb.toFixed(1) + " MB";
   }
 
   function formatNumber(value) {
@@ -223,28 +211,14 @@
     }
 
     if (asset && asset.name) {
-      setText(releaseArtifactEl, asset.name);
-      setText(releaseSizeEl, formatFileSize(asset.size));
-      setText(releaseDownloadCountEl, formatNumber(asset.download_count || 0));
       applyDownloadUrl(asset.browser_download_url);
     } else {
-      setText(releaseArtifactEl, "No DMG asset detected");
-      setText(releaseSizeEl, "-");
-      setText(releaseDownloadCountEl, "-");
       applyDownloadUrl(releaseData ? releaseData.html_url : fallbackReleaseUrl);
     }
 
     renderHighlights(extractHighlights(releaseData ? releaseData.body : ""));
     setHref(releaseNotesLinkEl, releaseData && releaseData.html_url ? releaseData.html_url : fallbackReleaseUrl);
     setHref(releaseHistoryLinkEl, fallbackReleaseHistoryUrl);
-
-    if (version && primaryDownloadEl) {
-      primaryDownloadEl.textContent = "Download " + version;
-    }
-
-    if (version && secondaryDownloadEl) {
-      secondaryDownloadEl.textContent = "Download " + version;
-    }
 
     if (sourceLabel === "cache") {
       return;
@@ -336,11 +310,7 @@
         setText(releaseVersionEl, "latest");
         setText(releaseTitleEl, "Could not load release data");
         setText(releaseDateEl, "Unavailable");
-        setText(releaseArtifactEl, "Open release page");
-        setText(releaseSizeEl, "-");
-        setText(releaseDownloadCountEl, "-");
         renderHighlights([]);
-      } else {
       }
 
       if (error && error.message) {
