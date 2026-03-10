@@ -51,12 +51,45 @@ struct SettingsView: View {
     @State private var showingError = false
     @State private var errorMessage = ""
     @State private var selectedSection: SettingsSection = .profiles
+    @State private var activeMenuBarManagerName: String?
+    @State private var hasRecentMenuBarDelayObservation = false
+    @State private var showingMenuBarCompatibilityAlert = false
+
+    private let reportIssueURL = URL(string: "https://github.com/hichipli/CiteBar/issues/new")
+
+    private var menuBarCompatibilityAlertMessage: String {
+        if let managerName = activeMenuBarManagerName {
+            if hasRecentMenuBarDelayObservation {
+                return "\(managerName) is managing menu bar items, and CiteBar recently detected delayed icon visibility. The app continues running normally in the background while the icon appears."
+            }
+
+            return "\(managerName) is managing menu bar items. On some Macs, newly launched status icons can appear with a short delay. CiteBar continues running normally during this time."
+        }
+
+        return "CiteBar recently detected delayed menu-bar visibility on this Mac. The app continues running normally in the background while the icon appears."
+    }
+
+    private func refreshMenuBarCompatibilityStatus() {
+        activeMenuBarManagerName = MenuBarCompatibility.activeManagerDisplayName()
+        hasRecentMenuBarDelayObservation = MenuBarCompatibility.hasRecentDelayObservation()
+    }
+
+    private func reportMenuBarIssue() {
+        guard let reportIssueURL else { return }
+        NSWorkspace.shared.open(reportIssueURL)
+    }
 
     var body: some View {
         // A fixed split layout is more predictable here than NavigationSplitView
         // for this app's settings window sizing and section switching behavior.
         HStack(spacing: 0) {
-            SettingsSidebar(selectedSection: $selectedSection)
+            SettingsSidebar(
+                selectedSection: $selectedSection,
+                menuBarManagerName: activeMenuBarManagerName,
+                hasRecentDelayObservation: hasRecentMenuBarDelayObservation
+            ) {
+                showingMenuBarCompatibilityAlert = true
+            }
                 .frame(width: 260)
 
             Divider()
@@ -82,14 +115,42 @@ struct SettingsView: View {
             .background(Color(nsColor: .windowBackgroundColor))
         }
         .frame(minWidth: 900, minHeight: 620)
+        .onAppear {
+            refreshMenuBarCompatibilityStatus()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshMenuBarCompatibilityStatus()
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowSupportSection"))) { _ in
             selectedSection = .about
+        }
+        .alert("Menu Bar Compatibility", isPresented: $showingMenuBarCompatibilityAlert) {
+            Button("Report Issue") {
+                reportMenuBarIssue()
+            }
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(menuBarCompatibilityAlertMessage)
         }
     }
 }
 
 private struct SettingsSidebar: View {
     @Binding var selectedSection: SettingsSection
+    let menuBarManagerName: String?
+    let hasRecentDelayObservation: Bool
+    let onOpenMenuBarCompatibilityInfo: () -> Void
+
+    private var shouldShowMenuBarNotice: Bool {
+        menuBarManagerName != nil || hasRecentDelayObservation
+    }
+
+    private var menuBarNoticeSummary: String {
+        if let managerName = menuBarManagerName {
+            return "\(managerName) may delay icon visibility."
+        }
+        return "Menu bar icon visibility may be delayed."
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -120,6 +181,44 @@ private struct SettingsSidebar: View {
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
             .background(Color(nsColor: .settingsSidebarBackground))
+
+            if shouldShowMenuBarNotice {
+                Divider()
+
+                Button(action: onOpenMenuBarCompatibilityInfo) {
+                    HStack(alignment: .center, spacing: 8) {
+                        Image(systemName: hasRecentDelayObservation ? "exclamationmark.triangle.fill" : "info.circle.fill")
+                            .font(.caption)
+                            .foregroundColor(hasRecentDelayObservation ? .orange : .blue)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("CiteBar Icon May Be Delayed")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.primary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+
+                            Text(menuBarNoticeSummary)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill((hasRecentDelayObservation ? Color.orange : Color.blue).opacity(0.10))
+                    )
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color(nsColor: .settingsSidebarBackground))

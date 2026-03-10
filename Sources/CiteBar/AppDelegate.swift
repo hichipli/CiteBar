@@ -21,11 +21,18 @@ import Carbon
     private var hasPresentedLaunchFeedback = false
     private var launchedFromUserInteraction = AppDelegate.didLaunchWithProcessSerialNumberArgument()
     private var receivedOpenApplicationEvent = false
+    private var statusItemHealthTimer: Timer?
+    private var consecutiveStatusItemFailures = 0
+    private var statusItemRecoveryInProgress = false
+    private var lastDelayObservationTimestamp: TimeInterval = 0
     private static let releasesURL = URL(string: "https://github.com/hichipli/CiteBar/releases")
     private static let latestReleaseURL = URL(string: "https://github.com/hichipli/CiteBar/releases/latest")
     private static let minimumManualUpdateVersion = "1.4.2"
     private static let notificationPromptedVersionDefaultsKey = "com.hichipli.citebar.notificationPromptedVersion"
-    private static let maxStatusItemSetupRetries = 5
+    private static let statusItemAutosaveName = "com.hichipli.citebar-Item-0"
+    private static let maxStatusItemSetupRetries = 24
+    private static let statusItemHealthCheckInterval: TimeInterval = 4
+    private static let statusItemFailureThreshold = 2
     
     private static func didLaunchWithProcessSerialNumberArgument() -> Bool {
         // Finder/LaunchServices launches typically include a -psn_* argument.
@@ -145,6 +152,7 @@ import Carbon
             guard let self else { return }
             _ = NSApp.setActivationPolicy(.accessory)
             self.setupMenuBar()
+            self.startStatusItemHealthMonitoring()
             self.setupManagers()
             self.setupUpdater()
             self.finishStartupFlow()
@@ -221,12 +229,16 @@ import Carbon
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         
         guard let statusItem = statusItem else {
+            markMenuBarDelayObserved(reason: "status-item-create-failed retry=\(retryCount)")
             AppLog.error("Failed to create status item")
-            scheduleMenuBarSetupRetry(after: 0.2, retryCount: retryCount)
+            scheduleMenuBarSetupRetry(after: Self.menuBarSetupRetryDelay(for: retryCount), retryCount: retryCount)
             return
         }
         
         if let button = statusItem.button {
+            statusItem.autosaveName = Self.statusItemAutosaveName
+            statusItem.isVisible = true
+
             // Keep startup state visible immediately, even before first network/storage refresh.
             if let image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "CiteBar - Launching") {
                 button.image = image
@@ -235,16 +247,19 @@ import Carbon
             button.action = #selector(menuBarClicked)
             button.target = self
         } else {
+            markMenuBarDelayObserved(reason: "status-item-button-missing retry=\(retryCount)")
             AppLog.error("Status item button is unavailable during startup")
             NSStatusBar.system.removeStatusItem(statusItem)
             self.statusItem = nil
-            scheduleMenuBarSetupRetry(after: 0.2, retryCount: retryCount)
+            scheduleMenuBarSetupRetry(after: Self.menuBarSetupRetryDelay(for: retryCount), retryCount: retryCount)
             return
         }
         
         menuBarManager = MenuBarManager(statusItem: statusItem)
         statusItem.menu = menuBarManager?.createMenu()
+        statusItem.isVisible = true
         menuBarManager?.showLaunchingState()
+        consecutiveStatusItemFailures = 0
     }
     
     private func scheduleMenuBarSetupRetry(after delay: TimeInterval, retryCount: Int) {
@@ -256,6 +271,77 @@ import Carbon
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             self?.setupMenuBar(retryCount: retryCount + 1)
         }
+    }
+
+    private static func menuBarSetupRetryDelay(for retryCount: Int) -> TimeInterval {
+        let exponentialDelay = 0.2 * pow(1.6, Double(retryCount))
+        return min(exponentialDelay, 5.0)
+    }
+
+    private func startStatusItemHealthMonitoring() {
+        statusItemHealthTimer?.invalidate()
+        let timer = Timer.scheduledTimer(withTimeInterval: Self.statusItemHealthCheckInterval, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                self?.ensureStatusItemHealthy(reason: "periodic")
+            }
+        }
+        timer.tolerance = 0.8
+        statusItemHealthTimer = timer
+    }
+
+    private func ensureStatusItemHealthy(reason: String) {
+        guard !statusItemRecoveryInProgress else { return }
+        guard settingsWindow == nil else {
+            consecutiveStatusItemFailures = 0
+            return
+        }
+        guard NSApp.activationPolicy() == .accessory else {
+            consecutiveStatusItemFailures = 0
+            return
+        }
+        guard let statusItem = statusItem else {
+            consecutiveStatusItemFailures += 1
+            maybeRecoverStatusItem(reason: "\(reason):missing-status-item")
+            return
+        }
+        guard let button = statusItem.button, button.window != nil else {
+            consecutiveStatusItemFailures += 1
+            maybeRecoverStatusItem(reason: "\(reason):detached-status-button")
+            return
+        }
+        consecutiveStatusItemFailures = 0
+    }
+
+    private func maybeRecoverStatusItem(reason: String) {
+        guard consecutiveStatusItemFailures >= Self.statusItemFailureThreshold else { return }
+        recoverStatusItem(reason: reason)
+    }
+
+    private func recoverStatusItem(reason: String) {
+        guard !statusItemRecoveryInProgress else { return }
+        markMenuBarDelayObserved(reason: "status-item-recovery reason=\(reason)")
+        statusItemRecoveryInProgress = true
+        AppLog.error("Recovering status item after host invalidation (\(reason))")
+
+        if let existingStatusItem = statusItem {
+            NSStatusBar.system.removeStatusItem(existingStatusItem)
+        }
+        statusItem = nil
+        menuBarManager = nil
+        consecutiveStatusItemFailures = 0
+
+        setupMenuBar()
+        citationManager?.updateMenuBarWithCurrentData()
+        statusItemRecoveryInProgress = false
+    }
+
+    private func markMenuBarDelayObserved(reason: String) {
+        let now = Date().timeIntervalSince1970
+        guard now - lastDelayObservationTimestamp > 10 else { return }
+        lastDelayObservationTimestamp = now
+        MenuBarCompatibility.noteDelayObservedNow()
+        AppLog.error("Menu bar visibility delay observed (\(reason))")
     }
     
     private func ensureSingleInstance() {
@@ -310,6 +396,13 @@ import Carbon
         guard NSApp.activationPolicy() != .accessory else { return }
         if !NSApp.setActivationPolicy(.accessory) {
             AppLog.error("Failed to restore accessory activation policy after closing settings")
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            self?.ensureStatusItemHealthy(reason: "post-settings-close")
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.ensureStatusItemHealthy(reason: "post-settings-close-delayed")
         }
     }
     
@@ -523,6 +616,9 @@ import Carbon
     }
     
     private func cleanup() {
+        statusItemHealthTimer?.invalidate()
+        statusItemHealthTimer = nil
+
         // Close settings window if open
         if let settingsWindow = settingsWindow {
             settingsWindow.close()
@@ -549,6 +645,7 @@ extension AppDelegate {
     func applicationDidBecomeActive(_ notification: Notification) {
         // Retry launch feedback when the app transitions to active after startup.
         presentLaunchFeedbackIfNeeded()
+        ensureStatusItemHealthy(reason: "did-become-active")
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
