@@ -3,6 +3,12 @@ import SwiftSoup
 import UserNotifications
 
 @MainActor class CitationManager {
+    struct ScholarProfileSnapshot {
+        let profileID: String
+        let displayName: String?
+        let metrics: ScholarMetrics?
+    }
+
     weak var delegate: CitationManagerDelegate?
     private let settingsManager = SettingsManager.shared
     private let storageManager = StorageManager()
@@ -79,6 +85,124 @@ import UserNotifications
         Task {
             await performCitationCheck(for: profiles, isStartup: isStartup)
         }
+    }
+
+    func fetchScholarProfileSnapshot(for profileID: String) async -> ScholarProfileSnapshot? {
+        guard let url = scholarProfileURL(for: profileID) else {
+            return nil
+        }
+
+        do {
+            let html = try await fetchScholarHTML(from: url)
+            let displayName = parseScholarDisplayName(from: html)
+
+            let metrics: ScholarMetrics?
+            do {
+                metrics = try parseScholarMetrics(from: html)
+            } catch {
+                AppLog.debug("Failed to parse scholar metrics from snapshot for profile ID \(profileID): \(error)")
+                metrics = nil
+            }
+
+            guard displayName != nil || metrics != nil else {
+                return nil
+            }
+
+            return ScholarProfileSnapshot(
+                profileID: profileID,
+                displayName: displayName,
+                metrics: metrics
+            )
+        } catch {
+            AppLog.debug("Failed to fetch scholar snapshot for profile ID \(profileID): \(error)")
+            return nil
+        }
+    }
+
+    func fetchScholarDisplayName(for profileID: String) async -> String? {
+        await fetchScholarProfileSnapshot(for: profileID)?.displayName
+    }
+
+    func primeProfileData(
+        for profile: ScholarProfile,
+        prefetchedSnapshot: ScholarProfileSnapshot? = nil
+    ) async -> ScholarProfileSnapshot? {
+        let snapshot: ScholarProfileSnapshot?
+        if let prefetchedSnapshot {
+            snapshot = prefetchedSnapshot
+        } else {
+            snapshot = await fetchScholarProfileSnapshot(for: profile.id)
+        }
+
+        guard let snapshot else {
+            AppLog.debug("No scholar snapshot available for profile \(profile.id); skipping immediate prime")
+            return nil
+        }
+
+        guard let metrics = snapshot.metrics else {
+            AppLog.debug("Scholar snapshot for profile \(profile.id) has no metrics; skipping immediate metric save")
+            return snapshot
+        }
+
+        let record = CitationRecord(
+            profileId: profile.id,
+            citationCount: metrics.citationCount,
+            hIndex: metrics.hIndex,
+            i10Index: metrics.i10Index,
+            citationsByYear: metrics.citationsByYear
+        )
+        await storageManager.saveCitationRecord(record)
+        settingsManager.setLastUpdateTime(Date())
+
+        return snapshot
+    }
+
+    nonisolated static func shouldRefreshOnStartup(
+        latestRecordDates: [Date?],
+        now: Date = Date(),
+        refreshInterval: TimeInterval
+    ) -> Bool {
+        guard !latestRecordDates.isEmpty else {
+            return false
+        }
+
+        // If any enabled profile has no local history yet, refresh immediately.
+        if latestRecordDates.contains(where: { $0 == nil }) {
+            return true
+        }
+
+        guard let oldestLatestRecord = latestRecordDates.compactMap({ $0 }).min() else {
+            return true
+        }
+
+        let age = max(0, now.timeIntervalSince(oldestLatestRecord))
+        return age >= refreshInterval
+    }
+
+    func shouldRefreshAtStartup() async -> Bool {
+        let enabledProfiles = settingsManager.settings.profiles.filter { $0.isEnabled }
+        guard !enabledProfiles.isEmpty else {
+            return false
+        }
+
+        var latestRecordDates: [Date?] = []
+        latestRecordDates.reserveCapacity(enabledProfiles.count)
+
+        for profile in enabledProfiles {
+            let latestRecord = await storageManager.getLatestRecord(for: profile.id)
+            latestRecordDates.append(latestRecord?.timestamp)
+        }
+
+        let interval = settingsManager.settings.refreshInterval.seconds
+        let shouldRefresh = Self.shouldRefreshOnStartup(
+            latestRecordDates: latestRecordDates,
+            refreshInterval: interval
+        )
+
+        AppLog.debug(
+            "Startup refresh decision: enabledProfiles=\(enabledProfiles.count), intervalSeconds=\(Int(interval)), shouldRefresh=\(shouldRefresh)"
+        )
+        return shouldRefresh
     }
     
     private func performCitationCheck(for profiles: [ScholarProfile], isStartup: Bool) async {
@@ -277,35 +401,102 @@ import UserNotifications
         guard let url = URL(string: profile.url) else {
             throw CitationError.invalidURL
         }
+        let html = try await fetchScholarHTML(from: url)
         
-        // Create request with proper headers to avoid being blocked
+        // Debug: Print first 500 characters of HTML
+        AppLog.debug("HTML Preview: \(String(html.prefix(500)))")
+        
+        return try parseScholarMetrics(from: html)
+    }
+
+    private func scholarProfileURL(for profileID: String) -> URL? {
+        URL(string: "https://scholar.google.com/citations?user=\(profileID)&hl=en")
+    }
+
+    private func makeScholarRequest(for url: URL) -> URLRequest {
         var request = URLRequest(url: url)
         request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
         request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8", forHTTPHeaderField: "Accept")
         request.setValue("en-US,en;q=0.5", forHTTPHeaderField: "Accept-Language")
         request.setValue("gzip, deflate, br", forHTTPHeaderField: "Accept-Encoding")
         request.timeoutInterval = 30.0
-        
+        return request
+    }
+
+    private func fetchScholarHTML(from url: URL) async throws -> String {
+        let request = makeScholarRequest(for: url)
         let (data, response) = try await urlSession.data(for: request)
-        
+
         guard let httpResponse = response as? HTTPURLResponse else {
             throw CitationError.networkError
         }
-        
+
         AppLog.debug("HTTP Status Code: \(httpResponse.statusCode)")
-        
+
         guard httpResponse.statusCode == 200 else {
             throw CitationError.networkError
         }
-        
+
         guard let html = String(data: data, encoding: .utf8) else {
             throw CitationError.invalidResponse
         }
-        
-        // Debug: Print first 500 characters of HTML
-        AppLog.debug("HTML Preview: \(String(html.prefix(500)))")
-        
-        return try parseScholarMetrics(from: html)
+
+        return html
+    }
+
+    private func parseScholarDisplayName(from html: String) -> String? {
+        do {
+            let doc = try SwiftSoup.parse(html)
+
+            if let profileHeaderName = try doc.select("#gsc_prf_in").first()?.text(),
+               let cleanedName = cleanedScholarDisplayName(from: profileHeaderName) {
+                return cleanedName
+            }
+
+            if let ogTitleName = try doc.select("meta[property=og:title]").first()?.attr("content"),
+               let cleanedName = cleanedScholarDisplayName(from: ogTitleName) {
+                return cleanedName
+            }
+
+            if let pageTitle = try doc.select("title").first()?.text(),
+               let cleanedName = cleanedScholarDisplayName(from: pageTitle) {
+                return cleanedName
+            }
+        } catch let error as Exception {
+            AppLog.debug("Scholar name parsing failed: \(error)")
+        } catch {
+            AppLog.debug("Scholar name parsing failed: \(error)")
+        }
+
+        return nil
+    }
+
+    private func cleanedScholarDisplayName(from rawName: String) -> String? {
+        let directionalMarks = CharacterSet(charactersIn: "\u{202A}\u{202B}\u{202C}\u{202D}\u{202E}\u{2066}\u{2067}\u{2068}\u{2069}")
+        let filteredScalars = rawName.unicodeScalars.filter { !directionalMarks.contains($0) }
+        var name = String(String.UnicodeScalarView(filteredScalars))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !name.isEmpty else {
+            return nil
+        }
+
+        name = name.replacingOccurrences(
+            of: "\\s*-\\s*Google Scholar.*$",
+            with: "",
+            options: .regularExpression
+        )
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !name.isEmpty else {
+            return nil
+        }
+
+        if name.caseInsensitiveCompare("Google Scholar") == .orderedSame {
+            return nil
+        }
+
+        return name
     }
     
     private func parseScholarMetrics(from html: String) throws -> ScholarMetrics {

@@ -33,7 +33,74 @@ import Carbon
     }
     
     func applicationWillFinishLaunching(_ notification: Notification) {
+        installMainMenuIfNeeded()
         registerAppleEventHandlers()
+    }
+
+    private func installMainMenuIfNeeded() {
+        guard NSApp.mainMenu == nil else { return }
+
+        let mainMenu = NSMenu()
+        let appName = ProcessInfo.processInfo.processName
+
+        let appMenuItem = NSMenuItem()
+        let appMenu = NSMenu(title: appName)
+        appMenuItem.submenu = appMenu
+        mainMenu.addItem(appMenuItem)
+
+        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        appMenu.addItem(settingsItem)
+        appMenu.addItem(NSMenuItem.separator())
+
+        let hideItem = NSMenuItem(title: "Hide \(appName)", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        hideItem.target = NSApp
+        appMenu.addItem(hideItem)
+
+        let hideOthersItem = NSMenuItem(title: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
+        hideOthersItem.target = NSApp
+        hideOthersItem.keyEquivalentModifierMask = [.command, .option]
+        appMenu.addItem(hideOthersItem)
+
+        appMenu.addItem(NSMenuItem.separator())
+
+        let quitItem = NSMenuItem(title: "Quit \(appName)", action: #selector(quitApp), keyEquivalent: "q")
+        quitItem.target = self
+        appMenu.addItem(quitItem)
+
+        let editMenuItem = NSMenuItem()
+        let editMenu = NSMenu(title: "Edit")
+        editMenuItem.submenu = editMenu
+        mainMenu.addItem(editMenuItem)
+
+        let undoItem = NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        undoItem.target = nil
+        editMenu.addItem(undoItem)
+
+        let redoItem = NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "z")
+        redoItem.target = nil
+        redoItem.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(redoItem)
+
+        editMenu.addItem(NSMenuItem.separator())
+
+        let cutItem = NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        cutItem.target = nil
+        editMenu.addItem(cutItem)
+
+        let copyItem = NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        copyItem.target = nil
+        editMenu.addItem(copyItem)
+
+        let pasteItem = NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        pasteItem.target = nil
+        editMenu.addItem(pasteItem)
+
+        let selectAllItem = NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        selectAllItem.target = nil
+        editMenu.addItem(selectAllItem)
+
+        NSApp.mainMenu = mainMenu
     }
     
     private func registerAppleEventHandlers() {
@@ -100,10 +167,19 @@ import Carbon
         // This ensures users see data even if network is unavailable
         citationManager?.updateMenuBarWithCurrentData()
         
-        // Then start network request to get fresh data
-        // Add a small delay to allow historical data to load first
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.citationManager?.checkCitations(isStartup: true)
+        // Refresh on launch only when local data is older than the configured interval.
+        Task { @MainActor [weak self] in
+            guard let self, let citationManager = self.citationManager else { return }
+            let shouldRefresh = await citationManager.shouldRefreshAtStartup()
+            guard shouldRefresh else {
+                AppLog.debug("Skipping startup refresh because local profile data is within refresh interval")
+                return
+            }
+
+            // Keep a small delay so historical data can render first.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                citationManager.checkCitations(isStartup: true)
+            }
         }
     }
     
@@ -344,6 +420,35 @@ import Carbon
     @objc func refreshCitations() {
         citationManager?.checkCitations()
     }
+
+    func primeNewProfile(
+        _ profile: ScholarProfile,
+        prefetchedSnapshot: CitationManager.ScholarProfileSnapshot?
+    ) async {
+        guard let citationManager else { return }
+
+        let snapshot = await citationManager.primeProfileData(
+            for: profile,
+            prefetchedSnapshot: prefetchedSnapshot
+        )
+
+        if let displayName = snapshot?.displayName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !displayName.isEmpty,
+           let existingProfile = settingsManager.settings.profiles.first(where: { $0.id == profile.id }),
+           isPlaceholderProfileName(existingProfile.name, for: existingProfile.id) {
+            var renamedProfile = ScholarProfile(
+                id: existingProfile.id,
+                name: displayName,
+                sortOrder: existingProfile.sortOrder
+            )
+            renamedProfile.isEnabled = existingProfile.isEnabled
+            renamedProfile.recentGrowth = existingProfile.recentGrowth
+            renamedProfile.recentGrowthDays = existingProfile.recentGrowthDays
+            settingsManager.updateProfile(renamedProfile)
+        }
+
+        citationManager.updateMenuBarWithCurrentData()
+    }
     
     func updateMenuBarDisplay() {
         // Update menu bar display immediately with existing data
@@ -432,6 +537,11 @@ import Carbon
             NSStatusBar.system.removeStatusItem(statusItem)
             self.statusItem = nil
         }
+    }
+
+    private func isPlaceholderProfileName(_ name: String, for profileID: String) -> Bool {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedName == "Scholar \(profileID)"
     }
 }
 

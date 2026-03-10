@@ -241,7 +241,7 @@ struct ProfilesTab: View {
                 profileName: $newProfileName,
                 showingError: $showingError,
                 errorMessage: $errorMessage
-            ) { id, name in
+            ) { id, name, prefetchedSnapshot in
                 let profile = ScholarProfile(id: id, name: name)
                 settingsManager.addProfile(profile)
                 newProfileId = ""
@@ -252,8 +252,9 @@ struct ProfilesTab: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
                         appDelegate.showNewProfileLoading(profile)
-                        // Then trigger actual data fetch.
-                        appDelegate.refreshCitations()
+                        Task { @MainActor in
+                            await appDelegate.primeNewProfile(profile, prefetchedSnapshot: prefetchedSnapshot)
+                        }
                     }
                 }
             }
@@ -1026,9 +1027,12 @@ struct AddProfileSheet: View {
     @Binding var profileName: String
     @Binding var showingError: Bool
     @Binding var errorMessage: String
-    let onAdd: (String, String) -> Void
+    let onAdd: (String, String, CitationManager.ScholarProfileSnapshot?) -> Void
     
     @State private var urlInput = ""
+    @State private var isAutoResolvingName = false
+    @State private var lastAutoResolvedId = ""
+    @State private var prefetchedSnapshot: CitationManager.ScholarProfileSnapshot?
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focusedField: Field?
     
@@ -1056,16 +1060,20 @@ struct AddProfileSheet: View {
             
             // Profile Name Section
             VStack(alignment: .leading, spacing: 8) {
-                Label("Profile Name", systemImage: "person.circle")
+                Label("Profile Name (Optional)", systemImage: "person.circle")
                     .font(.headline)
                     .foregroundColor(.primary)
                 
-                TextField("e.g., Dr. Jane Smith", text: $profileName)
+                TextField("Auto-filled from profile page (or type manually)", text: $profileName)
                     .textFieldStyle(.roundedBorder)
                     .focused($focusedField, equals: .name)
                     .onSubmit {
                         focusedField = .url
                     }
+
+                Text("Leave blank to add with just the Scholar URL/ID.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
             
             // Scholar URL/ID Section
@@ -1155,6 +1163,16 @@ struct AddProfileSheet: View {
             }
             
             // Success indicator
+            if isAutoResolvingName && profileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                HStack(spacing: 10) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Trying to auto-fill profile name...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
             if !profileId.isEmpty {
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
@@ -1185,14 +1203,20 @@ struct AddProfileSheet: View {
                     submitForm()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(profileId.isEmpty || profileName.isEmpty)
+                .disabled(
+                    profileId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                    (isAutoResolvingName && profileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                )
                 .keyboardShortcut(.defaultAction)
             }
         }
         .padding()
         .frame(width: 560)
         .onAppear {
-            focusedField = .name
+            focusedField = .url
+        }
+        .onChange(of: profileId) { newId in
+            maybeAutoResolveName(for: newId)
         }
         .alert("Error", isPresented: $showingError) {
             Button("OK") { }
@@ -1209,14 +1233,29 @@ struct AddProfileSheet: View {
     }
     
     private func submitForm() {
-        if profileId.isEmpty || profileName.isEmpty {
-            errorMessage = "Please fill in all fields"
+        let trimmedId = profileId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedId.isEmpty {
+            errorMessage = "Please enter a Scholar URL or ID"
             showingError = true
-        } else if !isValidScholarId(profileId) {
+        } else if !isValidScholarId(trimmedId) {
             errorMessage = "Invalid Scholar ID format. Please check your ID."
             showingError = true
         } else {
-            onAdd(profileId, profileName)
+            let trimmedName = profileName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let fallbackName = "Scholar \(trimmedId)"
+            let snapshotForID = prefetchedSnapshot?.profileID == trimmedId ? prefetchedSnapshot : nil
+            let snapshotName = snapshotForID?.displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let finalName: String
+            if trimmedName.isEmpty,
+               let snapshotName,
+               !snapshotName.isEmpty {
+                finalName = snapshotName
+            } else if trimmedName.isEmpty {
+                finalName = fallbackName
+            } else {
+                finalName = trimmedName
+            }
+            onAdd(trimmedId, finalName, snapshotForID)
             dismiss()
         }
     }
@@ -1225,6 +1264,9 @@ struct AddProfileSheet: View {
         profileId = ""
         profileName = ""
         urlInput = ""
+        isAutoResolvingName = false
+        lastAutoResolvedId = ""
+        prefetchedSnapshot = nil
     }
     
     private func extractScholarId(from url: String) {
@@ -1242,6 +1284,56 @@ struct AddProfileSheet: View {
             
             if !id.isEmpty && id != profileId {
                 profileId = id
+            }
+        }
+    }
+
+    private func maybeAutoResolveName(for rawId: String) {
+        let trimmedId = rawId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedName = profileName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if prefetchedSnapshot?.profileID != trimmedId {
+            prefetchedSnapshot = nil
+        }
+
+        guard !trimmedId.isEmpty, isValidScholarId(trimmedId) else {
+            isAutoResolvingName = false
+            return
+        }
+
+        guard trimmedName.isEmpty else {
+            isAutoResolvingName = false
+            return
+        }
+
+        guard trimmedId != lastAutoResolvedId else {
+            return
+        }
+
+        lastAutoResolvedId = trimmedId
+        isAutoResolvingName = true
+
+        Task {
+            let snapshot = await (NSApplication.shared.delegate as? AppDelegate)?
+                .citationManager?
+                .fetchScholarProfileSnapshot(for: trimmedId)
+
+            await MainActor.run {
+                guard profileId.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedId else {
+                    return
+                }
+
+                isAutoResolvingName = false
+                prefetchedSnapshot = snapshot
+
+                guard profileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    return
+                }
+
+                if let resolvedName = snapshot?.displayName?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !resolvedName.isEmpty {
+                    profileName = resolvedName
+                }
             }
         }
     }

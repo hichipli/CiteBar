@@ -36,6 +36,56 @@ final class CiteBarTests: XCTestCase {
         XCTAssertEqual(profile1, profile2)
         XCTAssertNotEqual(profile1, profile3)
     }
+
+    func testShouldRefreshOnStartup_WhenAnyProfileHasNoHistory_ReturnsTrue() {
+        let now = Date()
+        let shouldRefresh = CitationManager.shouldRefreshOnStartup(
+            latestRecordDates: [now.addingTimeInterval(-60), nil],
+            now: now,
+            refreshInterval: 3600
+        )
+
+        XCTAssertTrue(shouldRefresh)
+    }
+
+    func testShouldRefreshOnStartup_WhenOldestRecordIsWithinInterval_ReturnsFalse() {
+        let now = Date()
+        let shouldRefresh = CitationManager.shouldRefreshOnStartup(
+            latestRecordDates: [
+                now.addingTimeInterval(-600),
+                now.addingTimeInterval(-1200),
+                now.addingTimeInterval(-1800)
+            ],
+            now: now,
+            refreshInterval: 3600
+        )
+
+        XCTAssertFalse(shouldRefresh)
+    }
+
+    func testShouldRefreshOnStartup_WhenOldestRecordExceedsInterval_ReturnsTrue() {
+        let now = Date()
+        let shouldRefresh = CitationManager.shouldRefreshOnStartup(
+            latestRecordDates: [
+                now.addingTimeInterval(-600),
+                now.addingTimeInterval(-7200),
+                now.addingTimeInterval(-1800)
+            ],
+            now: now,
+            refreshInterval: 3600
+        )
+
+        XCTAssertTrue(shouldRefresh)
+    }
+
+    func testShouldRefreshOnStartup_WithNoProfiles_ReturnsFalse() {
+        let shouldRefresh = CitationManager.shouldRefreshOnStartup(
+            latestRecordDates: [],
+            refreshInterval: 3600
+        )
+
+        XCTAssertFalse(shouldRefresh)
+    }
     
     func testRefreshIntervalSeconds() {
         XCTAssertEqual(AppSettings.RefreshInterval.hourly.seconds, 60 * 60)
@@ -180,6 +230,80 @@ final class CiteBarTests: XCTestCase {
         XCTAssertEqual(metrics.citationsByYear?[2023], 10, "2023 yearly citations should be parsed from the citation graph.")
         XCTAssertEqual(metrics.citationsByYear?[2024], 59, "2024 yearly citations should be parsed from the citation graph.")
         XCTAssertEqual(metrics.citationsByYear?[2025], 25, "2025 yearly citations should be parsed from the citation graph.")
+    }
+
+    @MainActor
+    func testFetchScholarDisplayName_FromProfilePage() async {
+        let profileID = "_5pgNWgAAAAJ"
+        guard let url = URL(string: "https://scholar.google.com/citations?user=\(profileID)&hl=en") else {
+            XCTFail("Invalid URL")
+            return
+        }
+
+        guard let sampleHTMLData = MockURLProtocol.loadSampleData(from: "scholar_profile_sample", fileExtension: "html") else {
+            XCTFail("Failed to load sample HTML file.")
+            return
+        }
+
+        MockURLProtocol.setMockResponse(for: url, result: .success(sampleHTMLData))
+        let citationManager = CitationManager(urlSession: urlSession)
+
+        let name = await citationManager.fetchScholarDisplayName(for: profileID)
+        XCTAssertEqual(name, "Hongming Chip Li")
+    }
+
+    @MainActor
+    func testFetchScholarProfileSnapshot_ContainsNameAndMetrics() async {
+        let profileID = "_5pgNWgAAAAJ"
+        guard let url = URL(string: "https://scholar.google.com/citations?user=\(profileID)&hl=en") else {
+            XCTFail("Invalid URL")
+            return
+        }
+
+        guard let sampleHTMLData = MockURLProtocol.loadSampleData(from: "scholar_profile_sample", fileExtension: "html") else {
+            XCTFail("Failed to load sample HTML file.")
+            return
+        }
+
+        MockURLProtocol.setMockResponse(for: url, result: .success(sampleHTMLData))
+        let citationManager = CitationManager(urlSession: urlSession)
+
+        let snapshot = await citationManager.fetchScholarProfileSnapshot(for: profileID)
+        XCTAssertEqual(snapshot?.profileID, profileID)
+        XCTAssertEqual(snapshot?.displayName, "Hongming Chip Li")
+        XCTAssertEqual(snapshot?.metrics?.citationCount, 98)
+        XCTAssertEqual(snapshot?.metrics?.hIndex, 4)
+        XCTAssertEqual(snapshot?.metrics?.i10Index, 2)
+    }
+
+    @MainActor
+    func testFetchScholarDisplayName_FromOgTitleFallback() async {
+        let profileID = "fallback123"
+        guard let url = URL(string: "https://scholar.google.com/citations?user=\(profileID)&hl=en") else {
+            XCTFail("Invalid URL")
+            return
+        }
+
+        let html = """
+        <!doctype html>
+        <html>
+          <head>
+            <meta property="og:title" content="Fallback Scholar">
+          </head>
+          <body></body>
+        </html>
+        """
+
+        guard let data = html.data(using: .utf8) else {
+            XCTFail("Failed to encode HTML test fixture.")
+            return
+        }
+
+        MockURLProtocol.setMockResponse(for: url, result: .success(data))
+        let citationManager = CitationManager(urlSession: urlSession)
+
+        let name = await citationManager.fetchScholarDisplayName(for: profileID)
+        XCTAssertEqual(name, "Fallback Scholar")
     }
     
     @MainActor
