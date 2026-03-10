@@ -381,19 +381,49 @@ struct GeneralTab: View {
     @ObservedObject var settingsManager: SettingsManager
     @State private var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
 
-    private func getAutoLaunchStatus() -> String {
-        switch SMAppService.mainApp.status {
+    private func autoLaunchStatusText(for status: SMAppService.Status) -> String {
+        switch status {
         case .enabled:
             return "✓ Auto-launch is enabled"
         case .notRegistered:
-            return "Not registered for auto-launch"
+            return "Auto-launch is currently disabled."
         case .notFound:
-            return "Service not found"
+            return "CiteBar login-item service was not found."
         case .requiresApproval:
             return "⚠️ Waiting for user approval in System Settings"
         @unknown default:
             return "Unknown status"
         }
+    }
+
+    private func autoLaunchStatusIcon(for status: SMAppService.Status) -> String {
+        switch status {
+        case .enabled:
+            return "checkmark.circle.fill"
+        case .requiresApproval, .notFound:
+            return "exclamationmark.triangle.fill"
+        case .notRegistered:
+            return "gearshape.2.fill"
+        @unknown default:
+            return "questionmark.circle.fill"
+        }
+    }
+
+    private func autoLaunchStatusTint(for status: SMAppService.Status) -> Color {
+        switch status {
+        case .enabled:
+            return .green
+        case .requiresApproval, .notFound:
+            return .orange
+        case .notRegistered:
+            return .secondary
+        @unknown default:
+            return .secondary
+        }
+    }
+
+    private func openLoginItemsSettings() {
+        SMAppService.openSystemSettingsLoginItems()
     }
 
     private func refreshNotificationAuthorizationStatus() {
@@ -419,7 +449,13 @@ struct GeneralTab: View {
     }
 
     private func openNotificationSettings() {
+        let bundleID = Bundle.main.bundleIdentifier ?? "com.citebar.CiteBar"
+        // Try app-targeted notification panes first; fall back to the global Notifications page.
         let candidates = [
+            "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(bundleID)",
+            "x-apple.systempreferences:com.apple.Notifications-Settings.extension?bundleID=\(bundleID)",
+            "x-apple.systempreferences:com.apple.preference.notifications?id=\(bundleID)",
+            "x-apple.systempreferences:com.apple.preference.notifications?bundleID=\(bundleID)",
             "x-apple.systempreferences:com.apple.preference.notifications",
             "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
         ]
@@ -550,12 +586,33 @@ struct GeneralTab: View {
 
                     Divider()
 
-                    let status = getAutoLaunchStatus()
+                    let status = SMAppService.mainApp.status
                     SettingsStatusRow(
-                        icon: status.contains("enabled") ? "checkmark.circle.fill" : "gearshape.2.fill",
-                        text: status,
-                        tint: status.contains("enabled") ? .green : (status.contains("approval") ? .orange : .secondary)
+                        icon: autoLaunchStatusIcon(for: status),
+                        text: autoLaunchStatusText(for: status),
+                        tint: autoLaunchStatusTint(for: status)
                     )
+
+                    switch status {
+                    case .notFound:
+                        SettingsActionRow(
+                            text: "Open Login Items settings, then enable CiteBar in \"Open at Login\".",
+                            buttonTitle: "Open Login Items Settings"
+                        ) {
+                            openLoginItemsSettings()
+                        }
+                    case .requiresApproval:
+                        SettingsActionRow(
+                            text: "Enable CiteBar in \"Open at Login\" to finish setup.",
+                            buttonTitle: "Open Login Items Settings"
+                        ) {
+                            openLoginItemsSettings()
+                        }
+                    case .enabled, .notRegistered:
+                        EmptyView()
+                    @unknown default:
+                        EmptyView()
+                    }
                 }
 
                 SettingsCard(
