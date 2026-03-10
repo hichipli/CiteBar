@@ -2,6 +2,15 @@ import SwiftUI
 import ServiceManagement
 import UserNotifications
 
+private extension NSColor {
+    static var settingsSidebarBackground: NSColor {
+        NSColor(name: nil) { appearance in
+            let match = appearance.bestMatch(from: [.darkAqua, .aqua])
+            return match == .darkAqua ? .windowBackgroundColor : .white
+        }
+    }
+}
+
 private enum SettingsSection: String, CaseIterable, Identifiable {
     case profiles
     case general
@@ -110,10 +119,10 @@ private struct SettingsSidebar: View {
             }
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
-            .background(Color.white)
+            .background(Color(nsColor: .settingsSidebarBackground))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.white)
+        .background(Color(nsColor: .settingsSidebarBackground))
     }
 }
 
