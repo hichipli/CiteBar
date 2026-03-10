@@ -490,14 +490,39 @@ import Carbon
         settingsWindow?.backgroundColor = .windowBackgroundColor
         settingsWindow?.toolbarStyle = .automatic
         settingsWindow?.contentViewController = NSHostingController(rootView: settingsView)
-        settingsWindow?.center()
+        if let settingsWindow {
+            positionSettingsWindowAtScreenCenter(settingsWindow)
+        }
         settingsWindow?.delegate = self
         
         // Ensure proper window retention
         settingsWindow?.isReleasedWhenClosed = false
+        settingsWindow?.isRestorable = false
         
         settingsWindow?.makeKeyAndOrderFront(nil)
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let settingsWindow = self.settingsWindow else { return }
+            self.positionSettingsWindowAtScreenCenter(settingsWindow)
+        }
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func positionSettingsWindowAtScreenCenter(_ window: NSWindow) {
+        let mouseLocation = NSEvent.mouseLocation
+        let targetScreen = NSScreen.screens.first { screen in
+            NSMouseInRect(mouseLocation, screen.frame, false)
+        } ?? NSScreen.main ?? window.screen ?? NSScreen.screens.first
+
+        guard let visibleFrame = targetScreen?.visibleFrame else {
+            window.center()
+            return
+        }
+
+        let origin = NSPoint(
+            x: round(visibleFrame.origin.x + (visibleFrame.width - window.frame.width) / 2.0),
+            y: round(visibleFrame.origin.y + (visibleFrame.height - window.frame.height) / 2.0)
+        )
+        window.setFrameOrigin(origin)
     }
     
     @objc func showSupport() {
