@@ -3,10 +3,10 @@ import Foundation
 /// Centralized version management for CiteBar
 struct AppVersion {
     /// Current application version
-    static let current: String = "1.4.8"
+    static let current: String = "1.4.9"
     
     /// Current build number
-    static let build: String = "16"
+    static let build: String = "17"
     
     /// Version display string for UI
     static let displayString: String = "Version \(current)"
@@ -38,18 +38,18 @@ extension AppVersion {
     static let releaseNotes = ReleaseNotes(
         version: current,
         highlights: [
-            "Added current-year citations support from Google Scholar yearly histogram data",
-            "Added a primary metric selector to show either total citations or current-year citations in the menu bar",
-            "Improved settings action placement: Refresh Now, Check for Updates, and Quit are now organized by usage frequency",
-            "Menu rendering now gracefully falls back to total citations when yearly data is unavailable"
+            "Reduced redundant Scholar fetches with one-shot profile snapshot prefetch during onboarding",
+            "Startup refresh now runs only when local data is missing or stale relative to your configured interval",
+            "New profile flow now supports optional names with automatic Scholar name resolution",
+            "Settings UI polish: refined sidebar colors for light/dark mode and clearer settings copy"
         ],
-        description: "This release introduces current-year citation visibility and refines settings ergonomics so key actions are easier to find and use.",
+        description: "This release focuses on efficiency and UX polish by lowering unnecessary Scholar requests while making profile onboarding and settings interaction smoother.",
         technicalNotes: [
-            "CitationManager now parses and propagates yearly citation histogram pairs into ScholarMetrics/ProfileMetrics",
-            "CitationRecord persistence now includes optional citationsByYear data for historical reuse",
-            "AppSettings adds a backward-compatible menuBarPrimaryMetric option defaulting to total citations",
-            "Menu bar display logic now supports metric-mode-aware icon/title updates and profile-row summaries",
-            "Unit tests now assert yearly citation parsing and new settings compatibility defaults"
+            "Added CitationManager snapshot APIs to fetch display name + metrics from a single Scholar page request",
+            "Added staleness-aware startup refresh policy helpers and integrated them into launch flow",
+            "New profile priming now writes metrics for the added profile without forcing an immediate full refresh",
+            "Added fallback-safe Scholar name extraction from profile header, og:title, and page title",
+            "Extended test suite for startup refresh policy branches and profile snapshot/display-name parsing"
         ]
     )
     

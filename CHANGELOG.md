@@ -5,6 +5,26 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.9] - 2026-03-10
+
+### Added
+- **Scholar Snapshot Prefetch**: Added one-fetch profile snapshot support (name + metrics) for new profile onboarding
+- **Startup Refresh Policy**: Added staleness-aware startup refresh logic so launch refresh only runs when local data is missing or older than the configured interval
+- **Edit Command Chain**: Added a minimal app menu with standard Edit actions (Undo/Redo/Cut/Copy/Paste/Select All) so keyboard editing works reliably in settings sheets
+
+### Changed
+- **Add Profile Flow**: Profile name is now optional, auto-filled from Scholar when available, and adding a profile primes only that profile instead of triggering an immediate full refresh
+- **Settings Polish**: Refined settings copy and updated sidebar background treatment for clearer light/dark mode appearance
+
+### Improved
+- **Lower Scholar Request Volume**: Reduced redundant network fetches on startup and during profile onboarding to lower rate-limit pressure
+- **Launch Responsiveness**: Startup now prefers existing local data when fresh, avoiding unnecessary immediate network work
+
+### Technical
+- Added `CitationManager.ScholarProfileSnapshot`, `fetchScholarProfileSnapshot`, `primeProfileData`, and startup refresh policy helpers
+- Added `AppDelegate.primeNewProfile(...)` and placeholder-name replacement with resolved Scholar display names
+- Added unit tests for startup refresh policy branches and snapshot/display-name parsing fallbacks
+
 ## [1.4.8] - 2026-03-09
 
 ### Added
