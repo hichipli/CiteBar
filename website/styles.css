@@ -459,6 +459,104 @@ h3 {
   font-size: 0.97rem;
 }
 
+.feature-showcase {
+  margin-top: 1.5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.feature-spotlight,
+.feature-mini {
+  border: 1px solid var(--line-300);
+  box-shadow: var(--shadow-soft);
+  position: relative;
+  overflow: hidden;
+}
+
+.feature-spotlight {
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  background:
+    radial-gradient(420px 220px at 100% 0%, rgba(245, 79, 102, 0.09), rgba(245, 79, 102, 0) 60%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 247, 255, 0.94));
+}
+
+.feature-spotlight::before,
+.feature-mini::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--ink-700), rgba(245, 79, 102, 0.72));
+}
+
+.feature-kicker {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-700);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.feature-spotlight h3,
+.feature-mini h3 {
+  margin-top: 0.6rem;
+}
+
+.feature-spotlight p,
+.feature-mini p {
+  margin: 0.62rem 0 0;
+  color: var(--text-700);
+  line-height: 1.7;
+}
+
+.feature-points {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.66rem;
+}
+
+.feature-points li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.72rem 0.8rem;
+  border-radius: 14px;
+  border: 1px solid rgba(198, 206, 243, 0.95);
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink-900);
+  line-height: 1.55;
+  font-weight: 500;
+}
+
+.feature-points li::before {
+  content: "";
+  width: 0.68rem;
+  height: 0.68rem;
+  margin-top: 0.34rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--ink-700), var(--accent-600));
+  box-shadow: 0 0 0 4px rgba(40, 53, 168, 0.08);
+}
+
+.feature-stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.feature-mini {
+  border-radius: var(--radius-md);
+  padding: 1.12rem 1.08rem 1.02rem;
+  background: rgba(255, 255, 255, 0.88);
+}
+
 .grid-3 {
   margin-top: 1.5rem;
   display: grid;
@@ -505,7 +603,7 @@ h3 {
   display: grid;
   grid-template-columns: 1.08fr 0.92fr;
   gap: 1rem;
-  align-items: start;
+  align-items: stretch;
 }
 
 .panel {
@@ -514,6 +612,9 @@ h3 {
   background: rgba(255, 255, 255, 0.92);
   padding: 1.35rem 1.3rem;
   box-shadow: var(--shadow-soft);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .panel-install {
@@ -829,7 +930,9 @@ code {
   }
 
   .install-layout,
-  .grid-3 {
+  .grid-3,
+  .feature-showcase,
+  .feature-stack {
     grid-template-columns: 1fr;
   }
 
@@ -876,6 +979,12 @@ code {
   .meta-grid {
     grid-template-columns: 1fr;
     gap: 0.5rem;
+  }
+
+  .feature-spotlight,
+  .feature-mini {
+    padding-left: 1rem;
+    padding-right: 1rem;
   }
 
   .meta-item {
