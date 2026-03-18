@@ -1,4 +1,4 @@
-.PHONY: build run test clean install package install-sudo dmg help
+.PHONY: build debug run run-debug test clean install install-sudo package dmg xcode check-docs help
 
 # Configuration variables - easy to change for different projects
 PRODUCT_NAME = CiteBar
@@ -191,6 +191,14 @@ dmg: package
 	@echo "  2. Dragging $(PRODUCT_NAME).app to the Applications folder"
 	@echo ""
 
+xcode:
+	@echo "Opening $(PRODUCT_NAME) in Xcode..."
+	open Package.swift
+
+check-docs:
+	@echo "Checking documentation command references..."
+	@python3 scripts/check-docs-consistency.py
+
 
 help:
 	@echo "Available commands:"
@@ -204,6 +212,8 @@ help:
 	@echo "  install-sudo - Create app bundle and install to /Applications with sudo"
 	@echo "  package      - Create distribution package in '$(DIST_DIR)/' folder (with ad-hoc signing)"
 	@echo "  dmg          - Create DMG distribution file (includes package step)"
+	@echo "  xcode        - Open the Swift package in Xcode"
+	@echo "  check-docs   - Verify documented make targets match this Makefile"
 	@echo "  help         - Show this help message"
 	@echo ""
 	@echo "Configuration:"

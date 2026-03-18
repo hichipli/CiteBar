@@ -88,7 +88,10 @@ make build      # Build release version
 make debug      # Build debug version (with extra logging)
 make test       # Run unit tests
 make clean      # Clean build artifacts
-make install    # Install to /Applications
+make xcode      # Open the Swift package in Xcode
+make install    # Create a local app bundle for manual install
+make install-sudo # Install to /Applications with sudo
+make check-docs # Verify documented commands stay in sync
 make help       # Show all available commands
 ```
 

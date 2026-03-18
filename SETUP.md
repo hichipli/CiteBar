@@ -27,10 +27,16 @@ make build
 make run
 ```
 
-Or install directly to Applications folder:
+Or create a local app bundle for manual install:
 
 ```bash
 make install
+```
+
+To install directly to `/Applications` from the command line:
+
+```bash
+make install-sudo
 ```
 
 ### 4. First Time Setup
@@ -75,6 +81,7 @@ make run        # Build and run
 make test       # Run tests
 make clean      # Clean build artifacts
 make xcode      # Open in Xcode
+make check-docs # Verify documented commands stay in sync
 make help       # Show all commands
 ```
 

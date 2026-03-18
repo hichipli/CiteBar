@@ -74,7 +74,10 @@ git clone https://github.com/hichipli/CiteBar.git
 cd CiteBar
 make build && make run
 
-# Or install to Applications
+# Or open the package in Xcode
+make xcode
+
+# Or create a local app bundle for manual install
 make install
 ```
 
@@ -190,9 +193,11 @@ make build      # Release build (.build/apple/Products/Release/CiteBar)
 make debug      # Debug build (.build/debug/CiteBar)
 make test       # Run unit tests
 make clean      # Clean build artifacts
+make xcode      # Open the Swift package in Xcode
 make install    # Create CiteBar.app locally (copy to /Applications manually)
 make package    # Create dist/CiteBar.app
 make dmg        # Create distribution DMG in dist/
+make check-docs # Verify documented commands stay in sync
 ```
 
 ### Code Organization
@@ -248,7 +253,7 @@ We love contributions! Whether you're fixing bugs, adding features, or improving
 ```bash
 git clone https://github.com/hichipli/CiteBar.git
 cd CiteBar
-open Package.swift  # Opens Swift package in Xcode
+make xcode         # Opens Swift package in Xcode
 ```
 
 ### Code Style
