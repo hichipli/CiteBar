@@ -51,6 +51,8 @@ cat > "$1" << EOF
     <true/>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2025 CiteBar. All rights reserved.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>CiteBar uses Apple Events only to manage the optional launch-at-login setting on older macOS configurations.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>NSSupportsAutomaticGraphicsSwitching</key>

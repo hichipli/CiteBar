@@ -5,7 +5,7 @@
   
   **Track Your Academic Impact in Real-Time**
   
-  A elegant macOS menu bar application that keeps your Google Scholar citation metrics at your fingertips.
+  An elegant macOS menu bar application that keeps your Google Scholar citation metrics at your fingertips.
 
   [![Latest Release](https://img.shields.io/github/v/release/hichipli/CiteBar?style=flat-square)](https://github.com/hichipli/CiteBar/releases)
   [![macOS](https://img.shields.io/badge/macOS-13.0+-blue?style=flat-square)](https://www.apple.com/macos/)
@@ -19,7 +19,7 @@
 
 ## Why CiteBar?
 
-Because refreshing your Google Scholar profile every 20 minutes isn't productive research. CiteBar transforms citation tracking from an obsessive browser tab into a elegant, unobtrusive companion that respects both your attention and Google's servers.
+Because refreshing your Google Scholar profile every 20 minutes isn't productive research. CiteBar transforms citation tracking from an obsessive browser tab into an elegant, unobtrusive companion that respects both your attention and Google's servers.
 
 **Perfect for:** Researchers tracking paper impact, department heads monitoring team metrics, PhD students celebrating their first citations, and anyone who's ever wondered "Did my h-index just go up?"
 
@@ -35,26 +35,13 @@ Because refreshing your Google Scholar profile every 20 minutes isn't productive
    - Double-click the DMG file when downloaded
    - Drag CiteBar.app to the Applications folder
 
-2. **Handle macOS security** (because we're not paying Apple $99/year... yet):
-   
-   **Method 1 - Using Terminal (Quickest):**
-   - Press `Cmd + Space` to open Spotlight search
-   - Type "Terminal" and press Enter
-   - Copy and paste this command, then press Enter:
-   ```bash
-   xattr -cr /Applications/CiteBar.app
-   ```
-   
-   **Method 2 - Through System Settings (No Terminal Required):**
-   - Try to run CiteBar from Applications - it will show a security warning
-   - Go to **System Settings** (or **System Preferences** on older macOS)
-   - Click **Privacy & Security** 
-   - Scroll down to the **Security** section
-   - You'll see a message about CiteBar being blocked
-   - Click **"Open Anyway"** button next to the message
+2. **Open CiteBar**:
+   - Current releases are signed with Apple Developer ID and notarized by Apple
+   - Open CiteBar from Applications
+   - macOS may show a normal first-launch confirmation for downloaded apps
 
 > **Legacy Upgrade Note:** If you're on `1.3.x` or `1.4.1`, you may need one manual upgrade first.  
-> Install the latest DMG from [Releases](https://github.com/hichipli/CiteBar/releases/latest), and after you're on `1.4.4+`, in-app automatic updates should work normally.
+> Install the latest DMG from [Releases](https://github.com/hichipli/CiteBar/releases/latest), and after you're on a current version, in-app automatic updates should work normally.
 
 3. **Set up your profile**:
    - Click the CiteBar icon in menu bar
@@ -238,9 +225,9 @@ CiteBar uses GitHub Actions for automated releases:
    - Repository variable or secret: `SPARKLE_PUBLIC_ED_KEY`
    - Repository secret: `SPARKLE_PRIVATE_KEY`
 2. Tag a version: `git tag v1.x.x && git push --tags`
-3. GitHub Actions builds DMG with version + architecture
-4. Workflow signs the DMG with EdDSA and generates `appcast.xml`
-5. Users get automatic update notifications
+3. GitHub Actions builds the universal DMG
+4. Workflow signs the app and DMG with Developer ID, notarizes with Apple, staples the ticket, and generates `appcast.xml`
+5. Users get a standard drag-to-Applications installer and automatic update notifications
 
 Maintainers: see [RELEASING.md](RELEASING.md) for full release + signing workflow.
 

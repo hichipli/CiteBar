@@ -3,10 +3,10 @@ import Foundation
 /// Centralized version management for CiteBar
 struct AppVersion {
     /// Current application version
-    static let current: String = "1.4.9"
+    static let current: String = "1.5.0"
     
     /// Current build number
-    static let build: String = "17"
+    static let build: String = "18"
     
     /// Version display string for UI
     static let displayString: String = "Version \(current)"
@@ -38,18 +38,18 @@ extension AppVersion {
     static let releaseNotes = ReleaseNotes(
         version: current,
         highlights: [
-            "Reduced redundant Scholar fetches with one-shot profile snapshot prefetch during onboarding",
-            "Startup refresh now runs only when local data is missing or stale relative to your configured interval",
-            "New profile flow now supports optional names with automatic Scholar name resolution",
-            "Settings UI polish: refined sidebar colors for light/dark mode and clearer settings copy"
+            "Public releases are now signed with Apple Developer ID and notarized by Apple",
+            "DMG installs now support the standard drag-to-Applications flow without Terminal trust workarounds",
+            "Settings now include clearer recovery paths for launch-at-login and notification permissions",
+            "Menu bar startup behavior is more robust when macOS or third-party menu managers delay status item creation"
         ],
-        description: "This release focuses on efficiency and UX polish by lowering unnecessary Scholar requests while making profile onboarding and settings interaction smoother.",
+        description: "This release focuses on distribution trust and first-run reliability, making CiteBar easier for non-technical users to download, install, and keep running.",
         technicalNotes: [
-            "Added CitationManager snapshot APIs to fetch display name + metrics from a single Scholar page request",
-            "Added staleness-aware startup refresh policy helpers and integrated them into launch flow",
-            "New profile priming now writes metrics for the added profile without forcing an immediate full refresh",
-            "Added fallback-safe Scholar name extraction from profile header, og:title, and page title",
-            "Extended test suite for startup refresh policy branches and profile snapshot/display-name parsing"
+            "Added Developer ID signing and Apple notarization support for local and GitHub Actions releases",
+            "Added explicit signing validation for the app bundle, main executable, Sparkle framework binary, nested Sparkle helpers, and DMG container",
+            "Added notarization polling, submission log capture, diagnostics artifacts, and stapled-ticket verification",
+            "Added Apple Events entitlement and usage description for the optional launch-at-login fallback path",
+            "Updated distribution documentation, release workflow checks, and website messaging for the notarized DMG release path"
         ]
     )
     

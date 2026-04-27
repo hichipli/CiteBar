@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CiteBar | Google Scholar Citation Tracker for macOS</title>
-  <meta name="description" content="CiteBar is a native macOS menu bar app for tracking Google Scholar citations. Check updates at a glance, open profiles in one click, and see recent 30-day changes.">
+  <meta name="description" content="CiteBar is a notarized native macOS menu bar app for tracking Google Scholar citations. Check updates at a glance, open profiles in one click, and see recent 30-day changes.">
   <meta name="keywords" content="CiteBar, Google Scholar, citation tracker, h-index, i10-index, macOS menu bar app, academic tool">
   <meta name="author" content="CiteBar Contributors">
   <meta name="robots" content="index,follow,max-image-preview:large">
@@ -12,13 +12,13 @@
 
   <meta property="og:type" content="website">
   <meta property="og:title" content="CiteBar | Google Scholar Citation Tracker for macOS">
-  <meta property="og:description" content="Track Google Scholar citations from your menu bar. Check updates at a glance, open profiles in one click, and see recent 30-day changes.">
+  <meta property="og:description" content="Track Google Scholar citations from your menu bar with a notarized macOS app. Check updates at a glance, open profiles in one click, and see recent 30-day changes.">
   <meta property="og:url" content="https://www.citebar.org/">
   <meta property="og:image" content="https://www.citebar.org/assets/logo-512.png">
 
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="CiteBar | Google Scholar Citation Tracker for macOS">
-  <meta name="twitter:description" content="Track Google Scholar citations from your menu bar. Check updates at a glance, open profiles in one click, and see recent 30-day changes.">
+  <meta name="twitter:description" content="Track Google Scholar citations from your menu bar with a notarized macOS app. Check updates at a glance, open profiles in one click, and see recent 30-day changes.">
   <meta name="twitter:image" content="https://www.citebar.org/assets/logo-512.png">
 
   <link rel="icon" type="image/png" sizes="32x32" href="assets/logo-128.png">
@@ -37,7 +37,7 @@
     "name": "CiteBar",
     "applicationCategory": "BusinessApplication",
     "operatingSystem": "macOS 13.0+",
-    "description": "A native macOS menu bar application that tracks Google Scholar citation metrics, opens profiles quickly, and shows recent 30-day changes.",
+    "description": "A notarized native macOS menu bar application that tracks Google Scholar citation metrics, opens profiles quickly, and shows recent 30-day changes.",
     "softwareVersion": "Dynamic (latest release)",
     "downloadUrl": "https://github.com/hichipli/CiteBar/releases/latest",
     "offers": {
@@ -78,7 +78,7 @@
         "name": "Why does macOS show 'CiteBar is damaged and can't be opened'?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "This is usually a Gatekeeper quarantine prompt for non-notarized downloads. Run xattr -cr /Applications/CiteBar.app or allow the app in Privacy & Security."
+        "text": "CiteBar 1.5.0 and later are signed with Apple Developer ID and notarized by Apple. If you see this warning, delete the download and install the latest release from the official GitHub Releases page."
         }
       },
       {
@@ -86,7 +86,7 @@
         "name": "What if macOS says 'Cannot verify developer'?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Right-click CiteBar.app in Applications, select Open, then confirm Open again in the dialog."
+        "text": "Current releases should show a verified Developer ID prompt. If macOS cannot verify the developer, make sure you downloaded version 1.5.0 or later from the official GitHub Releases page."
         }
       },
       {
@@ -94,7 +94,7 @@
         "name": "What if I am on 1.3.x or 1.4.1 and auto-update fails?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Manually install the latest DMG once. After moving to 1.4.4 or later, automatic updates should work normally."
+        "text": "Manually install the latest DMG once. After moving to a current release, automatic updates should work normally."
         }
       },
       {
@@ -154,7 +154,7 @@
             <p class="subhead">
               CiteBar brings Google Scholar updates directly to your menu bar. 
               Check your h-index at a glance, jump to profiles instantly, and monitor 30-day citation growth. 
-              Open source, free, and designed specifically for macOS.
+              Open source, free, notarized by Apple, and designed specifically for macOS.
             </p>
             <div class="hero-actions">
               <a id="download-button" class="btn btn-primary" href="https://github.com/hichipli/CiteBar/releases/latest">Download Free</a>
@@ -168,11 +168,11 @@
               </div>
               <div class="trust-item">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
-                <span>Open Source MIT</span>
+                <span>Apple Notarized</span>
               </div>
               <div class="trust-item">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
-                <span>macOS 13.0+</span>
+                <span>Open Source MIT</span>
               </div>
             </div>
           </div>
@@ -251,7 +251,7 @@
       <div class="section-inner">
         <div class="section-header reveal">
           <h2 class="section-title">Get started in seconds.</h2>
-          <p class="section-desc">Download, move to Applications, and add your Scholar profile.</p>
+          <p class="section-desc">Download the notarized DMG, move CiteBar to Applications, and add your Scholar profile.</p>
         </div>
 
         <div class="install-container reveal">
@@ -260,7 +260,7 @@
               <div class="step-num">1</div>
               <div class="step-content">
                 <h4>Download CiteBar</h4>
-                <p>Get the latest universal DMG from GitHub Releases.</p>
+                <p>Get the latest universal, notarized DMG from GitHub Releases.</p>
               </div>
             </div>
             <div class="step">
@@ -273,39 +273,22 @@
             <div class="step">
               <div class="step-num">3</div>
               <div class="step-content">
-                <h4>Fix first-launch block (if prompted)</h4>
-                <p>Because the app is open-source and not notarized by Apple, macOS might block it initially. Run this command in your Terminal to allow it:</p>
-                <div class="terminal-box">
-                  <div class="terminal-header">
-                    <div class="mac-btn close"></div>
-                    <div class="mac-btn min"></div>
-                    <div class="mac-btn max"></div>
-                  </div>
-                  <div class="terminal-body">
-                    <span class="prompt">~ %</span>
-                    <code id="quarantine-command">xattr -cr /Applications/CiteBar.app</code>
-                    <button id="copy-command-btn" class="copy-btn" type="button" aria-label="Copy command">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                      <span class="copy-text-default">Copy</span>
-                      <span class="copy-text-success">Copied!</span>
-                    </button>
-                  </div>
-                </div>
-                <p id="copy-status" class="copy-status" aria-live="polite"></p>
+                <h4>Open CiteBar</h4>
+                <p>Launch CiteBar from Applications. macOS may show a standard first-launch confirmation for downloaded apps.</p>
               </div>
             </div>
             <div class="step">
               <div class="step-num">4</div>
               <div class="step-content">
-                <h4>Launch & Add Profile</h4>
-                <p>Open the app, paste a Google Scholar profile URL into Settings, and you're all set.</p>
+                <h4>Add Profile</h4>
+                <p>Paste a Google Scholar profile URL into Settings, choose your refresh schedule, and you're all set.</p>
               </div>
             </div>
           </div>
           
           <div class="install-help">
-            <h4>Alternative Troubleshooting</h4>
-            <p>If you see <strong>"Cannot verify developer"</strong> instead, right-click <code>CiteBar.app</code> in your Applications folder, choose <strong>Open</strong>, then click <strong>Open</strong> again in the popup.</p>
+            <h4>Need Help?</h4>
+            <p>Version <code>1.5.0+</code> is signed and notarized. If macOS still blocks launch, delete the download and install the latest DMG again from the official release page.</p>
             <a href="https://github.com/hichipli/CiteBar/blob/main/DISTRIBUTION.md" target="_blank" rel="noreferrer" class="link-arrow">Read full distribution guide <span>→</span></a>
           </div>
         </div>
@@ -337,21 +320,21 @@
           <details class="faq-item" name="faq">
             <summary>Why does macOS say "CiteBar is damaged and can't be opened"?</summary>
             <div class="faq-content">
-              <p>This is a standard macOS Gatekeeper quarantine warning that occurs for direct, non-notarized software downloads. To fix it, simply open Terminal, run <code>xattr -cr /Applications/CiteBar.app</code>, and then open the app again normally.</p>
+              <p>CiteBar <code>1.5.0+</code> is signed with Apple Developer ID and notarized by Apple. If you see this warning on a current release, delete the downloaded DMG and install the latest release again from the official GitHub Releases page. Older pre-<code>1.5.0</code> builds may show this warning on newer macOS versions.</p>
             </div>
           </details>
 
           <details class="faq-item" name="faq">
             <summary>What if macOS says "Cannot verify developer"?</summary>
             <div class="faq-content">
-              <p>Open your Applications folder, right-click (or Control-click) on <code>CiteBar.app</code>, select <strong>Open</strong> from the context menu, and then click <strong>Open</strong> again in the dialog box.</p>
+              <p>Current releases should show a verified Developer ID prompt. If macOS cannot verify the developer, make sure you downloaded CiteBar <code>1.5.0+</code> from the official GitHub Releases page.</p>
             </div>
           </details>
 
           <details class="faq-item" name="faq">
             <summary>I am on version 1.3.x or 1.4.1 and auto-update fails. What should I do?</summary>
             <div class="faq-content">
-              <p>Manually download and install the latest DMG from GitHub this one time. After you have upgraded to version <code>1.4.4+</code> or newer, the in-app automatic update feature will work normally for future releases.</p>
+              <p>Manually download and install the latest DMG from GitHub this one time. After you have upgraded to a current release, the in-app automatic update feature should work normally for future releases.</p>
             </div>
           </details>
 

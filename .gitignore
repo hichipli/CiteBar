@@ -58,6 +58,7 @@ Temporary Items
 
 # Logs
 *.log
+notary-log*.json
 
 # Sparkle signing keys
 .sparkle/private_ed_key.txt
