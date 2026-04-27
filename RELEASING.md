@@ -2,6 +2,19 @@
 
 This document is for maintainers publishing a new release.
 
+## One-Time Apple Developer ID Setup
+
+CiteBar release DMGs are signed with Developer ID and notarized by Apple. Complete `APPLE_DISTRIBUTION.md` before publishing a public release.
+
+Required GitHub secrets:
+
+- `DEVELOPER_ID_APPLICATION`
+- `MACOS_CERTIFICATE_P12`
+- `MACOS_CERTIFICATE_PASSWORD`
+- `APPLE_ID`
+- `APPLE_TEAM_ID`
+- `APP_SPECIFIC_PASSWORD`
+
 ## One-Time Sparkle Signing Setup
 
 To make automatic updates pass signature validation:
@@ -86,4 +99,12 @@ git push origin v1.x.y
 gh run list --workflow Release --limit 3
 curl -fsSL https://github.com/hichipli/CiteBar/releases/latest/download/appcast.xml \
   | grep -E "sparkle:edSignature|sparkle:shortVersionString|sparkle:version"
+```
+
+For local release candidate verification:
+
+```bash
+make notarize \
+  SIGN_IDENTITY="Developer ID Application: Your Legal Name (TEAMID1234)" \
+  NOTARY_PROFILE="CiteBar Notary"
 ```

@@ -1,9 +1,15 @@
-.PHONY: build debug run run-debug test clean install install-sudo package dmg xcode check-docs help
+.PHONY: build debug run run-debug test clean install install-sudo package dmg notarize xcode check-docs help
 
 # Configuration variables - easy to change for different projects
 PRODUCT_NAME = CiteBar
 SCHEME = CiteBar
 BUILD_DIR = .build
+SIGN_IDENTITY ?= -
+ENTITLEMENTS_FILE ?= CiteBar.entitlements
+NOTARY_PROFILE ?=
+APPLE_ID ?=
+APPLE_TEAM_ID ?=
+APP_SPECIFIC_PASSWORD ?=
 
 # Extract version from AppVersion.swift (primary source)
 VERSION = $(shell grep 'static let current' Sources/CiteBar/AppVersion.swift | cut -d'"' -f2)
@@ -78,12 +84,8 @@ install: build
 	@if [ -d "$(PRODUCT_NAME).app/Contents/Frameworks/Sparkle.framework" ]; then \
 		echo "🔧 Fixing rpath for Sparkle framework..."; \
 		install_name_tool -add_rpath @loader_path/../Frameworks "$(PRODUCT_NAME).app/Contents/MacOS/$(PRODUCT_NAME)" 2>/dev/null || true; \
-		echo "🔏 Re-signing Sparkle framework..."; \
-		codesign --force --deep --sign - "$(PRODUCT_NAME).app/Contents/Frameworks/Sparkle.framework" 2>/dev/null || true; \
 	fi
-	# Apply ad-hoc code signing
-	@echo "🔐 Applying ad-hoc code signature..."
-	@codesign --force --deep --sign - "$(PRODUCT_NAME).app" || echo "⚠️  Warning: Code signing failed"
+	@SIGN_IDENTITY="$(SIGN_IDENTITY)" ENTITLEMENTS_FILE="$(ENTITLEMENTS_FILE)" ./scripts/sign-app.sh "$(PRODUCT_NAME).app" "$(PRODUCT_NAME)"
 	@echo "App bundle created: $(PRODUCT_NAME).app"
 	@echo ""
 	@echo "To complete installation:"
@@ -112,12 +114,8 @@ install-sudo: build
 	@if [ -d "$(PRODUCT_NAME).app/Contents/Frameworks/Sparkle.framework" ]; then \
 		echo "🔧 Fixing rpath for Sparkle framework..."; \
 		install_name_tool -add_rpath @loader_path/../Frameworks "$(PRODUCT_NAME).app/Contents/MacOS/$(PRODUCT_NAME)" 2>/dev/null || true; \
-		echo "🔏 Re-signing Sparkle framework..."; \
-		codesign --force --deep --sign - "$(PRODUCT_NAME).app/Contents/Frameworks/Sparkle.framework" 2>/dev/null || true; \
 	fi
-	# Apply ad-hoc code signing before installation
-	@echo "🔐 Applying ad-hoc code signature..."
-	@codesign --force --deep --sign - "$(PRODUCT_NAME).app" || echo "⚠️  Warning: Code signing failed"
+	@SIGN_IDENTITY="$(SIGN_IDENTITY)" ENTITLEMENTS_FILE="$(ENTITLEMENTS_FILE)" ./scripts/sign-app.sh "$(PRODUCT_NAME).app" "$(PRODUCT_NAME)"
 	sudo cp -r "$(PRODUCT_NAME).app" /Applications/
 	# Force macOS to refresh icon cache
 	sudo touch "/Applications/$(PRODUCT_NAME).app"
@@ -125,6 +123,7 @@ install-sudo: build
 
 package: build
 	@echo "Creating installer package in '$(DIST_DIR)/'..."
+	@rm -rf "$(APP_BUNDLE)"
 	@mkdir -p "$(DIST_DIR)"
 	@mkdir -p "$(APP_BUNDLE)/Contents/MacOS"
 	@mkdir -p "$(APP_BUNDLE)/Contents/Resources"
@@ -133,7 +132,7 @@ package: build
 	@# Copy Sparkle framework if it exists
 	@if [ -d "$(RELEASE_SPARKLE_FRAMEWORK)" ]; then \
 		mkdir -p "$(APP_BUNDLE)/Contents/Frameworks"; \
-		cp -R "$(RELEASE_SPARKLE_FRAMEWORK)" "$(APP_BUNDLE)/Contents/Frameworks/"; \
+		ditto "$(RELEASE_SPARKLE_FRAMEWORK)" "$(APP_BUNDLE)/Contents/Frameworks/Sparkle.framework"; \
 		echo "✅ Copied Sparkle framework"; \
 	else \
 		echo "⚠️  Warning: Sparkle framework not found"; \
@@ -155,20 +154,17 @@ package: build
 	@if [ -d "$(APP_BUNDLE)/Contents/Frameworks/Sparkle.framework" ]; then \
 		echo "🔧 Fixing rpath for Sparkle framework..."; \
 		install_name_tool -add_rpath @loader_path/../Frameworks "$(APP_BUNDLE)/Contents/MacOS/$(PRODUCT_NAME)" 2>/dev/null || true; \
-		echo "🔏 Re-signing Sparkle framework..."; \
-		codesign --force --deep --sign - "$(APP_BUNDLE)/Contents/Frameworks/Sparkle.framework" 2>/dev/null || true; \
 	fi
-	@# Apply ad-hoc code signing to prevent "damaged" error on other machines
-	@echo "🔐 Applying ad-hoc code signature..."
-	@codesign --force --deep --sign - "$(APP_BUNDLE)" || { echo "⚠️  Warning: Code signing failed, app may show as damaged on other machines"; }
+	@SIGN_IDENTITY="$(SIGN_IDENTITY)" ENTITLEMENTS_FILE="$(ENTITLEMENTS_FILE)" ./scripts/sign-app.sh "$(APP_BUNDLE)" "$(PRODUCT_NAME)" || { echo "⚠️  Warning: Code signing failed, app may show as damaged on other machines"; exit 1; }
 	@echo "✅ Package created: $(APP_BUNDLE)"
 
 dmg: package
 	@echo "Creating DMG distribution package..."
 	@# Create a temporary directory for DMG contents
+	@rm -rf "$(DMG_TEMP_DIR)"
 	@mkdir -p "$(DMG_TEMP_DIR)"
 	@# Copy the app to the temp directory
-	@cp -r "$(APP_BUNDLE)" "$(DMG_TEMP_DIR)/" || { echo "❌ Failed to copy app bundle"; exit 1; }
+	@ditto "$(APP_BUNDLE)" "$(DMG_TEMP_DIR)/$(PRODUCT_NAME).app" || { echo "❌ Failed to copy app bundle"; exit 1; }
 	@# Create Applications symlink for easy installation
 	@ln -sf /Applications "$(DMG_TEMP_DIR)/Applications"
 	@# Create the DMG
@@ -177,6 +173,11 @@ dmg: package
 		-srcfolder "$(DMG_TEMP_DIR)" \
 		-ov -format UDZO \
 		"$(DIST_DIR)/$(DMG_NAME).dmg" || { echo "❌ Failed to create DMG"; rm -rf "$(DMG_TEMP_DIR)"; exit 1; }
+	@if [ "$(SIGN_IDENTITY)" != "-" ]; then \
+		echo "🔐 Signing DMG with Developer ID..."; \
+		codesign --force --timestamp --sign "$(SIGN_IDENTITY)" "$(DIST_DIR)/$(DMG_NAME).dmg"; \
+		codesign --verify --verbose=4 "$(DIST_DIR)/$(DMG_NAME).dmg"; \
+	fi
 	@# Clean up temp directory
 	@rm -rf "$(DMG_TEMP_DIR)"
 	@echo ""
@@ -190,6 +191,10 @@ dmg: package
 	@echo "  1. Double-clicking the DMG file"
 	@echo "  2. Dragging $(PRODUCT_NAME).app to the Applications folder"
 	@echo ""
+
+notarize: dmg
+	@DMG_FILE="$$(ls -t "$(DIST_DIR)"/$(PRODUCT_NAME)-$(VERSION)-$(ARCH_NAME)-*.dmg | head -1)"; \
+	NOTARY_PROFILE="$(NOTARY_PROFILE)" APPLE_ID="$(APPLE_ID)" APPLE_TEAM_ID="$(APPLE_TEAM_ID)" APP_SPECIFIC_PASSWORD="$(APP_SPECIFIC_PASSWORD)" ./scripts/notarize-dmg.sh "$$DMG_FILE"
 
 xcode:
 	@echo "Opening $(PRODUCT_NAME) in Xcode..."
@@ -212,6 +217,7 @@ help:
 	@echo "  install-sudo - Create app bundle and install to /Applications with sudo"
 	@echo "  package      - Create distribution package in '$(DIST_DIR)/' folder (with ad-hoc signing)"
 	@echo "  dmg          - Create DMG distribution file (includes package step)"
+	@echo "  notarize     - Create DMG, submit it to Apple notary service, and staple ticket"
 	@echo "  xcode        - Open the Swift package in Xcode"
 	@echo "  check-docs   - Verify documented make targets match this Makefile"
 	@echo "  help         - Show this help message"
@@ -223,6 +229,5 @@ help:
 	@echo "  DMG_NAME:     $(DMG_NAME)"
 	@echo ""
 	@echo "Code Signing:"
-	@echo "  All build targets now include ad-hoc signing to prevent 'damaged' errors"
-	@echo "  when distributing via GitHub or other networks. See DISTRIBUTION.md for"
-	@echo "  user installation instructions and troubleshooting."
+	@echo "  SIGN_IDENTITY defaults to '-' for ad-hoc local builds."
+	@echo "  Use SIGN_IDENTITY='Developer ID Application: ... (TEAMID)' for public releases."

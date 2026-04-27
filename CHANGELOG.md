@@ -5,6 +5,31 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-04-27
+
+### Added
+- **Apple Developer ID Distribution**: Public releases are now signed with Apple Developer ID and notarized by Apple so macOS can verify CiteBar on first launch
+- **Signed DMG Release Path**: Release packaging now signs the app bundle, main executable, Sparkle framework binary, nested Sparkle helpers, and DMG container before notarization
+- **Notarization Diagnostics**: Local and GitHub Actions release flows now capture submission IDs, polling results, Apple notary logs, signing diagnostics, and uploaded CI artifacts for troubleshooting
+- **Permission Recovery Guidance**: Settings now provide guided recovery actions for launch-at-login and notification permissions
+- **Menu Bar Compatibility Guidance**: Settings now explain menu bar manager delays and offer clearer recovery paths when macOS delays status item creation
+
+### Changed
+- **Distribution UX**: The standard release artifact is now a notarized drag-to-Applications DMG intended to install without Terminal commands or manual Gatekeeper workarounds
+- **Release Documentation**: Added Apple Developer setup, local release verification, GitHub Secrets setup, and support escalation guidance for notarization issues
+- **Website Messaging**: Refined landing page messaging and feature layout to focus on the product workflow and simpler install story
+
+### Fixed
+- **Settings Window Positioning**: Settings now stays centered when opened or reopened from the menu bar
+- **Status Item Robustness**: Menu bar startup handling now recovers more gracefully when status item creation is delayed
+
+### Technical
+- Added `CiteBar.entitlements`, `scripts/sign-app.sh`, and `scripts/notarize-dmg.sh`
+- Added `NSAppleEventsUsageDescription` for the optional AppleScript launch-at-login fallback
+- Updated GitHub Actions release workflow to import Developer ID certificates, validate signatures, notarize, staple, and upload diagnostics
+- Updated DMG packaging to start from clean staging directories, copy bundles with `ditto`, sign the DMG container, and verify signing before notarization
+- Added documentation consistency checks and a Makefile `xcode` helper target
+
 ## [1.4.9] - 2026-03-10
 
 ### Added
@@ -426,11 +451,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ ] Push notifications for citation updates
 - [ ] Advanced profile management (bulk import, profile templates)
 
-### [1.5.0] - Planned
-- [ ] Apple App Store distribution
+### [1.6.0] - Planned
 - [ ] Performance optimizations
 - [ ] Additional citation metrics
 - [ ] Enhanced notification settings
+- [ ] Mac App Store distribution exploration
 
 ### [2.0.0] - Future
 - [ ] Integration with other academic platforms

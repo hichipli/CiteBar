@@ -62,6 +62,7 @@ func extractVersion(from content: String) -> String {
 let version = extractVersion(from: content)
 let highlights = extractArray(from: content, arrayName: "highlights")
 let description = extractDescription(from: content)
+let technicalNotes = extractArray(from: content, arrayName: "technicalNotes")
 
 if format == "html" {
     // Generate HTML for Sparkle appcast
@@ -78,6 +79,14 @@ if format == "html" {
         markdown += "- ✨ \(highlight)\n"
     }
     markdown += "\n\(description)\n\n"
+
+    if !technicalNotes.isEmpty {
+        markdown += "### Technical Improvements\n\n"
+        for note in technicalNotes {
+            markdown += "- \(note)\n"
+        }
+        markdown += "\n"
+    }
     
     markdown += """
     ## Installation

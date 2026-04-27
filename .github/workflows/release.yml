@@ -10,6 +10,11 @@ on:
         description: 'Version to release (e.g., 1.3.1)'
         required: true
         type: string
+      dry_run:
+        description: 'Build, sign, notarize, and upload artifacts without publishing a GitHub Release'
+        required: false
+        default: true
+        type: boolean
 
 # Grant GITHUB_TOKEN the permissions required to make releases
 permissions:
@@ -66,6 +71,54 @@ jobs:
         fi
         
         echo "SPARKLE_PUBLIC_ED_KEY=$PUBLIC_ED_KEY" >> $GITHUB_ENV
+
+    - name: Validate Apple signing configuration
+      env:
+        DEVELOPER_ID_APPLICATION: ${{ secrets.DEVELOPER_ID_APPLICATION }}
+        MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+        MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        APP_SPECIFIC_PASSWORD: ${{ secrets.APP_SPECIFIC_PASSWORD }}
+      run: |
+        missing=0
+        for name in DEVELOPER_ID_APPLICATION MACOS_CERTIFICATE_P12 MACOS_CERTIFICATE_PASSWORD APPLE_ID APPLE_TEAM_ID APP_SPECIFIC_PASSWORD; do
+          if [ -z "${!name}" ]; then
+            echo "Error: Missing GitHub secret: $name"
+            missing=1
+          fi
+        done
+
+        if [ "$missing" -ne 0 ]; then
+          exit 1
+        fi
+
+    - name: Import Developer ID certificate
+      env:
+        DEVELOPER_ID_APPLICATION: ${{ secrets.DEVELOPER_ID_APPLICATION }}
+        MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+        MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      run: |
+        CERTIFICATE_PATH="$RUNNER_TEMP/developer_id_application.p12"
+        KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+        KEYCHAIN_PASSWORD="${KEYCHAIN_PASSWORD:-temporary-password-${{ github.run_id }}}"
+
+        echo "$MACOS_CERTIFICATE_P12" | base64 --decode > "$CERTIFICATE_PATH"
+
+        security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+        security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+        security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/"//g')
+        security default-keychain -s "$KEYCHAIN_PATH"
+        security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+        security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+        if ! security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -F "$DEVELOPER_ID_APPLICATION"; then
+          echo "Error: Developer ID identity not found in keychain: $DEVELOPER_ID_APPLICATION"
+          exit 1
+        fi
         
     - name: Update version in code
       run: |
@@ -111,6 +164,7 @@ jobs:
         make package
       env:
         SPARKLE_PUBLIC_ED_KEY: ${{ env.SPARKLE_PUBLIC_ED_KEY }}
+        SIGN_IDENTITY: ${{ secrets.DEVELOPER_ID_APPLICATION }}
         
     - name: Create DMG
       run: |
@@ -138,6 +192,53 @@ jobs:
           ls -la dist/
           exit 1
         fi
+      env:
+        SPARKLE_PUBLIC_ED_KEY: ${{ env.SPARKLE_PUBLIC_ED_KEY }}
+        SIGN_IDENTITY: ${{ secrets.DEVELOPER_ID_APPLICATION }}
+
+    - name: Capture signing diagnostics
+      run: |
+        set -o pipefail
+        mkdir -p dist/notary-logs
+        {
+          echo "DMG:"
+          ls -lh "dist/${{ steps.dmg_name.outputs.DMG_NAME }}.dmg"
+          codesign --verify --verbose=4 "dist/${{ steps.dmg_name.outputs.DMG_NAME }}.dmg"
+          codesign -dv --verbose=4 "dist/${{ steps.dmg_name.outputs.DMG_NAME }}.dmg"
+          echo
+          echo "App bundle verification:"
+          codesign --verify --strict --deep --verbose=4 dist/CiteBar.app
+          echo
+          echo "Main executable verification:"
+          codesign --verify --strict --verbose=4 dist/CiteBar.app/Contents/MacOS/CiteBar
+          codesign -dv --verbose=4 dist/CiteBar.app/Contents/MacOS/CiteBar
+          echo
+          echo "Sparkle framework binary verification:"
+          codesign --verify --strict --verbose=4 dist/CiteBar.app/Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle
+          codesign -dv --verbose=4 dist/CiteBar.app/Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle
+          echo
+          echo "Gatekeeper pre-notarization assessment:"
+          spctl -a -vvv -t exec dist/CiteBar.app || true
+        } 2>&1 | tee dist/notary-logs/signing-diagnostics.txt
+
+    - name: Notarize and staple DMG
+      env:
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        APP_SPECIFIC_PASSWORD: ${{ secrets.APP_SPECIFIC_PASSWORD }}
+        NOTARY_TIMEOUT_SECONDS: 3600
+      run: |
+        scripts/notarize-dmg.sh "dist/${{ steps.dmg_name.outputs.DMG_NAME }}.dmg"
+
+    - name: Upload notarization diagnostics
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: notarization-diagnostics-${{ steps.get_version.outputs.TAG }}
+        path: |
+          dist/notary-logs/**
+        if-no-files-found: warn
+        retention-days: 14
 
     - name: Build Sparkle sign_update tool
       run: |
@@ -211,8 +312,22 @@ jobs:
         # Generate release notes from AppVersion.swift
         RELEASE_NOTES_MARKDOWN=$(swift scripts/extract-release-notes.swift markdown)
         echo "$RELEASE_NOTES_MARKDOWN" > release-notes.md
+
+    - name: Upload dry-run release artifacts
+      if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == true }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: citebar-${{ steps.dmg_name.outputs.VERSION_FROM_FILE }}-dry-run-release
+        path: |
+          dist/${{ steps.dmg_name.outputs.DMG_NAME }}.dmg
+          appcast.xml
+          release-notes.md
+          dist/notary-logs/**
+        if-no-files-found: error
+        retention-days: 14
         
     - name: Publish Release
+      if: ${{ github.event_name == 'push' || inputs.dry_run == false }}
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ steps.get_version.outputs.TAG }}
