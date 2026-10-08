@@ -88,8 +88,8 @@ final class CiteBarTests: XCTestCase {
     }
     
     func testRefreshIntervalSeconds() {
-        XCTAssertEqual(AppSettings.RefreshInterval.hourly.seconds, 60 * 60)
-        XCTAssertEqual(AppSettings.RefreshInterval.sixHours.seconds, 6 * 60 * 60)
+        XCTAssertEqual(AppSettings.RefreshInterval.allCases, [.twelveHours, .daily, .twoDays])
+        XCTAssertEqual(AppSettings.RefreshInterval.twelveHours.seconds, 12 * 60 * 60)
         XCTAssertEqual(AppSettings.RefreshInterval.daily.seconds, 24 * 60 * 60)
         XCTAssertEqual(AppSettings.RefreshInterval.twoDays.seconds, 48 * 60 * 60)
     }
@@ -101,10 +101,12 @@ final class CiteBarTests: XCTestCase {
 
         let oldFifteenMinutes = try JSONEncoder().encode(["refreshInterval": "15min"])
         let oldThreeHours = try JSONEncoder().encode(["refreshInterval": "3hours"])
+        let oldSixHours = try JSONEncoder().encode(["refreshInterval": "6hours"])
         let unknownValue = try JSONEncoder().encode(["refreshInterval": "legacy-value"])
 
-        XCTAssertEqual(try JSONDecoder().decode(Wrapper.self, from: oldFifteenMinutes).refreshInterval, .hourly)
-        XCTAssertEqual(try JSONDecoder().decode(Wrapper.self, from: oldThreeHours).refreshInterval, .sixHours)
+        XCTAssertEqual(try JSONDecoder().decode(Wrapper.self, from: oldFifteenMinutes).refreshInterval, .twelveHours)
+        XCTAssertEqual(try JSONDecoder().decode(Wrapper.self, from: oldThreeHours).refreshInterval, .twelveHours)
+        XCTAssertEqual(try JSONDecoder().decode(Wrapper.self, from: oldSixHours).refreshInterval, .twelveHours)
         XCTAssertEqual(try JSONDecoder().decode(Wrapper.self, from: unknownValue).refreshInterval, .daily)
     }
     

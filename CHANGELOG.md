@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Stats Card**: Save a 3:4 "Citation Record" image (total, this year, 30-day growth, h-index, i10-index, citations per year, most cited papers) to Downloads; it is also copied to the clipboard
 
 ### Changed
+- **Refresh Intervals**: Choose every 12 hours, once daily (default), or every 2 days. Google Scholar updates every day or two, so shorter intervals only added requests; settings saved with 1-hour or 6-hour intervals move to 12 hours
 - **Settings**: Native toolbar tabs (Profiles, General, About) with grouped forms. First launch opens straight into Add Profiles
 - **Change-Only Notifications**: Refresh notifications are posted only when citations changed, including after startup refreshes; "no change" notifications are gone
 

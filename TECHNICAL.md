@@ -72,7 +72,7 @@ The integration is designed around public profile pages:
 - Profiles can carry an optional `group`; the panel and Settings show groups with combined totals.
 - Per-paper counts from the latest refresh are stored in `papers.json` and compared with the next refresh to find newly cited papers and the citations needed for the next h-index.
 - Historical trend tracking supports growth indicators.
-- Refresh intervals are user-configurable, from 1 hour to 2 days.
+- Refresh intervals are user-configurable: every 12 hours, once daily (default), or every 2 days.
 - Settings use an `NSTabViewController` with toolbar tabs, one SwiftUI pane per tab.
 - Debug builds accept `-CiteBarDebugOpen panel|card|profiles|general|about` (and `-CiteBarDebugDark YES`) to open UI at launch, useful for screenshots with `CFFIXED_USER_HOME` pointing at demo data.
 - Multiple scholar profiles can be tracked in one app instance.

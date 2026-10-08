@@ -170,15 +170,13 @@ struct AppSettings: Codable {
     }
     
     enum RefreshInterval: String, CaseIterable, Codable {
-        case hourly = "1hour"
-        case sixHours = "6hours"
+        case twelveHours = "12hours"
         case daily = "24hours"
         case twoDays = "48hours"
         
         var displayName: String {
             switch self {
-            case .hourly: return "Every hour"
-            case .sixHours: return "Every 6 hours"
+            case .twelveHours: return "Every 12 hours"
             case .daily: return "Once daily"
             case .twoDays: return "Every 2 days"
             }
@@ -186,24 +184,20 @@ struct AppSettings: Codable {
         
         var seconds: TimeInterval {
             switch self {
-            case .hourly: return 60 * 60
-            case .sixHours: return 6 * 60 * 60
+            case .twelveHours: return 12 * 60 * 60
             case .daily: return 24 * 60 * 60
             case .twoDays: return 48 * 60 * 60
             }
         }
 
+        /// Shorter intervals from earlier versions map to the shortest one offered now.
         init(from decoder: Decoder) throws {
             let container = try decoder.singleValueContainer()
             let rawValue = try container.decode(String.self)
 
             switch rawValue {
-            case Self.hourly.rawValue, "15min", "30min":
-                self = .hourly
-            case Self.sixHours.rawValue, "3hours":
-                self = .sixHours
-            case Self.daily.rawValue:
-                self = .daily
+            case Self.twelveHours.rawValue, "15min", "30min", "1hour", "3hours", "6hours":
+                self = .twelveHours
             case Self.twoDays.rawValue:
                 self = .twoDays
             default:
