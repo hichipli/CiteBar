@@ -327,6 +327,11 @@ actor StorageManager {
         return records.map { ($0.timestamp, $0.citationCount) }
     }
     
+    func records(for profileId: String) async -> [CitationRecord] {
+        await ensureInitialized()
+        return citationHistory.filter { $0.profileId == profileId }
+    }
+
     func getAllRecords() async -> [CitationRecord] {
         await ensureInitialized()
         return citationHistory

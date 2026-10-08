@@ -480,25 +480,68 @@ final class CiteBarTests: XCTestCase {
     }
 
     @MainActor
-    func testStatsCardRendersAtTwiceSocialSize() throws {
-        var metrics = ProfileMetrics(
-            citationCount: 1_284,
-            hIndex: 13,
-            i10Index: 15,
-            citationsByYear: [2019: 12, 2020: 40, 2021: 88, 2022: 140, 2023: 205, 2024: 301, 2025: 347, 2026: 312]
-        )
-        metrics.topPapers = [
-            ScholarPaper(id: "a", title: "Intelligent Productivity Transformation: Corporate Market Demand Forecasting with the Aid of an AI Virtual Assistant", citations: 412, citedByURL: nil),
-            ScholarPaper(id: "b", title: "A Human-Centered Framework for Transparent, Responsible, and Collaborative AI-Assisted Instructional Design", citations: 208, citedByURL: nil),
-            ScholarPaper(id: "c", title: "Post-pandemic Reflections", citations: 97, citedByURL: nil)
+    func testStatsCardRendersEveryThemeAtTwiceSocialSize() throws {
+        var content = CardContent(name: "Elena Varga", date: Date(), citations: 1_284)
+        content.hIndex = 13
+        content.i10Index = 15
+        content.chart = [2023: 205, 2024: 301, 2025: 347, 2026: 312]
+        content.yearCitations = 312
+        content.milestone = 1_000
+        content.note = "Thank you to everyone who cited our work."
+        content.papers = [
+            ScholarPaper(id: "a", title: "Measuring Productive Struggle in Online Mathematics Practice", citations: 412, citedByURL: nil, year: 2019)
         ]
-        let png = try XCTUnwrap(StatsCard(name: "Hongming (Chip) Li", metrics: metrics, recentGrowth: 27, recentGrowthDays: 30).pngData())
-        let image = try XCTUnwrap(NSBitmapImageRep(data: png))
-        XCTAssertEqual(image.pixelsWide, 1800)
-        XCTAssertEqual(image.pixelsHigh, 2400)
-        if let preview = ProcessInfo.processInfo.environment["CITEBAR_CARD_PREVIEW"] {
-            try png.write(to: URL(fileURLWithPath: preview))
+        for theme in CardTheme.allCases {
+            let png = try XCTUnwrap(StatsCard(content: content, theme: theme).pngData(), "\(theme)")
+            let image = try XCTUnwrap(NSBitmapImageRep(data: png))
+            XCTAssertEqual(image.pixelsWide, 1800, "\(theme)")
+            XCTAssertEqual(image.pixelsHigh, 2400, "\(theme)")
+            if let folder = ProcessInfo.processInfo.environment["CITEBAR_CARD_PREVIEW_DIR"] {
+                try png.write(to: URL(fileURLWithPath: folder).appendingPathComponent("card-\(theme.rawValue).png"))
+            }
         }
+    }
+
+    func testGazetteHeadlines() {
+        var content = CardContent(name: "Hongming (Chip) Li", date: Date(timeIntervalSince1970: 1_791_000_000), citations: 1_284)
+        content.milestone = 1_000
+        XCTAssertEqual(StatsCard.gazetteHeadline(for: content).headline, "Li Passes 1,000 Citations")
+
+        content.milestone = nil
+        content.growth = CardGrowthValue(value: 27, days: 30, isPartial: false, startDate: Date())
+        XCTAssertEqual(StatsCard.gazetteHeadline(for: content).headline, "Li Cited 27 Times in the Last 30 Days")
+
+        content.growth = nil
+        XCTAssertEqual(StatsCard.gazetteHeadline(for: content).headline, "Li's Work Now Cited 1,284 Times")
+    }
+
+    func testTimelinePointsEstimatesAndMoments() {
+        let calendar = Calendar.current
+        func date(_ y: Int, _ m: Int, _ d: Int, _ h: Int = 10) -> Date {
+            calendar.date(from: DateComponents(year: y, month: m, day: d, hour: h))!
+        }
+        let byYear = [2023: 40, 2024: 50, 2025: 5]
+        let records = [
+            CitationRecord(profileId: "p", citationCount: 95, hIndex: 4, citationsByYear: byYear, timestamp: date(2025, 1, 10, 9)),
+            CitationRecord(profileId: "p", citationCount: 96, hIndex: 4, citationsByYear: byYear, timestamp: date(2025, 1, 10, 18)),
+            CitationRecord(profileId: "p", citationCount: 101, hIndex: 5, citationsByYear: byYear, timestamp: date(2025, 2, 1)),
+            CitationRecord(profileId: "p", citationCount: 110, hIndex: 5, citationsByYear: byYear, timestamp: date(2025, 3, 1))
+        ]
+        let timeline = CitationTimeline(records: records)
+
+        // Two year-end estimates (2023: 40, 2024: 90), then one point per tracked day.
+        XCTAssertEqual(timeline.points.map(\.citations), [40, 90, 96, 101, 110])
+        XCTAssertEqual(timeline.points.map(\.isEstimate), [true, true, false, false, false])
+        XCTAssertEqual(timeline.firstTrackedDate, date(2025, 1, 10, 18))
+
+        XCTAssertEqual(timeline.moments.map(\.kind), [.citations(10), .citations(25), .citations(50), .citations(100), .hIndex(5)])
+        XCTAssertTrue(timeline.moments[0].isEstimate)
+        XCTAssertFalse(timeline.moments[3].isEstimate, "100 was crossed between two tracked days")
+        XCTAssertEqual(timeline.milestone(on: date(2025, 2, 1, 20)), 100)
+
+        XCTAssertEqual(timeline.point(at: date(2025, 2, 15))?.citations, 101)
+        let growth = timeline.growth(endingAt: date(2025, 3, 2), days: 30)
+        XCTAssertEqual(growth?.value, 14, "From the Jan 10 point (96) to Mar 1 (110), since nothing is 30 days back")
     }
 
     func testScholarIDParser() {
