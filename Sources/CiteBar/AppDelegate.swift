@@ -9,6 +9,7 @@ import Carbon
     var menuBarManager: MenuBarManager?
     var citationManager: CitationManager?
     var settingsWindow: NSWindow?
+    private var cardWindow: NSWindow?
     
     // Shared settings manager for checking first launch
     private let settingsManager = SettingsManager.shared
@@ -168,18 +169,35 @@ import Carbon
     
     private func finishStartupFlow() {
 #if DEBUG
-        // `-CiteBarDebugOpen panel|card|profiles|general|about` opens UI (or saves a stats card) at launch;
+        // `-CiteBarDebugOpen panel|card|profiles|general|data|backup|about` opens that UI at launch
+        // (`backup` also runs a backup first);
         // `-CiteBarDebugDark YES` forces dark mode.
         if UserDefaults.standard.bool(forKey: "CiteBarDebugDark") {
             NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
+        // `-CiteBarDebugImport <path>` imports a backup at launch.
+        if let path = UserDefaults.standard.string(forKey: "CiteBarDebugImport"),
+           let storage = citationManager?.storageManager,
+           let archive = try? DataManager.readArchive(at: URL(fileURLWithPath: path)) {
+            Task { @MainActor [weak self] in
+                let result = await DataManager.importArchive(archive, storage: storage)
+                print("Debug import: \(result.addedProfiles) profiles, \(result.addedRecords) records")
+                self?.updateMenuBarDisplay()
+            }
         }
         if let target = UserDefaults.standard.string(forKey: "CiteBarDebugOpen") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
                 switch target {
                 case "panel": self?.menuBarManager?.togglePanel()
-                case "card": self?.menuBarManager?.saveStatsCard()
+                case "card": self?.showCardStudio()
                 case "general": self?.showSettings(pane: .general)
                 case "about": self?.showSettings(pane: .about)
+                case "data": self?.showSettings(pane: .data)
+                case "backup":
+                    if let storage = self?.citationManager?.storageManager {
+                        Task { await DataManager.backUp(storage: storage) }
+                    }
+                    self?.showSettings(pane: .data)
                 default: self?.showSettings(pane: .profiles)
                 }
             }
@@ -534,6 +552,23 @@ import Carbon
         window.setFrameOrigin(origin)
     }
     
+    /// Opens the Citation Record window with a preview of the menu bar profile's card.
+    func showCardStudio() {
+        cardWindow?.close()
+        let host = NSHostingController(rootView: CardStudioView(model: menuBarManager?.model ?? DashboardModel()))
+        host.sizingOptions = [.preferredContentSize]
+        let window = NSWindow(contentViewController: host)
+        window.title = "Citation Record"
+        window.titleVisibility = .hidden
+        window.styleMask = [.titled, .closable]
+        window.isReleasedWhenClosed = false
+        window.isRestorable = false
+        cardWindow = window
+        positionSettingsWindowAtScreenCenter(window)
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     @objc func showSupport() {
         showSettings(pane: .about)
     }

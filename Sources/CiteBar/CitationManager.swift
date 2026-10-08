@@ -11,7 +11,7 @@ import UserNotifications
 
     weak var delegate: CitationManagerDelegate?
     private let settingsManager = SettingsManager.shared
-    private let storageManager = StorageManager()
+    let storageManager = StorageManager()
     private var refreshTimer: Timer?
     private let urlSession: URLSession
     private var isChecking = false
@@ -337,6 +337,7 @@ import UserNotifications
             // their last known data.
             updateMenuBarWithCurrentData()
             notifyIfNeeded(changes: changes, milestones: milestones)
+            await DataManager.backUpIfEnabled(storage: storageManager)
         } else {
             // Keep showing historical data when the network fails; only surface an
             // error when there is nothing stored for the active profiles.
@@ -400,7 +401,7 @@ import UserNotifications
         )
         if let profilePapers = await storageManager.getProfilePapers(for: profile.id) {
             if let hIndex = record.hIndex {
-                metrics.citationsToNextHIndex = StorageManager.computeCitationsToNextHIndex(
+                metrics.nextHIndexStep = StorageManager.computeNextHIndexStep(
                     hIndex: hIndex,
                     papers: profilePapers.papers
                 )

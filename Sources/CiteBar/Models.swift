@@ -55,10 +55,30 @@ struct ScholarMetrics {
 
 /// One row of the publication list on a Scholar profile page.
 struct ScholarPaper: Codable, Equatable {
+    /// Scholar's `citation_for_view` key, "USER:PAPER".
     let id: String
     let title: String
     let citations: Int
     let citedByURL: String?
+
+    /// The paper's page on Google Scholar.
+    var scholarURL: String {
+        let user = id.split(separator: ":").first.map(String.init) ?? ""
+        return "https://scholar.google.com/citations?view_op=view_citation&hl=en&user=\(user)&citation_for_view=\(id)"
+    }
+}
+
+/// The papers that need more citations for the h-index to rise by one.
+struct HIndexStep: Equatable {
+    struct Need: Equatable {
+        let paper: ScholarPaper
+        let needed: Int
+    }
+
+    let target: Int
+    let needs: [Need]
+
+    var total: Int { needs.reduce(0) { $0 + $1.needed } }
 }
 
 struct PaperGain: Codable, Equatable {
@@ -112,6 +132,11 @@ struct AppSettings: Codable {
     var menuBarPrimaryMetric: MenuBarPrimaryMetric = .totalCitations
     /// Set when Google Scholar rate-limits us; scheduled refreshes wait until then.
     var scholarPausedUntil: Date?
+    var iCloudBackupEnabled = false
+    var lastICloudBackup: Date?
+    var iCloudBackupError: String?
+    /// A folder the user picked for backups; nil means iCloud Drive › CiteBar.
+    var backupFolderPath: String?
 
     enum CodingKeys: String, CodingKey {
         case profiles
@@ -125,6 +150,10 @@ struct AppSettings: Codable {
         case showTrendInMenu
         case menuBarPrimaryMetric
         case scholarPausedUntil
+        case iCloudBackupEnabled
+        case lastICloudBackup
+        case iCloudBackupError
+        case backupFolderPath
     }
 
     enum MenuBarPrimaryMetric: String, CaseIterable, Codable {
@@ -167,6 +196,10 @@ struct AppSettings: Codable {
         showTrendInMenu = try container.decodeIfPresent(Bool.self, forKey: .showTrendInMenu) ?? true
         menuBarPrimaryMetric = try container.decodeIfPresent(MenuBarPrimaryMetric.self, forKey: .menuBarPrimaryMetric) ?? .totalCitations
         scholarPausedUntil = try container.decodeIfPresent(Date.self, forKey: .scholarPausedUntil)
+        iCloudBackupEnabled = try container.decodeIfPresent(Bool.self, forKey: .iCloudBackupEnabled) ?? false
+        lastICloudBackup = try container.decodeIfPresent(Date.self, forKey: .lastICloudBackup)
+        iCloudBackupError = try container.decodeIfPresent(String.self, forKey: .iCloudBackupError)
+        backupFolderPath = try container.decodeIfPresent(String.self, forKey: .backupFolderPath)
     }
     
     enum RefreshInterval: String, CaseIterable, Codable {
@@ -217,8 +250,8 @@ struct ProfileMetrics {
     let hIndex: Int?
     let i10Index: Int?
     let citationsByYear: [Int: Int]?
-    /// Citations still needed to reach the next h-index, when the paper list allows computing it.
-    var citationsToNextHIndex: Int?
+    /// Which papers need how many citations for the next h-index, when the paper list allows it.
+    var nextHIndexStep: HIndexStep?
     var recentPaperGains: [PaperGain] = []
     /// Most cited papers, for the stats card.
     var topPapers: [ScholarPaper] = []

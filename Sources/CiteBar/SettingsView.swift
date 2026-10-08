@@ -3,7 +3,7 @@ import ServiceManagement
 import UserNotifications
 
 enum SettingsPane: Int {
-    case profiles, general, about
+    case profiles, general, data, about
 }
 
 /// Settings window content: native toolbar tabs, one SwiftUI pane per tab. The window
@@ -16,6 +16,7 @@ enum SettingsPane: Int {
 
         addPane("Profiles", symbol: "person.2", ProfilesPane(model: model, showingAdd: startAddingProfile))
         addPane("General", symbol: "gearshape", GeneralPane(model: model))
+        addPane("Data", symbol: "internaldrive", DataPane())
         addPane("About", symbol: "info.circle", AboutPane())
         selectedTabViewItemIndex = pane.rawValue
     }
@@ -442,6 +443,16 @@ struct AddProfilesSheet: View {
             }
 
             HStack {
+                if existingIDs.isEmpty {
+                    Button("Moving from another Mac? Restore a backup…") {
+                        dismiss()
+                        DispatchQueue.main.async {
+                            (NSApp.delegate as? AppDelegate)?.showSettings(pane: .data)
+                        }
+                    }
+                    .buttonStyle(.link)
+                    .font(.system(size: 11.5))
+                }
                 Spacer()
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
@@ -776,6 +787,262 @@ struct GeneralPane: View {
     }
 }
 
+// MARK: - Data
+
+struct DataPane: View {
+    @ObservedObject private var settingsManager = SettingsManager.shared
+    @State private var folderSize: Int64 = 0
+    @State private var recordCount = 0
+    @State private var earliestRecord: Date?
+    @State private var isWorking = false
+    @State private var result: String?
+    @State private var pendingImport: (url: URL, archive: CiteBarArchive)?
+    @State private var errorMessage: String?
+
+    private var storage: StorageManager? {
+        (NSApp.delegate as? AppDelegate)?.citationManager?.storageManager
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("Location") {
+                    HStack(spacing: 10) {
+                        Text("~/Library/Application Support/CiteBar")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                        Button("Show in Finder") {
+                            NSWorkspace.shared.open(DataManager.folderURL)
+                        }
+                    }
+                }
+                LabeledContent("Size on disk", value: ByteCountFormatter.string(fromByteCount: folderSize, countStyle: .file))
+                LabeledContent("History", value: historyText)
+            } header: {
+                Text("On This Mac")
+            } footer: {
+                Text("Profiles, settings, and every snapshot of citation history live in this folder. Nothing is sent to CiteBar.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle(isOn: Binding(
+                    get: { settingsManager.settings.iCloudBackupEnabled },
+                    set: { enabled in
+                        if enabled && DataManager.backupFolderURL == nil {
+                            // No iCloud Drive here: ask where to keep backups first.
+                            guard chooseBackupFolder() else { return }
+                        }
+                        settingsManager.setICloudBackupEnabled(enabled)
+                        if enabled {
+                            backUpNow()
+                        }
+                    }
+                )) {
+                    Text("Back up automatically")
+                    Text("After each refresh, CiteBar saves a copy of everything to the folder below. It stays in your own storage, never with CiteBar.")
+                }
+
+                LabeledContent {
+                    Button(DataManager.backupFolderURL == nil ? "Choose…" : "Change…") {
+                        if chooseBackupFolder(), settingsManager.settings.iCloudBackupEnabled {
+                            backUpNow()
+                        }
+                    }
+                } label: {
+                    Text("Folder")
+                    if let folder = DataManager.backupFolderDisplayName {
+                        Text(folder)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(folder)
+                    } else {
+                        Text("iCloud Drive is off on this Mac. Choose a folder, such as Google Drive or Dropbox.")
+                    }
+                }
+
+                if settingsManager.settings.iCloudBackupEnabled {
+                    LabeledContent {
+                        HStack(spacing: 8) {
+                            if let folder = DataManager.backupFolderURL {
+                                Button("Show in Finder") { NSWorkspace.shared.open(folder) }
+                            }
+                            Button("Back Up Now", action: backUpNow)
+                                .disabled(isWorking)
+                        }
+                    } label: {
+                        if let error = settingsManager.settings.iCloudBackupError {
+                            Label("Last backup failed: \(error)", systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                        } else {
+                            Text(lastBackupText)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            } header: {
+                Text("Backup")
+            }
+
+            Section {
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        Button("Export…", action: export)
+                        Button("Import…") { chooseImport(from: nil) }
+                    }
+                    .disabled(isWorking)
+                } label: {
+                    Text("Save everything to one file")
+                    Text("Profiles, groups, settings, and full history")
+                }
+                if let folder = DataManager.backupFolderURL {
+                    LabeledContent {
+                        Button("Restore…") { chooseImport(from: folder) }
+                            .disabled(isWorking)
+                    } label: {
+                        Text("Restore from backup folder")
+                        Text("Pick a backup any of your Macs made")
+                    }
+                }
+            } header: {
+                Text("Move to Another Mac")
+            } footer: {
+                Text("Export here and import on the other Mac, or back up both Macs to the same folder and restore. Importing only adds profiles and history; nothing on this Mac is deleted.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
+            if let result {
+                Section {
+                    Label(result, systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 520, height: 640)
+        .onAppear(perform: reload)
+        .alert(
+            "Import this backup?",
+            isPresented: Binding(get: { pendingImport != nil }, set: { if !$0 { pendingImport = nil } }),
+            presenting: pendingImport
+        ) { pending in
+            Button("Import") { runImport(pending.archive) }
+            Button("Cancel", role: .cancel) {}
+        } message: { pending in
+            Text(importSummary(pending.archive))
+        }
+        .alert(
+            "Couldn't read that file",
+            isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private var historyText: String {
+        guard recordCount > 0 else { return "No snapshots yet" }
+        let count = "\(recordCount.decimalString) \(recordCount == 1 ? "snapshot" : "snapshots")"
+        guard let earliestRecord else { return count }
+        return "\(count) since \(earliestRecord.formatted(date: .abbreviated, time: .omitted))"
+    }
+
+    private var lastBackupText: String {
+        guard let date = settingsManager.settings.lastICloudBackup else { return "Not backed up yet" }
+        return "Last backup \(date.formatted(date: .abbreviated, time: .shortened))"
+    }
+
+    private func reload() {
+        folderSize = DataManager.folderSize()
+        Task { @MainActor in
+            if let summary = await storage?.historySummary() {
+                recordCount = summary.count
+                earliestRecord = summary.earliest
+            }
+        }
+    }
+
+    private func backUpNow() {
+        guard let storage else { return }
+        isWorking = true
+        Task { @MainActor in
+            await DataManager.backUp(storage: storage)
+            isWorking = false
+        }
+    }
+
+    /// Returns false when the user cancels.
+    @discardableResult
+    private func chooseBackupFolder() -> Bool {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Use This Folder"
+        panel.message = "Choose where CiteBar keeps automatic backups, such as iCloud Drive, Google Drive, or Dropbox."
+        panel.directoryURL = DataManager.backupFolderURL
+        guard panel.runModal() == .OK, let url = panel.url else { return false }
+        settingsManager.setBackupFolder(url)
+        return true
+    }
+
+    private func export() {
+        guard let storage else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "CiteBar Backup \(Date().formatted(.iso8601.year().month().day())).json"
+        panel.message = "Save profiles, groups, settings, and history to one file."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        isWorking = true
+        Task { @MainActor in
+            do {
+                try await DataManager.export(to: url, storage: storage)
+                result = "Exported to \(url.lastPathComponent)"
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isWorking = false
+        }
+    }
+
+    private func chooseImport(from directory: URL?) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = directory
+        panel.message = "Choose a CiteBar backup."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            pendingImport = (url, try DataManager.readArchive(at: url))
+        } catch {
+            errorMessage = "\(url.lastPathComponent) isn't a CiteBar backup."
+        }
+    }
+
+    private func importSummary(_ archive: CiteBarArchive) -> String {
+        let profiles = archive.settings.profiles.count
+        let snapshots = archive.history.count
+        let date = archive.exportedAt.formatted(date: .abbreviated, time: .shortened)
+        return "From \(archive.deviceName), \(date): \(profiles) \(profiles == 1 ? "profile" : "profiles") and \(snapshots.decimalString) snapshots. Anything new is added; nothing on this Mac is deleted."
+    }
+
+    private func runImport(_ archive: CiteBarArchive) {
+        guard let storage else { return }
+        isWorking = true
+        Task { @MainActor in
+            let outcome = await DataManager.importArchive(archive, storage: storage)
+            (NSApp.delegate as? AppDelegate)?.updateMenuBarDisplay()
+            result = "Imported \(outcome.addedProfiles) new \(outcome.addedProfiles == 1 ? "profile" : "profiles") and \(outcome.addedRecords.decimalString) snapshots."
+            isWorking = false
+            reload()
+        }
+    }
+}
+
 // MARK: - About
 
 struct AboutPane: View {
@@ -791,7 +1058,7 @@ struct AboutPane: View {
                 .font(.system(size: 12.5))
                 .foregroundStyle(.secondary)
                 .padding(.top, 4)
-            Text("Version \(AppVersion.current) (\(AppVersion.build))")
+            Text("Version \(AppVersion.bundleVersion) (\(AppVersion.bundleBuild))")
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
                 .textSelection(.enabled)
