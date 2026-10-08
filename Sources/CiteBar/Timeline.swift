@@ -1,8 +1,8 @@
 import Foundation
 
-/// A profile's citation history as a timeline: one point per tracked day, plus year-end
-/// estimates from Google Scholar's yearly counts for the years before tracking began, and the
-/// moments worth celebrating (citation milestones, h-index increases).
+/// A profile's citation history as a timeline: one point per tracked day, plus estimates from
+/// Google Scholar's yearly counts for the years before tracking began, and the moments worth
+/// celebrating (citation milestones, h-index increases).
 struct CitationTimeline {
     struct Point: Identifiable, Equatable {
         let date: Date
@@ -10,7 +10,7 @@ struct CitationTimeline {
         let hIndex: Int?
         let i10Index: Int?
         let citationsByYear: [Int: Int]?
-        /// Year-end total estimated from Scholar's per-year counts, before tracking began.
+        /// Estimated from Scholar's per-year counts, before tracking began.
         let isEstimate: Bool
 
         var id: Date { date }
@@ -24,7 +24,7 @@ struct CitationTimeline {
 
         let date: Date
         let kind: Kind
-        /// Dated to a year-end estimate rather than an observed refresh.
+        /// Dated by estimate rather than seen on a refresh.
         let isEstimate: Bool
 
         var id: String { "\(date.timeIntervalSince1970)-\(kind)" }
@@ -53,44 +53,75 @@ struct CitationTimeline {
                       citationsByYear: $0.citationsByYear, isEstimate: false)
             }
 
+        // Before tracking began, estimate year-end totals from Scholar's per-year counts. The latest
+        // counts are the most complete (records from older versions have none), and they're scaled
+        // to add up to that record's total, which also includes citations Scholar gives no year.
         var estimates: [Point] = []
-        if let first = tracked.first, let byYear = first.citationsByYear {
-            let firstYear = calendar.component(.year, from: first.date)
+        var origin: Point?
+        if let first = tracked.first,
+           let latest = tracked.last(where: { !($0.citationsByYear ?? [:]).isEmpty }),
+           let byYear = latest.citationsByYear,
+           let startYear = byYear.filter({ $0.value > 0 }).keys.min(),
+           let start = calendar.date(from: DateComponents(year: startYear, month: 1, day: 1)),
+           start < first.date {
+            let scale = Double(latest.citations) / Double(byYear.values.reduce(0, +))
+            origin = Point(date: start, citations: 0, hIndex: nil, i10Index: nil, citationsByYear: [:], isEstimate: true)
             var running = 0
-            for year in byYear.keys.sorted() where year < firstYear {
-                // Yearly counts can disagree slightly with the total; never estimate past
-                // the first tracked total, so the line only rises.
-                running = min(first.citations, running + (byYear[year] ?? 0))
-                guard running > 0,
-                      let yearEnd = calendar.date(from: DateComponents(year: year, month: 12, day: 31, hour: 12)) else {
+            for year in startYear..<calendar.component(.year, from: first.date) {
+                running += byYear[year] ?? 0
+                guard let yearEnd = calendar.date(from: DateComponents(year: year, month: 12, day: 31, hour: 12)) else {
                     continue
                 }
-                let soFar = byYear.filter { $0.key <= year }
-                estimates.append(Point(date: yearEnd, citations: running, hIndex: nil, i10Index: nil,
-                                       citationsByYear: soFar, isEstimate: true))
+                // Never past the first tracked total, so the line only rises.
+                let total = min(first.citations, Int((Double(running) * scale).rounded()))
+                estimates.append(Point(date: yearEnd, citations: total, hIndex: nil, i10Index: nil,
+                                       citationsByYear: byYear.filter { $0.key <= year }, isEstimate: true))
             }
         }
 
-        points = estimates + tracked
-        moments = Self.findMoments(in: points)
+        let found = Self.findMoments(in: estimates + tracked, after: origin, calendar: calendar)
+        points = (estimates + tracked + found.crossings).sorted { $0.date < $1.date }
+        moments = found.moments
     }
 
-    private static func findMoments(in points: [Point]) -> [Moment] {
+    /// Citation milestones and h-index increases. A milestone passed on an estimated stretch gets
+    /// a point of its own, dated as if citations came in evenly between its neighbours. Without
+    /// an estimated past, milestones already passed on the first tracked day are left out: their
+    /// dates are unknown.
+    private static func findMoments(in points: [Point], after origin: Point?,
+                                     calendar: Calendar) -> (moments: [Moment], crossings: [Point]) {
         var moments: [Moment] = []
-        var previous: Point?
+        var crossings: [Point] = []
+        var previous = origin
+        // Scholar's numbers sometimes dip and recover; only new highs count.
+        var bestCitations = origin?.citations ?? 0
+        var bestHIndex = 0
         for point in points {
-            let before = previous?.citations ?? 0
-            for threshold in CitationManager.citationMilestones where before < threshold && point.citations >= threshold {
-                // Crossed before the first tracked day: only known to the year (or the first day).
-                let isEstimate = point.isEstimate || (previous?.isEstimate ?? true)
-                moments.append(Moment(date: point.date, kind: .citations(threshold), isEstimate: isEstimate))
+            defer {
+                previous = point
+                bestCitations = max(bestCitations, point.citations)
+                bestHIndex = max(bestHIndex, point.hIndex ?? 0)
             }
-            if let old = previous?.hIndex, let new = point.hIndex, new > old {
+            guard let previous else { continue }
+            let isEstimate = previous.isEstimate || point.isEstimate
+            for threshold in CitationManager.citationMilestones
+            where bestCitations < threshold && point.citations >= threshold {
+                var date = point.date
+                if isEstimate && threshold < point.citations {
+                    let fraction = Double(threshold - previous.citations) / Double(point.citations - previous.citations)
+                    date = previous.date.addingTimeInterval(point.date.timeIntervalSince(previous.date) * fraction)
+                    var byYear = previous.citationsByYear ?? [:]
+                    byYear[calendar.component(.year, from: date), default: 0] += threshold - previous.citations
+                    crossings.append(Point(date: date, citations: threshold, hIndex: nil, i10Index: nil,
+                                           citationsByYear: byYear, isEstimate: true))
+                }
+                moments.append(Moment(date: date, kind: .citations(threshold), isEstimate: isEstimate))
+            }
+            if bestHIndex > 0, let new = point.hIndex, new > bestHIndex {
                 moments.append(Moment(date: point.date, kind: .hIndex(new), isEstimate: false))
             }
-            previous = point
         }
-        return moments
+        return (moments, crossings)
     }
 
     /// The latest point on or before `date`, or the first point when `date` is earlier.

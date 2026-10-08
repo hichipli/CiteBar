@@ -85,7 +85,7 @@ Having trouble installing? See the [Install Guide](DISTRIBUTION.md).
 **A time machine for your record**
 - Drag along a timeline to any day and make the card for that day
 - Citation milestones and h-index increases are marked, so you can share a moment you missed
-- Before you installed CiteBar, Google Scholar's yearly counts fill in the timeline as estimates
+- Works from day one: milestones from before you installed CiteBar are dated from Google Scholar's yearly counts and marked with ~, and every day since is recorded exactly
 
 **Respectful and reliable**
 - One request per profile, spaced two seconds apart

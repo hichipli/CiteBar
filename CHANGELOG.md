@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Card Themes**: The Citation Record studio offers four themes: Record, Night, Gazette (a newspaper front page with a headline written from the numbers), and Certificate (with a seal, the date in words, and an option to certify a single paper)
 - **Card Options**: Choose what the card shows: citations per year, h-index and i10-index, papers (none, most cited, or one featured paper), growth over 7, 30, 90, or 365 days, and an optional note. Choices are remembered, and the preview updates live
-- **Time Machine**: A timeline of citations in the studio. Drag to any day and the card shows the record as of that day. Citation milestones and h-index increases are marked and listed; before tracking began, year-end estimates from Google Scholar's yearly counts fill in the timeline
+- **Time Machine**: A timeline of citations in the studio. Drag to any day and the card shows the record as of that day. Citation milestones and h-index increases are marked and listed, with ‹ › to step between them. Before tracking began, Google Scholar's yearly counts fill in the timeline and date earlier milestones (marked ~), so there's something to share on day one
 - **Milestone Cards**: Clicking a milestone notification opens the studio, ready to share the moment
 
 ### Changed

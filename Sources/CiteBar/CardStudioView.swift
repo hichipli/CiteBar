@@ -201,7 +201,6 @@ struct CardStudioView: View {
                         ForEach(CardPapers.allCases) { Text($0.title).tag($0.rawValue) }
                     }
                 }
-                .disabled(!isToday)
                 if papersMode == .featured && isToday && !paperChoices.isEmpty {
                     Picker("Paper", selection: $featuredPaperID) {
                         ForEach(paperChoices.prefix(40), id: \.id) { paper in
@@ -226,9 +225,7 @@ struct CardStudioView: View {
                 .padding(.top, 12)
 
             if !isToday {
-                Text(selectedPointIsEstimate
-                     ? "This day is before CiteBar started tracking, so the total is estimated from Google Scholar's yearly counts."
-                     : "Showing the record as of this day. Paper lists are only kept for today.")
+                Text(pastDayNote)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -276,8 +273,13 @@ struct CardStudioView: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    private var selectedPointIsEstimate: Bool {
-        selectedDate.flatMap { timeline?.point(at: $0)?.isEstimate } ?? false
+    private var pastDayNote: String {
+        let isEstimate = selectedDate.flatMap { timeline?.point(at: $0)?.isEstimate } ?? false
+        let record = isEstimate
+            ? "This day is before CiteBar started tracking, so the total is estimated from Google Scholar's yearly counts."
+            : "Showing the record as of this day."
+        // Only the latest paper list is kept.
+        return papersMode == .none ? record : record + " Papers appear on today's card only."
     }
 
     private func label(_ text: String) -> some View {
@@ -451,9 +453,10 @@ private struct TimeMachineView: View {
             }
 
             if let first = timeline.firstTrackedDate, timeline.points.first?.isEstimate == true {
-                Text("Hollow points before \(first.formatted(date: .abbreviated, time: .omitted)) are estimated from Google Scholar's yearly counts.")
+                Text("Before \(first.formatted(date: .abbreviated, time: .omitted)), hollow points are estimates from Google Scholar's yearly counts. Since then, CiteBar has kept the exact count every day.")
                     .font(.system(size: 10.5))
                     .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -589,8 +592,9 @@ private struct TimeMachineView: View {
     }
 
     private func summary(_ point: CitationTimeline.Point) -> String {
+        let estimated = CardContent.estimatedWhen(point.date)
         let date = point.isEstimate
-            ? "End of \(Calendar.current.component(.year, from: point.date))"
+            ? estimated.prefix(1).uppercased() + estimated.dropFirst()
             : point.date.formatted(date: .abbreviated, time: .omitted)
         var text = "\(date) · \(point.isEstimate ? "~" : "")\(point.citations.decimalString) citations"
         if let hIndex = point.hIndex {
@@ -642,7 +646,7 @@ private struct MomentChip: View {
                     Text(moment.title)
                         .font(.system(size: 11.5, weight: .medium))
                     Text(moment.isEstimate
-                         ? "by \(moment.date.formatted(.dateTime.year()))"
+                         ? "~" + moment.date.formatted(.dateTime.month(.abbreviated).year())
                          : moment.date.formatted(date: .abbreviated, time: .omitted))
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
@@ -660,6 +664,8 @@ private struct MomentChip: View {
             )
         }
         .buttonStyle(.plain)
-        .help("Make a card for \(moment.title)")
+        .help(moment.isEstimate
+              ? "Make a card for \(moment.title). The date is estimated from Google Scholar's yearly counts."
+              : "Make a card for \(moment.title)")
     }
 }

@@ -520,28 +520,51 @@ final class CiteBarTests: XCTestCase {
         func date(_ y: Int, _ m: Int, _ d: Int, _ h: Int = 10) -> Date {
             calendar.date(from: DateComponents(year: y, month: m, day: d, hour: h))!
         }
-        let byYear = [2023: 40, 2024: 50, 2025: 5]
+        // Like a profile first tracked by an older CiteBar: only the latest record has yearly counts.
         let records = [
-            CitationRecord(profileId: "p", citationCount: 95, hIndex: 4, citationsByYear: byYear, timestamp: date(2025, 1, 10, 9)),
-            CitationRecord(profileId: "p", citationCount: 96, hIndex: 4, citationsByYear: byYear, timestamp: date(2025, 1, 10, 18)),
-            CitationRecord(profileId: "p", citationCount: 101, hIndex: 5, citationsByYear: byYear, timestamp: date(2025, 2, 1)),
-            CitationRecord(profileId: "p", citationCount: 110, hIndex: 5, citationsByYear: byYear, timestamp: date(2025, 3, 1))
+            CitationRecord(profileId: "p", citationCount: 95, hIndex: 4, timestamp: date(2025, 1, 10, 9)),
+            CitationRecord(profileId: "p", citationCount: 96, hIndex: 4, timestamp: date(2025, 1, 10, 18)),
+            CitationRecord(profileId: "p", citationCount: 101, hIndex: 5, timestamp: date(2025, 2, 1)),
+            CitationRecord(profileId: "p", citationCount: 110, hIndex: 5,
+                           citationsByYear: [2023: 40, 2024: 50, 2025: 20], timestamp: date(2025, 3, 1))
         ]
         let timeline = CitationTimeline(records: records)
 
-        // Two year-end estimates (2023: 40, 2024: 90), then one point per tracked day.
-        XCTAssertEqual(timeline.points.map(\.citations), [40, 90, 96, 101, 110])
-        XCTAssertEqual(timeline.points.map(\.isEstimate), [true, true, false, false, false])
+        // Year-end estimates (2023: 40, 2024: 90), milestone points in between, then one point per tracked day.
+        XCTAssertEqual(timeline.points.map(\.citations), [10, 25, 40, 50, 90, 96, 101, 110])
+        XCTAssertEqual(timeline.points.map(\.isEstimate), [true, true, true, true, true, false, false, false])
         XCTAssertEqual(timeline.firstTrackedDate, date(2025, 1, 10, 18))
 
         XCTAssertEqual(timeline.moments.map(\.kind), [.citations(10), .citations(25), .citations(50), .citations(100), .hIndex(5)])
         XCTAssertTrue(timeline.moments[0].isEstimate)
+        // 10 of 2023's 40 citations: about a quarter of the way through 2023.
+        XCTAssertEqual(calendar.dateComponents([.year, .month], from: timeline.moments[0].date), DateComponents(year: 2023, month: 4))
+        // 50 is 10 into 2024's 50: about a fifth of the way through 2024.
+        XCTAssertEqual(calendar.dateComponents([.year, .month], from: timeline.moments[2].date), DateComponents(year: 2024, month: 3))
+        XCTAssertEqual(timeline.point(at: timeline.moments[2].date)?.citations, 50)
         XCTAssertFalse(timeline.moments[3].isEstimate, "100 was crossed between two tracked days")
         XCTAssertEqual(timeline.milestone(on: date(2025, 2, 1, 20)), 100)
 
         XCTAssertEqual(timeline.point(at: date(2025, 2, 15))?.citations, 101)
         let growth = timeline.growth(endingAt: date(2025, 3, 2), days: 30)
         XCTAssertEqual(growth?.value, 14, "From the Jan 10 point (96) to Mar 1 (110), since nothing is 30 days back")
+
+        // A dip and recovery is not a new milestone.
+        let wobbly = CitationTimeline(records: [
+            CitationRecord(profileId: "p", citationCount: 98, hIndex: 5, timestamp: date(2025, 6, 1)),
+            CitationRecord(profileId: "p", citationCount: 101, hIndex: 6, timestamp: date(2025, 6, 2)),
+            CitationRecord(profileId: "p", citationCount: 99, hIndex: 5, timestamp: date(2025, 6, 3)),
+            CitationRecord(profileId: "p", citationCount: 102, hIndex: 6, timestamp: date(2025, 6, 4))
+        ])
+        XCTAssertEqual(wobbly.moments.map(\.kind), [.citations(100), .hIndex(6)])
+
+        // Without yearly counts there's no estimated past, so milestones already passed have no date.
+        let untracked = CitationTimeline(records: [
+            CitationRecord(profileId: "p", citationCount: 1_167, timestamp: date(2025, 6, 26)),
+            CitationRecord(profileId: "p", citationCount: 1_170, timestamp: date(2025, 6, 27))
+        ])
+        XCTAssertEqual(untracked.points.count, 2)
+        XCTAssertTrue(untracked.moments.isEmpty)
     }
 
     func testScholarIDParser() {

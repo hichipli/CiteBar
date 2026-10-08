@@ -80,7 +80,7 @@ struct CardGrowthValue: Equatable {
 struct CardContent: Equatable {
     var name: String
     var date: Date
-    /// A year-end total estimated from Scholar's per-year counts.
+    /// A total estimated from Scholar's per-year counts, from before tracking began.
     var isEstimate = false
     var citations: Int
     var hIndex: Int?
@@ -108,13 +108,27 @@ struct CardContent: Equatable {
         return formatter.string(from: date)
     }
 
+    var estimatedWhen: String { Self.estimatedWhen(date) }
+
+    /// When an estimate is from: "end of 2024" for a year-end total, otherwise "around March 2025".
+    static func estimatedWhen(_ date: Date) -> String {
+        let day = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        if day.month == 12 && day.day == 31 {
+            return "end of \(day.year ?? 0)"
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MMMM yyyy"
+        return "around \(formatter.string(from: date))"
+    }
+
     var dateText: String {
-        isEstimate ? "End of \(year)" : Self.longDate(date)
+        isEstimate ? estimatedWhen.prefix(1).uppercased() + estimatedWhen.dropFirst() : Self.longDate(date)
     }
 
     var sourceText: String {
         isEstimate
-            ? "Source: Google Scholar yearly counts, approximate, end of \(year)"
+            ? "Source: Google Scholar yearly counts, approximate, \(estimatedWhen)"
             : "Source: Google Scholar, \(Self.longDate(date))"
     }
 }
@@ -158,7 +172,7 @@ struct StatsCard: View {
         if let milestone = content.milestone {
             return (
                 "\(surname) Passes \(milestone.decimalString) Citations",
-                "The mark fell on \(CardContent.longDate(content.date)). \(content.name)'s work is now cited \(total) times on Google Scholar\(hClause)."
+                "The mark fell \(content.isEstimate ? content.estimatedWhen : "on " + CardContent.longDate(content.date)). \(content.name)'s work is now cited \(total) times on Google Scholar\(hClause)."
             )
         }
         if let paper = content.featured {
@@ -178,7 +192,7 @@ struct StatsCard: View {
         return (
             "\(surname)'s Work Now Cited \(total) Times",
             content.isEstimate
-                ? "An estimate from Google Scholar's yearly counts at the end of \(content.year)."
+                ? "An estimate from Google Scholar's yearly counts, \(content.estimatedWhen)."
                 : "So says Google Scholar as of \(CardContent.longDate(content.date))\(hClause)."
         )
     }
@@ -449,7 +463,7 @@ private struct GazetteLayout: View {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "EEEE, d MMMM yyyy"
-        return content.isEstimate ? "End of \(content.year)" : formatter.string(from: content.date)
+        return content.isEstimate ? content.dateText : formatter.string(from: content.date)
     }
 
     var body: some View {
@@ -623,7 +637,9 @@ private struct CertificateLayout: View {
     /// "as of the eighth of October, 2026"
     private var dateInWords: String {
         if content.isEstimate {
-            return "by the end of \(content.year), approximately"
+            return content.estimatedWhen.hasPrefix("end")
+                ? "by the \(content.estimatedWhen), approximately"
+                : "as of \(content.estimatedWhen.replacingOccurrences(of: "around", with: "about"))"
         }
         let day = Calendar.current.component(.day, from: content.date)
         let formatter = DateFormatter()
