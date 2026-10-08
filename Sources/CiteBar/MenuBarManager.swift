@@ -55,7 +55,12 @@ import Cocoa
         refreshItem.target = NSApplication.shared.delegate
         refreshItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Refresh")
         menu.addItem(refreshItem)
-        
+
+        let statsCardItem = NSMenuItem(title: "Save Stats Card", action: #selector(saveStatsCard), keyEquivalent: "")
+        statsCardItem.target = self
+        statsCardItem.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: "Save Stats Card")
+        menu.addItem(statsCardItem)
+
         // Settings option
         let settingsItem = NSMenuItem(title: "Settings...", action: #selector(AppDelegate.showSettings), keyEquivalent: ",")
         settingsItem.target = NSApplication.shared.delegate
@@ -458,6 +463,39 @@ import Cocoa
         )
     }
     
+    /// Saves a share image for the menu bar profile to Downloads, copies it, and reveals it in Finder.
+    @objc private func saveStatsCard() {
+        guard let profile = currentCitations.keys.sorted(by: { $0.sortOrder < $1.sortOrder }).first,
+              let metrics = currentCitations[profile],
+              metrics.citationCount >= 0,
+              let png = StatsCard(
+                name: profile.name,
+                metrics: metrics,
+                recentGrowth: profile.recentGrowth,
+                recentGrowthDays: profile.recentGrowthDays
+              ).pngData(),
+              let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first else {
+            NSSound.beep()
+            return
+        }
+
+        let safeName = profile.name.components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }.joined(separator: "-")
+        let day = ISO8601DateFormatter.string(from: Date(), timeZone: .current, formatOptions: [.withFullDate])
+        let fileURL = downloads.appendingPathComponent("CiteBar-\(safeName)-\(day).png")
+
+        do {
+            try png.write(to: fileURL, options: .atomic)
+        } catch {
+            AppLog.error("Failed to save stats card: \(error)")
+            NSSound.beep()
+            return
+        }
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setData(png, forType: .png)
+        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+    }
+
     func showProfileLoading(_ profile: ScholarProfile) {
         // Add the new profile to current citations with a loading indicator
         currentCitations[profile] = ProfileMetrics(citationCount: -1, hIndex: nil, i10Index: nil) // Use -1 to indicate loading

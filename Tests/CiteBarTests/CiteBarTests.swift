@@ -412,4 +412,13 @@ final class CiteBarTests: XCTestCase {
             XCTAssertEqual(nsError.code, NSURLErrorNotConnectedToInternet)
         }
     }
+
+    @MainActor
+    func testStatsCardRendersAtTwiceSocialSize() throws {
+        let metrics = ProfileMetrics(citationCount: 1_284, hIndex: 13, i10Index: 15, citationsByYear: [2025: 347, 2026: 312])
+        let png = try XCTUnwrap(StatsCard(name: "Ada", metrics: metrics, recentGrowth: 27, recentGrowthDays: 30).pngData())
+        let image = try XCTUnwrap(NSBitmapImageRep(data: png))
+        XCTAssertEqual(image.pixelsWide, 2400)
+        XCTAssertEqual(image.pixelsHigh, 1350)
+    }
 }

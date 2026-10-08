@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Per-Paper Citation Gains**: Each refresh compares the profile's papers with the previous refresh, so notifications and the menu name the papers that gained citations; clicking opens that paper's "Cited by" page
 - **h-index Progress**: The menu shows when the next h-index is within 5 citations
 - **Milestone Notifications**: Notifications for passing citation milestones (10, 25, 50, 100, 250, 500, 1,000, ...) and for h-index or i10-index increases
+- **Stats Card**: "Save Stats Card" in the menu saves a 1200×675 share image of the menu bar profile (total, this year, 30-day growth, h-index, i10-index, citations per year) to Downloads and copies it to the clipboard
 
 ### Changed
 - **Change-Only Notifications**: Refresh notifications are posted only when citations changed, including after startup refreshes; "no change" notifications are gone
