@@ -83,21 +83,29 @@ struct ProfilesPane: View {
             if profiles.isEmpty {
                 emptyState
             } else {
-                List {
-                    ForEach(sections, id: \.group) { section in
-                        Section {
-                            ForEach(section.profiles, id: \.id) { profile in
-                                row(for: profile)
+                ScrollViewReader { proxy in
+                    List {
+                        ForEach(sections, id: \.group) { section in
+                            Section {
+                                ForEach(section.profiles, id: \.id) { profile in
+                                    row(for: profile)
+                                }
+                                .onMove { source, destination in
+                                    move(section.profiles, from: source, to: destination)
+                                }
+                            } header: {
+                                sectionHeader(section.group, members: section.profiles)
                             }
-                            .onMove { source, destination in
-                                move(section.profiles, from: source, to: destination)
-                            }
-                        } header: {
-                            sectionHeader(section.group, members: section.profiles)
+                        }
+                    }
+                    .listStyle(.inset(alternatesRowBackgrounds: false))
+                    .onAppear {
+                        // The list can open scrolled to the end while the window sizes itself.
+                        DispatchQueue.main.async {
+                            proxy.scrollTo(profiles.first?.id, anchor: .top)
                         }
                     }
                 }
-                .listStyle(.inset(alternatesRowBackgrounds: false))
             }
 
             Divider()
@@ -108,7 +116,9 @@ struct ProfilesPane: View {
                 } label: {
                     Label("Add Profiles…", systemImage: "plus")
                 }
-                Text(note ?? "Drag to reorder. The first profile is shown in the menu bar.")
+                Text(note ?? (groups.isEmpty && profiles.count > 1
+                    ? "Tip: choose ⋯ › Group to gather your lab or co-authors under one heading."
+                    : "Drag to reorder. The first profile is shown in the menu bar."))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

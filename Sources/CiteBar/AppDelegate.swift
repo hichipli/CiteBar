@@ -455,7 +455,8 @@ import Carbon
     }
 
     private func maybePromptForNotificationPermission() {
-        guard settingsManager.settings.showNotifications else { return }
+        // UNUserNotificationCenter needs an app bundle; `make run` launches a bare executable.
+        guard settingsManager.settings.showNotifications, Bundle.main.bundleIdentifier != nil else { return }
 
         let defaults = UserDefaults.standard
         let promptedVersion = defaults.string(forKey: Self.notificationPromptedVersionDefaultsKey)

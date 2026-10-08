@@ -461,7 +461,7 @@ import UserNotifications
     }
 
     private func notifyIfNeeded(changes: [ProfileChange], milestones: [String]) {
-        guard settingsManager.settings.showNotifications else { return }
+        guard settingsManager.settings.showNotifications, Bundle.main.bundleIdentifier != nil else { return }
         let changeText = Self.changeNotificationText(for: changes)
         guard changeText != nil || !milestones.isEmpty else { return }
 
