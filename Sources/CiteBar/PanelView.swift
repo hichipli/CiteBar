@@ -110,6 +110,8 @@ struct PanelView: View {
             FooterView(model: model, actions: actions)
         }
         .frame(width: Self.width)
+        // Opaque so text stays legible over whatever sits behind the translucent popover.
+        .background(Color(nsColor: .textBackgroundColor))
         .animation(.spring(response: 0.32, dampingFraction: 0.86), value: expandedProfileID)
         .animation(.spring(response: 0.32, dampingFraction: 0.86), value: collapsedGroupsStorage)
     }

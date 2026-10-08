@@ -168,7 +168,7 @@ import Carbon
     
     private func finishStartupFlow() {
 #if DEBUG
-        // `-CiteBarDebugOpen panel|profiles|general|about` opens UI at launch for screenshots;
+        // `-CiteBarDebugOpen panel|card|profiles|general|about` opens UI (or saves a stats card) at launch;
         // `-CiteBarDebugDark YES` forces dark mode.
         if UserDefaults.standard.bool(forKey: "CiteBarDebugDark") {
             NSApp.appearance = NSAppearance(named: .darkAqua)
@@ -177,6 +177,7 @@ import Carbon
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
                 switch target {
                 case "panel": self?.menuBarManager?.togglePanel()
+                case "card": self?.menuBarManager?.saveStatsCard()
                 case "general": self?.showSettings(pane: .general)
                 case "about": self?.showSettings(pane: .about)
                 default: self?.showSettings(pane: .profiles)

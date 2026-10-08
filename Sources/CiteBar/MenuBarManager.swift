@@ -241,7 +241,7 @@ import SwiftUI
     // MARK: - Stats card
 
     /// Saves a share image of the primary profile to Downloads and copies it.
-    private func saveStatsCard() {
+    func saveStatsCard() {
         guard let entry = model.entries.first,
               let metrics = entry.metrics,
               let png = StatsCard(
