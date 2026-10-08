@@ -76,10 +76,16 @@ Having trouble installing? See the [Install Guide](DISTRIBUTION.md).
 - No "nothing changed" noise
 
 **A citation record worth sharing**
-- One click opens a preview of a typeset card: totals, citations per year, and the most cited papers
-- Pick any tracked profile, then Share (AirDrop, Messages, Mail), Copy, or Save to Downloads
+- Four card styles: Record, Night, Gazette (a front page with a headline written from your numbers), and Certificate
+- Choose what it shows: citations per year, h-index, most cited papers or one paper, growth over 7 to 365 days, and a note
+- Share (AirDrop, Messages, Mail), Copy, or Save in one click
 
-<img src="website/assets/stats-card.png" alt="A Citation Record card with 1,284 citations, a citations-per-year chart, and the three most cited papers" width="360">
+<img src="website/assets/card-record.png" alt="Record card" width="180"> <img src="website/assets/card-night.png" alt="Night card" width="180"> <img src="website/assets/card-gazette.png" alt="Gazette card" width="180"> <img src="website/assets/card-certificate.png" alt="Certificate card" width="180">
+
+**A time machine for your record**
+- Drag along a timeline to any day and make the card for that day
+- Citation milestones and h-index increases are marked, so you can share a moment you missed
+- Works from day one: milestones from before you installed CiteBar are dated from Google Scholar's yearly counts and marked with ~, and every day since is recorded exactly
 
 **Respectful and reliable**
 - One request per profile, spaced two seconds apart

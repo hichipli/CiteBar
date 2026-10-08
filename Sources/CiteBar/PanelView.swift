@@ -17,7 +17,25 @@ enum Theme {
 
     static let sectionLabel = Font.system(size: 10.5, weight: .semibold)
     /// Shared by the column header, group headers, and rows so the 30-day numbers line up.
-    static let growthColumnWidth: CGFloat = 42
+    static let growthColumnWidth: CGFloat = 46
+    static let growthMarkerWidth: CGFloat = 11
+    /// The growth window in days; profiles tracked for less show their own day count.
+    static let growthWindowDays = 30
+}
+
+extension ScholarProfile {
+    /// Growth covers fewer than 30 days because CiteBar started tracking recently (#21).
+    var hasPartialGrowthWindow: Bool {
+        recentGrowth != nil && (recentGrowthDays ?? Theme.growthWindowDays) < Theme.growthWindowDays
+    }
+
+    var growthDays: Int { max(1, recentGrowthDays ?? Theme.growthWindowDays) }
+
+    /// "since Oct 5", the day the growth window starts.
+    var growthWindowStartText: String {
+        let start = Calendar.current.date(byAdding: .day, value: -growthDays, to: Date()) ?? Date()
+        return start.formatted(.dateTime.month(.abbreviated).day())
+    }
 }
 
 extension Int {
@@ -82,6 +100,11 @@ struct PanelView: View {
         return model.entries.compactMap(\.profile.group).filter { seen.insert($0).inserted }
     }
 
+    private var allGrowthPartial: Bool {
+        let withGrowth = model.entries.filter { $0.profile.recentGrowth != nil }
+        return !withGrowth.isEmpty && withGrowth.allSatisfy(\.profile.hasPartialGrowthWindow)
+    }
+
     private var collapsedGroups: Set<String> {
         Set(collapsedGroupsStorage.split(separator: "\n").map(String.init))
     }
@@ -117,7 +140,8 @@ struct PanelView: View {
             VStack(alignment: .leading, spacing: 2) {
                 ColumnHeader(
                     metricLabel: settings.settings.menuBarPrimaryMetric == .currentYearCitations ? "this year" : "citations",
-                    showsGrowth: settings.settings.showTrendInMenu
+                    showsGrowth: settings.settings.showTrendInMenu,
+                    allPartial: allGrowthPartial
                 )
                 ForEach(groupNames, id: \.self) { group in
                     let members = model.entries.filter { $0.profile.group == group }
@@ -295,9 +319,13 @@ private struct HeroView: View {
 
     private func statItems(_ metrics: ProfileMetrics) -> [(label: String, value: String)] {
         var items: [(label: String, value: String)] = []
-        if settings.showTrendInMenu, let growth = entry.profile.recentGrowth {
-            let days = max(1, entry.profile.recentGrowthDays ?? 30)
-            items.append(("last \(days) \(days == 1 ? "day" : "days")", growth.signedString))
+        if settings.showTrendInMenu, let growth = entry.profile.recentGrowth,
+           growth != 0 || !entry.profile.hasPartialGrowthWindow {
+            let days = entry.profile.growthDays
+            let label = entry.profile.hasPartialGrowthWindow
+                ? "since \(entry.profile.growthWindowStartText)"
+                : "last \(days) \(days == 1 ? "day" : "days")"
+            items.append((label, growth.signedString))
         }
         if settings.menuBarPrimaryMetric == .currentYearCitations {
             items.append(("total", metrics.citationCount.decimalString))
@@ -489,17 +517,48 @@ private struct CitationProgress: View {
 
 // MARK: - List
 
+/// A 30-day growth number. A short window (profile tracked for under 30 days) carries a small
+/// superscript marker, like a footnote: the day count on a row, an asterisk on a group.
+private struct GrowthCell: View {
+    let text: String
+    let marker: String?
+    let help: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 1) {
+            Text(text)
+                .font(.system(size: 11))
+                .monospacedDigit()
+                .frame(minWidth: Theme.growthColumnWidth - Theme.growthMarkerWidth - 1, alignment: .trailing)
+            // A fixed slot for the footnote-style marker keeps the digits aligned.
+            Text(marker ?? "")
+                .font(.system(size: 8))
+                .baselineOffset(4)
+                .fixedSize()
+                .frame(width: Theme.growthMarkerWidth, alignment: .leading)
+        }
+        .foregroundStyle(.tertiary)
+        .help(help)
+    }
+}
+
 /// Labels the number columns, so new users can tell totals from 30-day growth.
 private struct ColumnHeader: View {
     let metricLabel: String
     let showsGrowth: Bool
+    /// Every profile with growth was added within the last 30 days (a new install).
+    let allPartial: Bool
 
     var body: some View {
         HStack(spacing: 8) {
             Spacer()
             Text(metricLabel)
-            Text(showsGrowth ? "30 days" : "")
-                .frame(minWidth: Theme.growthColumnWidth, alignment: .trailing)
+            Text(showsGrowth ? (allPartial ? "so far" : "30 days") : "")
+                .frame(minWidth: Theme.growthColumnWidth - Theme.growthMarkerWidth - 1, alignment: .trailing)
+                .padding(.trailing, Theme.growthMarkerWidth + 1)
+                .help(allPartial
+                      ? "Citations gained since CiteBar started tracking. This becomes a 30-day window once there is a month of history."
+                      : "Citations gained in the last 30 days. Profiles tracked for less show their own day count, like 3d.")
         }
         .font(.system(size: 10))
         .foregroundStyle(.tertiary)
@@ -536,6 +595,18 @@ private struct GroupHeader: View {
         return values.isEmpty ? nil : values.reduce(0, +)
     }
 
+    private var partialMembers: [ScholarProfile] {
+        members.map(\.profile).filter(\.hasPartialGrowthWindow)
+    }
+
+    private var groupGrowthHelp: String {
+        guard !partialMembers.isEmpty else { return "Combined new citations in the last 30 days" }
+        let list = partialMembers
+            .map { "\($0.name) (\($0.growthDays) \($0.growthDays == 1 ? "day" : "days"))" }
+            .joined(separator: ", ")
+        return "Combined new citations in the last 30 days. * Tracked for less than 30 days so far: \(list)."
+    }
+
     var body: some View {
         Button(action: toggle) {
             HStack(spacing: 6) {
@@ -553,12 +624,11 @@ private struct GroupHeader: View {
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
                     .numericTransition(value: total)
-                Text(growth.map { $0 == 0 ? "" : $0.signedString } ?? "")
-                    .font(.system(size: 11))
-                    .monospacedDigit()
-                    .foregroundStyle(.tertiary)
-                    .frame(minWidth: Theme.growthColumnWidth, alignment: .trailing)
-                    .help("Combined new citations in the last 30 days")
+                GrowthCell(
+                    text: growth.map { $0 == 0 ? "" : $0.signedString } ?? "",
+                    marker: partialMembers.isEmpty ? nil : "*",
+                    help: groupGrowthHelp
+                )
             }
             .padding(.horizontal, 6)
             .padding(.top, 10)
@@ -605,12 +675,12 @@ private struct ProfileRowView: View {
                             .font(.system(size: 13, weight: .medium))
                             .monospacedDigit()
                             .numericTransition(value: value(metrics))
-                        Text(deltaText)
-                            .font(.system(size: 11))
-                            .monospacedDigit()
-                            .foregroundStyle(.tertiary)
-                            .frame(minWidth: Theme.growthColumnWidth, alignment: .trailing)
-                            .help(deltaHelp)
+                        GrowthCell(
+                            text: deltaText,
+                            marker: deltaText.isEmpty || !entry.profile.hasPartialGrowthWindow
+                                ? nil : "\(entry.profile.growthDays)d",
+                            help: deltaHelp
+                        )
                     } else if isLoading {
                         ProgressView().controlSize(.mini)
                     } else {
@@ -643,9 +713,13 @@ private struct ProfileRowView: View {
     }
 
     private var deltaHelp: String {
-        guard let growth = entry.profile.recentGrowth else { return "" }
-        let days = max(1, entry.profile.recentGrowthDays ?? 30)
-        return "\(growth.signedString) citations in the last \(days) \(days == 1 ? "day" : "days")"
+        let profile = entry.profile
+        guard let growth = profile.recentGrowth else { return "" }
+        guard profile.hasPartialGrowthWindow else {
+            return "\(growth.signedString) citations in the last 30 days"
+        }
+        let days = profile.growthDays
+        return "\(growth.signedString) citations since tracking began on \(profile.growthWindowStartText) (\(days) \(days == 1 ? "day" : "days")). The full 30-day window fills in over the first month."
     }
 }
 

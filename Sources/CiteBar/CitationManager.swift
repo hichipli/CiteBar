@@ -248,6 +248,7 @@ import UserNotifications
     private func performCitationCheck(for profiles: [ScholarProfile]) async {
         var changes: [ProfileChange] = []
         var milestones: [String] = []
+        var milestoneProfileID: String?
         var rateLimited = false
         var succeeded = 0
         // Profiles still worth retrying: not yet fetched, or failed on a network blip.
@@ -283,7 +284,11 @@ import UserNotifications
                             profileURL: profile.url
                         ))
                     }
-                    milestones += Self.milestoneMessages(name: profile.name, previous: previousRecord, current: record)
+                    let reached = Self.milestoneMessages(name: profile.name, previous: previousRecord, current: record)
+                    if !reached.isEmpty && milestoneProfileID == nil {
+                        milestoneProfileID = profile.id
+                    }
+                    milestones += reached
                 }
 
                 succeeded += 1
@@ -336,7 +341,7 @@ import UserNotifications
             // Reload every profile from storage so ones that failed this cycle keep showing
             // their last known data.
             updateMenuBarWithCurrentData()
-            notifyIfNeeded(changes: changes, milestones: milestones)
+            notifyIfNeeded(changes: changes, milestones: milestones, milestoneProfileID: milestoneProfileID)
             await DataManager.backUpIfEnabled(storage: storageManager)
         } else {
             // Keep showing historical data when the network fails; only surface an
@@ -483,7 +488,7 @@ import UserNotifications
         return (title, body, first.paperGains.first?.citedByURL ?? first.profileURL)
     }
 
-    private func notifyIfNeeded(changes: [ProfileChange], milestones: [String]) {
+    private func notifyIfNeeded(changes: [ProfileChange], milestones: [String], milestoneProfileID: String?) {
         guard settingsManager.settings.showNotifications, Bundle.main.bundleIdentifier != nil else { return }
         let changeText = Self.changeNotificationText(
             for: changes,
@@ -499,27 +504,31 @@ import UserNotifications
             guard status == .authorized || status == .provisional else { return }
 
             if !milestones.isEmpty {
+                var userInfo: [String: String] = ["action": "card"]
+                userInfo["profileID"] = milestoneProfileID
                 await Self.postNotification(
                     title: "🎉 Milestone reached",
-                    body: milestones.joined(separator: "\n"),
-                    url: changeText?.url
+                    body: milestones.joined(separator: "\n") + "\nClick to make a card of the moment.",
+                    userInfo: userInfo
                 )
             }
             if let changeText {
-                await Self.postNotification(title: changeText.title, body: changeText.body, url: changeText.url)
+                await Self.postNotification(
+                    title: changeText.title,
+                    body: changeText.body,
+                    userInfo: changeText.url.map { ["url": $0] } ?? [:]
+                )
             }
         }
     }
 
-    private static func postNotification(title: String, body: String, url: String?) async {
+    /// `userInfo` tells AppDelegate what a click opens: a "url", or "action": "card".
+    private static func postNotification(title: String, body: String, userInfo: [String: String]) async {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.threadIdentifier = "com.hichipli.citebar.refresh"
-        if let url {
-            // Opened by AppDelegate when the notification is clicked.
-            content.userInfo = ["url": url]
-        }
+        content.userInfo = userInfo
 
         let request = UNNotificationRequest(
             identifier: "citebar-refresh-\(UUID().uuidString)",

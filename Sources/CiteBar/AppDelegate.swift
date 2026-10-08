@@ -190,7 +190,10 @@ import Carbon
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
                 switch target {
                 case "panel": self?.menuBarManager?.togglePanel()
-                case "card": self?.showCardStudio()
+                case "card":
+                    // `-CiteBarDebugCardDaysAgo N` opens the studio N days back in time.
+                    let daysAgo = UserDefaults.standard.integer(forKey: "CiteBarDebugCardDaysAgo")
+                    self?.showCardStudio(date: daysAgo > 0 ? Date().addingTimeInterval(-Double(daysAgo) * 86_400) : nil)
                 case "papers": self?.showPapers()
                 case "general": self?.showSettings(pane: .general)
                 case "about": self?.showSettings(pane: .about)
@@ -554,10 +557,13 @@ import Carbon
         window.setFrameOrigin(origin)
     }
     
-    /// Opens the Citation Record window with a preview of the menu bar profile's card.
-    func showCardStudio() {
+    /// Opens the Citation Record studio for a profile (default: the menu bar profile), at
+    /// `date` in its history or today.
+    func showCardStudio(profileID: String? = nil, date: Date? = nil) {
         cardWindow?.close()
-        let host = NSHostingController(rootView: CardStudioView(model: menuBarManager?.model ?? DashboardModel()))
+        let model = menuBarManager?.model ?? DashboardModel()
+        guard let id = profileID ?? model.entries.first(where: { $0.metrics != nil })?.id else { return }
+        let host = NSHostingController(rootView: CardStudioView(model: model, profileID: id, selectedDate: date))
         host.sizingOptions = [.preferredContentSize]
         let window = NSWindow(contentViewController: host)
         window.title = "Citation Record"
@@ -790,7 +796,14 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
-        guard let urlString = response.notification.request.content.userInfo["url"] as? String,
+        let userInfo = response.notification.request.content.userInfo
+        // Milestones open the card studio, ready to share the moment.
+        if userInfo["action"] as? String == "card" {
+            let profileID = userInfo["profileID"] as? String
+            await MainActor.run { self.showCardStudio(profileID: profileID) }
+            return
+        }
+        guard let urlString = userInfo["url"] as? String,
               let url = URL(string: urlString) else { return }
         await MainActor.run { _ = NSWorkspace.shared.open(url) }
     }

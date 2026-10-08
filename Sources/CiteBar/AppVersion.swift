@@ -3,10 +3,10 @@ import Foundation
 /// Centralized version management for CiteBar
 struct AppVersion {
     /// Current application version
-    static let current: String = "1.6.1"
+    static let current: String = "1.6.2"
     
     /// Current build number
-    static let build: String = "20"
+    static let build: String = "21"
     
     /// Version display string for UI
     static let displayString: String = "Version \(current)"
@@ -38,21 +38,17 @@ extension AppVersion {
     static let releaseNotes = ReleaseNotes(
         version: current,
         highlights: [
-            "Watch specific papers: star them in the new Papers window to follow their citations in the panel and notifications",
-            "Share opens a Citation Record window: preview the card, pick any profile, then share, copy, or save",
-            "The next h-index now names the exact papers that need citations, with progress for each",
-            "The panel labels its columns, so totals and 30-day growth are clear at a glance",
-            "A new Data tab shows where your data lives and how much space it uses",
-            "Export and import everything (profiles, groups, settings, full history) to move to a new Mac",
-            "Optional automatic backup to iCloud Drive or any folder you choose"
+            "Four card themes: Record, Night, Gazette (a front page with your headline), and Certificate",
+            "Choose what the card shows: chart, h-index, papers or one featured paper, growth from 7 to 365 days, and a note",
+            "A time machine: go back to any day, see the milestones you passed, and share that moment",
+            "Milestone notifications open a card of the moment",
+            "Growth from profiles tracked for less than 30 days is now marked instead of labeled as 30 days"
         ],
-        description: "CiteBar 1.6.1 makes your citation history portable and safe, and turns sharing into a one-click preview.",
+        description: "CiteBar 1.6.2 turns sharing into something worth doing: four card styles, full control over what they show, and a time machine for any day in your citation history.",
         technicalNotes: [
-            "Backups and exports are one JSON file with settings, history, and paper lists; importing merges and never deletes",
-            "Automatic backups write one file per Mac after each refresh, to iCloud Drive › CiteBar or a chosen folder",
-            "Citation history is written as compact JSON, roughly halving its size on disk",
-            "The h-index step uses the top h+1 papers by citations, so it names the papers that would raise it soonest",
-            "Paper years and each paper's latest gain are stored with the paper list; watched papers are saved by Scholar paper ID"
+            "The timeline keeps one point per tracked day and estimates earlier year-ends from Google Scholar's yearly counts, capped at the first tracked total",
+            "Card previews render live; the share file renders after a short pause",
+            "Short growth windows carry a day-count marker on rows and an asterisk on group totals"
         ]
     )
     
