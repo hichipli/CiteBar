@@ -8,12 +8,24 @@ struct ScholarProfile: Hashable, Codable {
     var recentGrowth: Int?
     var recentGrowthDays: Int?
     var sortOrder: Int = 0
+    /// Optional group such as a lab or a set of collaborators; nil means ungrouped.
+    var group: String?
     
-    init(id: String, name: String, sortOrder: Int = 0) {
+    init(id: String, name: String, sortOrder: Int = 0, group: String? = nil) {
         self.id = id
         self.name = name
         self.url = "https://scholar.google.com/citations?user=\(id)&hl=en"
         self.sortOrder = sortOrder
+        self.group = group
+    }
+
+    /// Same profile under a new display name, keeping order, group, and state.
+    func renamed(to newName: String) -> ScholarProfile {
+        var copy = ScholarProfile(id: id, name: newName, sortOrder: sortOrder, group: group)
+        copy.isEnabled = isEnabled
+        copy.recentGrowth = recentGrowth
+        copy.recentGrowthDays = recentGrowthDays
+        return copy
     }
     
     static func == (lhs: ScholarProfile, rhs: ScholarProfile) -> Bool {
@@ -30,13 +42,43 @@ struct ScholarMetrics {
     let hIndex: Int?
     let i10Index: Int?
     let citationsByYear: [Int: Int]?
+    let papers: [ScholarPaper]
 
-    init(citationCount: Int, hIndex: Int? = nil, i10Index: Int? = nil, citationsByYear: [Int: Int]? = nil) {
+    init(citationCount: Int, hIndex: Int? = nil, i10Index: Int? = nil, citationsByYear: [Int: Int]? = nil, papers: [ScholarPaper] = []) {
         self.citationCount = citationCount
         self.hIndex = hIndex
         self.i10Index = i10Index
         self.citationsByYear = citationsByYear
+        self.papers = papers
     }
+}
+
+/// One row of the publication list on a Scholar profile page.
+struct ScholarPaper: Codable, Equatable {
+    let id: String
+    let title: String
+    let citations: Int
+    let citedByURL: String?
+}
+
+struct PaperGain: Codable, Equatable {
+    let title: String
+    let delta: Int
+    let citedByURL: String?
+
+    /// Quoted title short enough for a menu line or notification.
+    var shortTitle: String {
+        let limit = 48
+        let text = title.count > limit ? title.prefix(limit - 1).trimmingCharacters(in: .whitespaces) + "…" : title
+        return "“\(text)”"
+    }
+}
+
+/// Latest publication list for a profile plus the most recent per-paper gains.
+struct ProfilePapers: Codable {
+    var papers: [ScholarPaper]
+    var lastGains: [PaperGain] = []
+    var lastGainDate: Date?
 }
 
 struct CitationRecord: Codable {
@@ -68,6 +110,8 @@ struct AppSettings: Codable {
     var showI10IndexInMenu: Bool = true
     var showTrendInMenu: Bool = true
     var menuBarPrimaryMetric: MenuBarPrimaryMetric = .totalCitations
+    /// Set when Google Scholar rate-limits us; scheduled refreshes wait until then.
+    var scholarPausedUntil: Date?
 
     enum CodingKeys: String, CodingKey {
         case profiles
@@ -80,6 +124,7 @@ struct AppSettings: Codable {
         case showI10IndexInMenu
         case showTrendInMenu
         case menuBarPrimaryMetric
+        case scholarPausedUntil
     }
 
     enum MenuBarPrimaryMetric: String, CaseIterable, Codable {
@@ -121,18 +166,17 @@ struct AppSettings: Codable {
         showI10IndexInMenu = try container.decodeIfPresent(Bool.self, forKey: .showI10IndexInMenu) ?? true
         showTrendInMenu = try container.decodeIfPresent(Bool.self, forKey: .showTrendInMenu) ?? true
         menuBarPrimaryMetric = try container.decodeIfPresent(MenuBarPrimaryMetric.self, forKey: .menuBarPrimaryMetric) ?? .totalCitations
+        scholarPausedUntil = try container.decodeIfPresent(Date.self, forKey: .scholarPausedUntil)
     }
     
     enum RefreshInterval: String, CaseIterable, Codable {
-        case hourly = "1hour"
-        case sixHours = "6hours"
+        case twelveHours = "12hours"
         case daily = "24hours"
         case twoDays = "48hours"
         
         var displayName: String {
             switch self {
-            case .hourly: return "Every hour"
-            case .sixHours: return "Every 6 hours"
+            case .twelveHours: return "Every 12 hours"
             case .daily: return "Once daily"
             case .twoDays: return "Every 2 days"
             }
@@ -140,24 +184,20 @@ struct AppSettings: Codable {
         
         var seconds: TimeInterval {
             switch self {
-            case .hourly: return 60 * 60
-            case .sixHours: return 6 * 60 * 60
+            case .twelveHours: return 12 * 60 * 60
             case .daily: return 24 * 60 * 60
             case .twoDays: return 48 * 60 * 60
             }
         }
 
+        /// Shorter intervals from earlier versions map to the shortest one offered now.
         init(from decoder: Decoder) throws {
             let container = try decoder.singleValueContainer()
             let rawValue = try container.decode(String.self)
 
             switch rawValue {
-            case Self.hourly.rawValue, "15min", "30min":
-                self = .hourly
-            case Self.sixHours.rawValue, "3hours":
-                self = .sixHours
-            case Self.daily.rawValue:
-                self = .daily
+            case Self.twelveHours.rawValue, "15min", "30min", "1hour", "3hours", "6hours":
+                self = .twelveHours
             case Self.twoDays.rawValue:
                 self = .twoDays
             default:
@@ -177,6 +217,11 @@ struct ProfileMetrics {
     let hIndex: Int?
     let i10Index: Int?
     let citationsByYear: [Int: Int]?
+    /// Citations still needed to reach the next h-index, when the paper list allows computing it.
+    var citationsToNextHIndex: Int?
+    var recentPaperGains: [PaperGain] = []
+    /// Most cited papers, for the stats card.
+    var topPapers: [ScholarPaper] = []
 
     init(citationCount: Int, hIndex: Int? = nil, i10Index: Int? = nil, citationsByYear: [Int: Int]? = nil) {
         self.citationCount = citationCount
@@ -192,8 +237,22 @@ struct ProfileMetrics {
     }
 }
 
+/// Why the last refresh left profiles unfetched, and when CiteBar retries on its own.
+enum RefreshIssue: Equatable {
+    case rateLimited(retryAt: Date)
+    case networkUnavailable(retryAt: Date)
+
+    var retryAt: Date {
+        switch self {
+        case .rateLimited(let date), .networkUnavailable(let date):
+            return date
+        }
+    }
+}
+
 @MainActor protocol CitationManagerDelegate: AnyObject {
     func citationsUpdated(_ citations: [ScholarProfile: ProfileMetrics])
     func citationCheckFailed(_ error: Error)
     func refreshingStateChanged(_ isRefreshing: Bool)
+    func refreshIssueChanged(_ issue: RefreshIssue?, failedProfileIDs: Set<String>)
 }

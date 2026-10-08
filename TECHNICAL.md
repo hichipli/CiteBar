@@ -41,9 +41,12 @@ actor StorageManager {
 
 ### Rate Limiting Strategy
 
-- 2-second delays between individual requests
-- User-controlled refresh intervals
-- Exponential backoff on errors
+- One request per profile: the first profile page with `pagesize=100` carries totals, the yearly histogram, and per-paper counts (robots.txt allows `/citations?user=`; it disallows `cstart=` pagination)
+- 2-second delays between individual requests, including after failures
+- User-controlled refresh intervals, daily by default
+- A request that times out, loses its connection, or gets a 5xx is retried after 2 and then 5 seconds
+- Profiles left unfetched are retried on their own: after 5, 10, 20, 40, then 60 minutes for network problems
+- A 429, a redirect to Google's `/sorry` page, or a CAPTCHA page stops the cycle and pauses automatic refreshes for 15, 30, 60, 120, then 240 minutes; Refresh Now always works
 - Respectful User-Agent headers
 
 ## Google Scholar Integration
@@ -65,9 +68,13 @@ The integration is designed around public profile pages:
 
 ## Feature Implementation Notes
 
-- Citation counts are shown directly in the menu bar.
+- The citation count is shown in the menu bar; clicking it opens a SwiftUI popover (`PanelView`) fed by `DashboardModel`, which `MenuBarManager` keeps current. Right-click opens a small classic menu.
+- Profiles can carry an optional `group`; the panel and Settings show groups with combined totals.
+- Per-paper counts from the latest refresh are stored in `papers.json` and compared with the next refresh to find newly cited papers and the citations needed for the next h-index.
 - Historical trend tracking supports growth indicators.
-- Refresh intervals are user-configurable, from 1 hour to 2 days.
+- Refresh intervals are user-configurable: every 12 hours, once daily (default), or every 2 days.
+- Settings use an `NSTabViewController` with toolbar tabs, one SwiftUI pane per tab.
+- Debug builds accept `-CiteBarDebugOpen panel|card|profiles|general|about` (and `-CiteBarDebugDark YES`) to open UI at launch, useful for screenshots with `CFFIXED_USER_HOME` pointing at demo data.
 - Multiple scholar profiles can be tracked in one app instance.
 - Profile ordering supports drag and drop.
 - Profile switching and prioritization are available from the app UI.
@@ -159,7 +166,7 @@ Maintainers should use [RELEASING.md](RELEASING.md) for the full release and sig
 
 - Built-in delays between requests
 - Default 24-hour refresh intervals
-- Exponential backoff on errors
+- Short retries for network hiccups and gradual backoff on Google Scholar rate limits
 - Professional User-Agent headers
 
 ### Open Source Transparency

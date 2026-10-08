@@ -2,1778 +2,852 @@ import SwiftUI
 import ServiceManagement
 import UserNotifications
 
-private extension NSColor {
-    static var settingsSidebarBackground: NSColor {
-        NSColor(name: nil) { appearance in
-            let match = appearance.bestMatch(from: [.darkAqua, .aqua])
-            return match == .darkAqua ? .windowBackgroundColor : .white
-        }
+enum SettingsPane: Int {
+    case profiles, general, about
+}
+
+/// Settings window content: native toolbar tabs, one SwiftUI pane per tab. The window
+/// resizes to each pane, keeping its top edge in place.
+@MainActor final class SettingsTabController: NSTabViewController {
+    init(model: DashboardModel, pane: SettingsPane, startAddingProfile: Bool) {
+        super.init(nibName: nil, bundle: nil)
+        tabStyle = .toolbar
+        transitionOptions = [.crossfade, .allowUserInteraction]
+
+        addPane("Profiles", symbol: "person.2", ProfilesPane(model: model, showingAdd: startAddingProfile))
+        addPane("General", symbol: "gearshape", GeneralPane(model: model))
+        addPane("About", symbol: "info.circle", AboutPane())
+        selectedTabViewItemIndex = pane.rawValue
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func addPane<Content: View>(_ title: String, symbol: String, _ content: Content) {
+        let host = NSHostingController(rootView: content)
+        host.sizingOptions = [.preferredContentSize]
+        host.title = title
+        let item = NSTabViewItem(viewController: host)
+        item.label = title
+        item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
+        addTabViewItem(item)
+    }
+
+    override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
+        super.tabView(tabView, didSelect: tabViewItem)
+        guard let window = view.window, let size = tabViewItem?.viewController?.preferredContentSize,
+              size.width > 0, size.height > 0 else { return }
+        let frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: size))
+        let origin = NSPoint(x: window.frame.minX, y: window.frame.maxY - frame.height)
+        window.setFrame(NSRect(origin: origin, size: frame.size), display: true, animate: window.isVisible)
     }
 }
 
-private enum SettingsSection: String, CaseIterable, Identifiable {
-    case profiles
-    case general
-    case about
-
-    var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .profiles: return "Profiles"
-        case .general: return "General"
-        case .about: return "About"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .profiles: return "Manage Scholar accounts"
-        case .general: return "Refresh and display options"
-        case .about: return "Version, features, and support"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .profiles: return "person.2.fill"
-        case .general: return "gearshape.fill"
-        case .about: return "info.circle.fill"
-        }
-    }
+@MainActor private func refreshMenuBar() {
+    (NSApp.delegate as? AppDelegate)?.updateMenuBarDisplay()
 }
 
-struct SettingsView: View {
+// MARK: - Profiles
+
+struct ProfilesPane: View {
+    @ObservedObject var model: DashboardModel
     @ObservedObject private var settingsManager = SettingsManager.shared
-    @State private var newProfileId = ""
-    @State private var newProfileName = ""
-    @State private var showingAddProfile = false
-    @State private var showingError = false
-    @State private var errorMessage = ""
-    @State private var selectedSection: SettingsSection = .profiles
-    @State private var activeMenuBarManagerName: String?
-    @State private var hasRecentMenuBarDelayObservation = false
-    @State private var showingMenuBarCompatibilityAlert = false
+    @State var showingAdd: Bool
 
-    private let reportIssueURL = URL(string: "https://github.com/hichipli/CiteBar/issues/new")
+    @State private var renamingProfile: ScholarProfile?
+    @State private var groupingProfile: ScholarProfile?
+    @State private var renamingGroup: String?
+    @State private var removingProfile: ScholarProfile?
+    @State private var note: String?
 
-    private var menuBarCompatibilityAlertMessage: String {
-        if let managerName = activeMenuBarManagerName {
-            if hasRecentMenuBarDelayObservation {
-                return "\(managerName) is managing menu bar items, and CiteBar recently detected delayed icon visibility. The app continues running normally in the background while the icon appears."
-            }
-
-            return "\(managerName) is managing menu bar items. On some Macs, newly launched status icons can appear with a short delay. CiteBar continues running normally during this time."
-        }
-
-        return "CiteBar recently detected delayed menu-bar visibility on this Mac. The app continues running normally in the background while the icon appears."
+    private var profiles: [ScholarProfile] {
+        settingsManager.settings.profiles.sorted { $0.sortOrder < $1.sortOrder }
     }
 
-    private func refreshMenuBarCompatibilityStatus() {
-        activeMenuBarManagerName = MenuBarCompatibility.activeManagerDisplayName()
-        hasRecentMenuBarDelayObservation = MenuBarCompatibility.hasRecentDelayObservation()
-    }
+    private var groups: [String] { settingsManager.groups }
 
-    private func reportMenuBarIssue() {
-        guard let reportIssueURL else { return }
-        NSWorkspace.shared.open(reportIssueURL)
-    }
-
-    var body: some View {
-        // A fixed split layout is more predictable here than NavigationSplitView
-        // for this app's settings window sizing and section switching behavior.
-        HStack(spacing: 0) {
-            SettingsSidebar(
-                selectedSection: $selectedSection,
-                menuBarManagerName: activeMenuBarManagerName,
-                hasRecentDelayObservation: hasRecentMenuBarDelayObservation
-            ) {
-                showingMenuBarCompatibilityAlert = true
-            }
-                .frame(width: 260)
-
-            Divider()
-
-            Group {
-                switch selectedSection {
-                case .profiles:
-                    ProfilesTab(
-                        settingsManager: settingsManager,
-                        newProfileId: $newProfileId,
-                        newProfileName: $newProfileName,
-                        showingAddProfile: $showingAddProfile,
-                        showingError: $showingError,
-                        errorMessage: $errorMessage
-                    )
-                case .general:
-                    GeneralTab(settingsManager: settingsManager)
-                case .about:
-                    AboutTab()
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(Color(nsColor: .windowBackgroundColor))
+    /// Groups and the ungrouped profiles, each placed where its first member sits in the
+    /// overall order, so the menu bar profile's section always comes first.
+    private var sections: [(group: String?, profiles: [ScholarProfile])] {
+        var result: [(group: String?, profiles: [ScholarProfile])] = []
+        for profile in profiles where !result.contains(where: { $0.group == profile.group }) {
+            result.append((profile.group, profiles.filter { $0.group == profile.group }))
         }
-        .frame(minWidth: 900, minHeight: 620)
-        .onAppear {
-            refreshMenuBarCompatibilityStatus()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            refreshMenuBarCompatibilityStatus()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowSupportSection"))) { _ in
-            selectedSection = .about
-        }
-        .alert("Menu Bar Compatibility", isPresented: $showingMenuBarCompatibilityAlert) {
-            Button("Report Issue") {
-                reportMenuBarIssue()
-            }
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(menuBarCompatibilityAlertMessage)
-        }
-    }
-}
-
-private struct SettingsSidebar: View {
-    @Binding var selectedSection: SettingsSection
-    let menuBarManagerName: String?
-    let hasRecentDelayObservation: Bool
-    let onOpenMenuBarCompatibilityInfo: () -> Void
-
-    private var shouldShowMenuBarNotice: Bool {
-        menuBarManagerName != nil || hasRecentDelayObservation
-    }
-
-    private var menuBarNoticeSummary: String {
-        if let managerName = menuBarManagerName {
-            return "\(managerName) may delay icon visibility."
-        }
-        return "Menu bar icon visibility may be delayed."
+        return result
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                AppIconView(size: 20)
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("CiteBar Settings")
-                        .font(.headline)
-                    Text("Preferences")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+            if profiles.isEmpty {
+                emptyState
+            } else {
+                ScrollViewReader { proxy in
+                    List {
+                        ForEach(sections, id: \.group) { section in
+                            Section {
+                                ForEach(section.profiles, id: \.id) { profile in
+                                    row(for: profile)
+                                }
+                                .onMove { source, destination in
+                                    move(section.profiles, from: source, to: destination)
+                                }
+                            } header: {
+                                sectionHeader(section.group, members: section.profiles)
+                            }
+                        }
+                    }
+                    .listStyle(.inset(alternatesRowBackgrounds: false))
+                    .onAppear {
+                        // The list can open scrolled to the end while the window sizes itself.
+                        DispatchQueue.main.async {
+                            proxy.scrollTo(profiles.first?.id, anchor: .top)
+                        }
+                    }
                 }
-
-                Spacer()
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
 
             Divider()
 
-            // Keep native List selection for reliable macOS row hit-testing.
-            List(SettingsSection.allCases, selection: $selectedSection) { section in
-                Label(section.title, systemImage: section.icon)
-                    .tag(section)
-                    .help(section.subtitle)
-            }
-            .listStyle(.sidebar)
-            .scrollContentBackground(.hidden)
-            .background(Color(nsColor: .settingsSidebarBackground))
-
-            if shouldShowMenuBarNotice {
-                Divider()
-
-                Button(action: onOpenMenuBarCompatibilityInfo) {
-                    HStack(alignment: .center, spacing: 8) {
-                        Image(systemName: hasRecentDelayObservation ? "exclamationmark.triangle.fill" : "info.circle.fill")
-                            .font(.caption)
-                            .foregroundColor(hasRecentDelayObservation ? .orange : .blue)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("CiteBar Icon May Be Delayed")
-                                .font(.caption)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.primary)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-
-                            Text(menuBarNoticeSummary)
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
-
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill((hasRecentDelayObservation ? Color.orange : Color.blue).opacity(0.10))
-                    )
+            HStack(spacing: 12) {
+                Button {
+                    showingAdd = true
+                } label: {
+                    Label("Add Profiles…", systemImage: "plus")
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+                Text(note ?? (groups.isEmpty && profiles.count > 1
+                    ? "Tip: choose ⋯ › Group to gather your lab or co-authors under one heading."
+                    : "Drag to reorder. The first profile is shown in the menu bar."))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+        }
+        .frame(width: 600, height: 460)
+        .sheet(isPresented: $showingAdd) {
+            AddProfilesSheet(existingIDs: Set(profiles.map(\.id)), groups: groups) { newProfiles, snapshots in
+                settingsManager.addProfiles(newProfiles)
+                (NSApp.delegate as? AppDelegate)?.primeNewProfiles(newProfiles, snapshots: snapshots)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(nsColor: .settingsSidebarBackground))
+        .sheet(item: $renamingProfile) { profile in
+            TextPromptSheet(title: "Rename Profile", label: "Name", initialText: profile.name, confirmTitle: "Rename") { name in
+                settingsManager.updateProfile(profile.renamed(to: name))
+                refreshMenuBar()
+            }
+        }
+        .sheet(item: $groupingProfile) { profile in
+            TextPromptSheet(
+                title: "New Group",
+                message: "Groups gather a lab, co-authors, or a cohort under one heading with a combined total.",
+                label: "Group name",
+                initialText: "",
+                confirmTitle: "Create"
+            ) { name in
+                settingsManager.setGroup(name, forProfileID: profile.id)
+                refreshMenuBar()
+            }
+        }
+        .sheet(item: Binding(
+            get: { renamingGroup.map(GroupName.init) },
+            set: { renamingGroup = $0?.name }
+        )) { group in
+            TextPromptSheet(title: "Rename Group", label: "Group name", initialText: group.name, confirmTitle: "Rename") { name in
+                settingsManager.renameGroup(group.name, to: name)
+                refreshMenuBar()
+            }
+        }
+        .alert(
+            "Remove \(removingProfile?.name ?? "profile")?",
+            isPresented: Binding(get: { removingProfile != nil }, set: { if !$0 { removingProfile = nil } }),
+            presenting: removingProfile
+        ) { profile in
+            Button("Remove", role: .destructive) {
+                settingsManager.removeProfile(profile)
+                refreshMenuBar()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("CiteBar stops tracking this profile. Its saved history stays on this Mac.")
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            Spacer()
+            Text("No profiles yet")
+                .font(Theme.serif(22, .medium))
+            Text("Add your Google Scholar profile, then anyone else you follow:\nco-authors, your advisor, or a whole lab.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button("Add Profiles…") { showingAdd = true }
+                .buttonStyle(.borderedProminent)
+                .padding(.top, 6)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func row(for profile: ScholarProfile) -> some View {
+        let isPrimary = profile.id == profiles.first?.id
+        let citations = model.entries.first { $0.id == profile.id }?.metrics?.citationCount
+
+        return HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(profile.name)
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+                    if isPrimary {
+                        Text("Menu bar")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(Theme.accent)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1.5)
+                            .background(Capsule().stroke(Theme.accent.opacity(0.5), lineWidth: 0.75))
+                    }
+                }
+                Text(profile.id)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            Spacer(minLength: 12)
+            if let citations, citations >= 0 {
+                Text(citations.decimalString)
+                    .font(.system(size: 12))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            Menu {
+                profileMenu(for: profile, isPrimary: isPrimary)
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Profile options")
+        }
+        .padding(.vertical, 4)
+        .contextMenu {
+            profileMenu(for: profile, isPrimary: isPrimary)
+        }
+    }
+
+    @ViewBuilder
+    private func profileMenu(for profile: ScholarProfile, isPrimary: Bool) -> some View {
+        if !isPrimary {
+            Button("Show in Menu Bar") {
+                var reordered = profiles.filter { $0.id != profile.id }
+                reordered.insert(profile, at: 0)
+                settingsManager.reorderProfiles(reordered)
+                refreshMenuBar()
+            }
+        }
+        Menu("Group") {
+            Button {
+                settingsManager.setGroup(nil, forProfileID: profile.id)
+                refreshMenuBar()
+            } label: {
+                checkmarkLabel("None", checked: profile.group == nil)
+            }
+            if !groups.isEmpty {
+                Divider()
+                ForEach(groups, id: \.self) { group in
+                    Button {
+                        settingsManager.setGroup(group, forProfileID: profile.id)
+                        refreshMenuBar()
+                    } label: {
+                        checkmarkLabel(group, checked: profile.group == group)
+                    }
+                }
+            }
+            Divider()
+            Button("New Group…") { groupingProfile = profile }
+        }
+        Button("Rename…") { renamingProfile = profile }
+        Button("Open Scholar Profile") {
+            if let url = URL(string: profile.url) {
+                NSWorkspace.shared.open(url)
+            }
+        }
+        Divider()
+        Button("Remove…", role: .destructive) { removingProfile = profile }
+    }
+
+    @ViewBuilder
+    private func checkmarkLabel(_ title: String, checked: Bool) -> some View {
+        if checked {
+            Label(title, systemImage: "checkmark")
+        } else {
+            Text(title)
+        }
+    }
+
+    @ViewBuilder
+    private func sectionHeader(_ group: String?, members: [ScholarProfile]) -> some View {
+        if let group {
+            let total = members.compactMap { member in
+                model.entries.first { $0.id == member.id }?.metrics?.citationCount
+            }.filter { $0 >= 0 }.reduce(0, +)
+
+            HStack(spacing: 6) {
+                Text(group)
+                Text("\(members.count) · \(total.decimalString) citations")
+                    .fontWeight(.regular)
+                    .foregroundStyle(.tertiary)
+                Spacer()
+                Menu {
+                    Button("Rename Group…") { renamingGroup = group }
+                    Button("Copy Profile Links") { copyLinks(group: group, members: members) }
+                    Divider()
+                    Button("Ungroup") {
+                        settingsManager.dissolveGroup(group)
+                        refreshMenuBar()
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Group options")
+            }
+        } else if !groups.isEmpty {
+            Text("Ungrouped")
+        }
+    }
+
+    /// Readable list that AddProfilesSheet can paste back in, for sharing a lab with others.
+    private func copyLinks(group: String, members: [ScholarProfile]) {
+        let text = members.map { "\($0.name): \($0.url)" }.joined(separator: "\n")
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        note = "Copied \(members.count) \(group) links. Paste them into Add Profiles on another Mac."
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { note = nil }
+    }
+
+    /// Reorders within one section while keeping every other profile where it was.
+    private func move(_ members: [ScholarProfile], from source: IndexSet, to destination: Int) {
+        var reordered = members
+        reordered.move(fromOffsets: source, toOffset: destination)
+        let memberIDs = Set(members.map(\.id))
+        var next = reordered.makeIterator()
+        settingsManager.reorderProfiles(profiles.map { memberIDs.contains($0.id) ? (next.next() ?? $0) : $0 })
+        refreshMenuBar()
     }
 }
 
-struct ProfilesTab: View {
-    @ObservedObject var settingsManager: SettingsManager
-    @Binding var newProfileId: String
-    @Binding var newProfileName: String
-    @Binding var showingAddProfile: Bool
-    @Binding var showingError: Bool
-    @Binding var errorMessage: String
+extension ScholarProfile: Identifiable {}
 
-    private var sortedProfiles: [ScholarProfile] {
-        settingsManager.settings.profiles.sorted { $0.sortOrder < $1.sortOrder }
+private struct GroupName: Identifiable {
+    let name: String
+    var id: String { name }
+}
+
+// MARK: - Add profiles
+
+struct AddProfilesSheet: View {
+    let existingIDs: Set<String>
+    let groups: [String]
+    let onAdd: ([ScholarProfile], [String: CitationManager.ScholarProfileSnapshot]) -> Void
+
+    @State private var text = ""
+    @State private var groupChoice = ""
+    @State private var newGroupName = ""
+    @State private var snapshots: [String: CitationManager.ScholarProfileSnapshot] = [:]
+    @State private var unresolved: Set<String> = []
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var editorFocused: Bool
+
+    private static let newGroupTag = "\u{0}new"
+
+    private var ids: [String] { ScholarIDParser.ids(in: text) }
+    private var newIDs: [String] { ids.filter { !existingIDs.contains($0) } }
+
+    private var chosenGroup: String? {
+        let name = groupChoice == Self.newGroupTag ? newGroupName : groupChoice
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Google Scholar Profiles")
-                        .font(.title3)
-                        .fontWeight(.semibold)
-
-                    Text("Add, reorder, and maintain the profiles shown in your menu bar.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-
-                Spacer()
-
-                Button {
-                    showingAddProfile = true
-                } label: {
-                    Label("Add Profile", systemImage: "plus")
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Add Scholar Profiles")
+                    .font(.system(size: 15, weight: .semibold))
+                Text("Paste Google Scholar profile links or IDs, one per line. One profile is fine; a whole lab works too.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            if sortedProfiles.isEmpty {
-                SettingsCard {
-                    VStack(spacing: 14) {
-                        Image(systemName: "person.badge.plus")
-                            .font(.system(size: 34, weight: .regular))
-                            .foregroundColor(.secondary)
-
-                        Text("No profiles configured")
-                            .font(.headline)
-
-                        Text("Add your Google Scholar profile to start tracking citations.")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-
-                        Button {
-                            showingAddProfile = true
-                        } label: {
-                            Label("Add First Profile", systemImage: "plus.circle.fill")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                        .padding(.top, 4)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 240)
-                    .padding(.vertical, 12)
+            ZStack(alignment: .topLeading) {
+                TextEditor(text: $text)
+                    .font(.system(size: 12, design: .monospaced))
+                    .scrollContentBackground(.hidden)
+                    .focused($editorFocused)
+                    .padding(6)
+                if text.isEmpty {
+                    Text(verbatim: "https://scholar.google.com/citations?user=…")
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 6)
+                        .allowsHitTesting(false)
                 }
+            }
+            .frame(height: 92)
+            .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
+
+            if !ids.isEmpty {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(ids, id: \.self) { id in
+                            detectedRow(id)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 130)
+            }
+
+            HStack(spacing: 8) {
+                Text("Group")
+                    .font(.system(size: 12))
+                Picker("Group", selection: $groupChoice) {
+                    Text("None").tag("")
+                    if !groups.isEmpty {
+                        Divider()
+                        ForEach(groups, id: \.self) { Text($0).tag($0) }
+                    }
+                    Divider()
+                    Text("New Group…").tag(Self.newGroupTag)
+                }
+                .labelsHidden()
+                .fixedSize()
+                if groupChoice == Self.newGroupTag {
+                    TextField("e.g. My Lab", text: $newGroupName)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 180)
+                }
+                Spacer()
+            }
+
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button(newIDs.count > 1 ? "Add \(newIDs.count) Profiles" : "Add Profile") {
+                    add()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(newIDs.isEmpty || (groupChoice == Self.newGroupTag && chosenGroup == nil))
+            }
+        }
+        .padding(20)
+        .frame(width: 480)
+        .onAppear {
+            editorFocused = true
+        }
+        .task(id: newIDs) {
+            await resolveNames()
+        }
+    }
+
+    @ViewBuilder
+    private func detectedRow(_ id: String) -> some View {
+        HStack(spacing: 8) {
+            if existingIDs.contains(id) {
+                Image(systemName: "checkmark.circle").foregroundStyle(.tertiary)
+                Text(id).font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
+                Text("already tracked").font(.system(size: 11)).foregroundStyle(.tertiary)
+            } else if let name = snapshots[id]?.displayName {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                Text(name).font(.system(size: 12, weight: .medium))
+                Text(id).font(.system(size: 11, design: .monospaced)).foregroundStyle(.tertiary)
+            } else if unresolved.contains(id) {
+                Image(systemName: "questionmark.circle").foregroundStyle(.secondary)
+                Text(id).font(.system(size: 12, design: .monospaced))
+                Text("name will fill in later").font(.system(size: 11)).foregroundStyle(.tertiary)
             } else {
-                SettingsCard(
-                    title: "Profile Order",
-                    subtitle: "Drag rows to reorder. The top profile is shown in the menu bar.",
-                    expandContent: true
-                ) {
-                    List {
-                        ForEach(sortedProfiles, id: \.id) { profile in
-                            ProfileRow(profile: profile) { updatedProfile in
-                                settingsManager.updateProfile(updatedProfile)
-                            } onDelete: {
-                                settingsManager.removeProfile(profile)
+                ProgressView().controlSize(.mini).frame(width: 14)
+                Text(id).font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+    }
 
-                                // Trigger immediate refresh when deleting profile.
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
-                                        appDelegate.updateMenuBarDisplay()
-                                    }
-                                }
-                            } onMakePrimary: {
-                                // Move this profile to first position.
-                                var profiles = settingsManager.settings.profiles
-                                profiles.removeAll { $0.id == profile.id }
-                                profiles.insert(profile, at: 0)
-                                settingsManager.reorderProfiles(profiles)
+    /// Looks up names one profile at a time, spaced out to be gentle on Google Scholar.
+    private func resolveNames() async {
+        let manager = (NSApp.delegate as? AppDelegate)?.citationManager
+        for id in newIDs where snapshots[id] == nil && !unresolved.contains(id) {
+            guard !Task.isCancelled else { return }
+            if let snapshot = await manager?.fetchScholarProfileSnapshot(for: id), snapshot.displayName != nil {
+                snapshots[id] = snapshot
+            } else {
+                unresolved.insert(id)
+            }
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+    }
 
-                                // Trigger immediate refresh when making primary.
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
-                                        appDelegate.updateMenuBarDisplay()
-                                    }
-                                }
+    private func add() {
+        let profiles = newIDs.map { id in
+            ScholarProfile(id: id, name: snapshots[id]?.displayName ?? "Scholar \(id)", group: chosenGroup)
+        }
+        onAdd(profiles, snapshots)
+        dismiss()
+    }
+}
+
+/// Pulls Scholar profile IDs out of pasted text: profile links anywhere in a line, or a
+/// line that is just an ID.
+enum ScholarIDParser {
+    static func ids(in text: String) -> [String] {
+        var result: [String] = []
+        for line in text.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let linkIDs = trimmed.components(separatedBy: "user=").dropFirst().compactMap { part in
+                part.prefix { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }.description
+            }
+            let candidates = linkIDs.isEmpty ? [trimmed] : linkIDs
+            for id in candidates where isValid(id) && !result.contains(id) {
+                result.append(id)
+            }
+        }
+        return result
+    }
+
+    static func isValid(_ id: String) -> Bool {
+        id.range(of: "^[A-Za-z0-9_-]{8,20}$", options: .regularExpression) != nil
+    }
+}
+
+private struct TextPromptSheet: View {
+    let title: String
+    var message: String?
+    let label: String
+    let initialText: String
+    let confirmTitle: String
+    let onSubmit: (String) -> Void
+
+    @State private var text = ""
+    @Environment(\.dismiss) private var dismiss
+
+    private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+            if let message {
+                Text(message)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            TextField(label, text: $text)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(submit)
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button(confirmTitle, action: submit)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(trimmed.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 340)
+        .onAppear { text = initialText }
+    }
+
+    private func submit() {
+        guard !trimmed.isEmpty else { return }
+        onSubmit(trimmed)
+        dismiss()
+    }
+}
+
+// MARK: - General
+
+struct GeneralPane: View {
+    @ObservedObject var model: DashboardModel
+    @ObservedObject private var settingsManager = SettingsManager.shared
+    @State private var notificationStatus: UNAuthorizationStatus = .notDetermined
+    @State private var menuBarManagerName: String?
+    @State private var hasRecentDelay = false
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Check for new citations", selection: Binding(
+                    get: { settingsManager.settings.refreshInterval },
+                    set: { settingsManager.setRefreshInterval($0) }
+                )) {
+                    ForEach(AppSettings.RefreshInterval.allCases, id: \.self) { interval in
+                        Text(interval.displayName).tag(interval)
+                    }
+                }
+                LabeledContent {
+                    Button("Refresh Now") {
+                        (NSApp.delegate as? AppDelegate)?.refreshCitations()
+                    }
+                    .disabled(model.isRefreshing)
+                } label: {
+                    Text(statusText)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Updates")
+            } footer: {
+                Text("Google Scholar updates its counts every day or two, so a daily check keeps CiteBar current. Network hiccups retry automatically.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Menu Bar") {
+                Picker("Number in menu bar", selection: Binding(
+                    get: { settingsManager.settings.menuBarPrimaryMetric },
+                    set: { metric in
+                        settingsManager.setMenuBarPrimaryMetric(metric)
+                        refreshMenuBar()
+                    }
+                )) {
+                    ForEach(AppSettings.MenuBarPrimaryMetric.allCases, id: \.self) { metric in
+                        Text(metric.displayName).tag(metric)
+                    }
+                }
+                Toggle("Show h-index", isOn: Binding(
+                    get: { settingsManager.settings.showHIndexInMenu },
+                    set: { settingsManager.setShowHIndexInMenu($0) }
+                ))
+                Toggle("Show i10-index", isOn: Binding(
+                    get: { settingsManager.settings.showI10IndexInMenu },
+                    set: { settingsManager.setShowI10IndexInMenu($0) }
+                ))
+                Toggle(isOn: Binding(
+                    get: { settingsManager.settings.showTrendInMenu },
+                    set: { settingsManager.setShowTrendInMenu($0) }
+                )) {
+                    Text("Show trends and insights")
+                    Text("30-day growth, newly cited papers, and a nearby next h-index")
+                }
+                if menuBarManagerName != nil || hasRecentDelay {
+                    LabeledContent {
+                        Button("Report Issue") {
+                            if let url = URL(string: "https://github.com/hichipli/CiteBar/issues/new") {
+                                NSWorkspace.shared.open(url)
                             }
                         }
-                        .onMove(perform: moveProfiles)
-                    }
-                    .listStyle(.inset)
-                    .frame(maxHeight: .infinity)
-                }
-                .frame(maxHeight: .infinity)
-                .layoutPriority(1)
-
-                SettingsCard {
-                    HStack(spacing: 10) {
-                        Image(systemName: "info.circle")
-                            .foregroundColor(.secondary)
-                        Text("Click profile names in the menu to open each Scholar page quickly.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                    } label: {
+                        Text(menuBarNotice)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
-        }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .sheet(isPresented: $showingAddProfile) {
-            AddProfileSheet(
-                profileId: $newProfileId,
-                profileName: $newProfileName,
-                showingError: $showingError,
-                errorMessage: $errorMessage
-            ) { id, name, prefetchedSnapshot in
-                let profile = ScholarProfile(id: id, name: name)
-                settingsManager.addProfile(profile)
-                newProfileId = ""
-                newProfileName = ""
-                showingAddProfile = false
 
-                // Immediately show new profile in menu with "Loading..." status.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
-                        appDelegate.showNewProfileLoading(profile)
-                        Task { @MainActor in
-                            await appDelegate.primeNewProfile(profile, prefetchedSnapshot: prefetchedSnapshot)
+            Section("Notifications") {
+                Toggle(isOn: Binding(
+                    get: { settingsManager.settings.showNotifications },
+                    set: { enabled in
+                        settingsManager.setNotifications(enabled)
+                        if enabled {
+                            requestNotificationPermission()
                         }
                     }
+                )) {
+                    Text("Notify me about new citations")
+                    Text("Which papers were cited, plus milestones like 1,000 citations or a higher h-index")
                 }
-            }
-        }
-    }
-
-    private func moveProfiles(from source: IndexSet, to destination: Int) {
-        var updatedProfiles = settingsManager.settings.profiles.sorted(by: { $0.sortOrder < $1.sortOrder })
-        updatedProfiles.move(fromOffsets: source, toOffset: destination)
-        settingsManager.reorderProfiles(updatedProfiles)
-
-        // Immediately update menu bar display after reordering.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
-                appDelegate.updateMenuBarDisplay()
-            }
-        }
-    }
-}
-
-struct ProfileRow: View {
-    let profile: ScholarProfile
-    let onUpdate: (ScholarProfile) -> Void
-    let onDelete: () -> Void
-    let onMakePrimary: () -> Void
-
-    @State private var showingEditSheet = false
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "line.3.horizontal")
-                .foregroundColor(.secondary)
-                .font(.caption)
-                .help("Drag to reorder profiles")
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(profile.name)
-                        .font(.body)
-                        .fontWeight(.semibold)
-
-                    if profile.sortOrder == 0 {
-                        Text("Primary")
-                            .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Color.accentColor.opacity(0.15))
-                            .foregroundColor(.accentColor)
-                            .clipShape(Capsule())
-                    }
-
-                    Spacer()
-                }
-
-                Text("ID: \(profile.id)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                if let growth = profile.recentGrowth {
-                    let growthText = growth > 0 ? "+\(growth)" : "\(growth)"
-                    if let growthDays = profile.recentGrowthDays {
-                        let dayLabel = growthDays == 1 ? "day" : "days"
-                        Text("Recent growth: \(growthText) in last \(growthDays) \(dayLabel)")
-                            .font(.caption)
-                            .foregroundColor(.green)
-                    } else {
-                        Text("Recent growth: \(growthText)")
-                            .font(.caption)
-                            .foregroundColor(.green)
+                if settingsManager.settings.showNotifications {
+                    switch notificationStatus {
+                    case .notDetermined:
+                        LabeledContent("Permission not requested yet") {
+                            Button("Allow Notifications") { requestNotificationPermission() }
+                        }
+                    case .denied:
+                        LabeledContent("Notifications are turned off for CiteBar in System Settings") {
+                            Button("Open System Settings") { openNotificationSettings() }
+                        }
+                    default:
+                        EmptyView()
                     }
                 }
             }
 
-            Spacer()
-
-            HStack(spacing: 10) {
-                if profile.sortOrder != 0 {
-                    Button("Set Primary") {
-                        onMakePrimary()
+            Section("Startup") {
+                Toggle("Launch at login", isOn: Binding(
+                    get: { settingsManager.settings.autoLaunch },
+                    set: { settingsManager.setAutoLaunch($0) }
+                ))
+                switch SMAppService.mainApp.status {
+                case .requiresApproval:
+                    LabeledContent("Waiting for approval in Login Items") {
+                        Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
                     }
-                    .frame(width: 124)
-                    .buttonStyle(.bordered)
-                    .controlSize(.regular)
-                    .help("Make this the primary profile")
-                } else {
-                    Color.clear
-                        .frame(width: 124, height: 0)
+                case .notFound:
+                    LabeledContent("Login item not found; add CiteBar in Login Items") {
+                        Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
+                    }
+                default:
+                    EmptyView()
                 }
-
-                Button {
-                    showingEditSheet = true
-                } label: {
-                    Label("Edit", systemImage: "slider.horizontal.3")
-                }
-                .frame(width: 112)
-                .buttonStyle(.bordered)
-                .labelStyle(.titleAndIcon)
-                .controlSize(.regular)
-                .help("Edit or delete this profile")
             }
-            .frame(width: 246, alignment: .trailing)
         }
-        .padding(.vertical, 6)
-        .sheet(isPresented: $showingEditSheet) {
-            EditProfileSheet(profile: profile, onUpdate: { updatedProfile in
-                onUpdate(updatedProfile)
-            }, onDelete: {
-                onDelete()
-            })
-        }
-    }
-}
-
-struct GeneralTab: View {
-    @ObservedObject var settingsManager: SettingsManager
-    @State private var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
-
-    private func autoLaunchStatusText(for status: SMAppService.Status) -> String {
-        switch status {
-        case .enabled:
-            return "✓ Auto-launch is enabled"
-        case .notRegistered:
-            return "Auto-launch is currently disabled."
-        case .notFound:
-            return "CiteBar login-item service was not found."
-        case .requiresApproval:
-            return "⚠️ Waiting for user approval in System Settings"
-        @unknown default:
-            return "Unknown status"
+        .formStyle(.grouped)
+        .frame(width: 520, height: 660)
+        .onAppear(perform: refreshStatuses)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshStatuses()
         }
     }
 
-    private func autoLaunchStatusIcon(for status: SMAppService.Status) -> String {
-        switch status {
-        case .enabled:
-            return "checkmark.circle.fill"
-        case .requiresApproval, .notFound:
-            return "exclamationmark.triangle.fill"
-        case .notRegistered:
-            return "gearshape.2.fill"
-        @unknown default:
-            return "questionmark.circle.fill"
+    private var statusText: String {
+        if model.isRefreshing {
+            return "Updating…"
+        }
+        if let issue = model.issue, issue.retryAt > Date() {
+            let time = issue.retryAt.formatted(date: .omitted, time: .shortened)
+            switch issue {
+            case .rateLimited:
+                return "Google Scholar paused requests; retrying at \(time)"
+            case .networkUnavailable:
+                return "Couldn't reach Google Scholar; retrying at \(time)"
+            }
+        }
+        guard let lastUpdate = settingsManager.settings.lastUpdateTime else {
+            return "Not updated yet"
+        }
+        return "Last updated \(lastUpdate.formatted(date: .abbreviated, time: .shortened))"
+    }
+
+    private var menuBarNotice: String {
+        if let name = menuBarManagerName {
+            return "\(name) manages your menu bar and can delay CiteBar's icon. CiteBar keeps running meanwhile."
+        }
+        return "macOS recently delayed CiteBar's menu bar icon. CiteBar keeps running meanwhile."
+    }
+
+    private func refreshStatuses() {
+        menuBarManagerName = MenuBarCompatibility.activeManagerDisplayName()
+        hasRecentDelay = MenuBarCompatibility.hasRecentDelayObservation()
+        guard Bundle.main.bundleIdentifier != nil else { return }
+        Task { @MainActor in
+            notificationStatus = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
         }
     }
 
-    private func autoLaunchStatusTint(for status: SMAppService.Status) -> Color {
-        switch status {
-        case .enabled:
-            return .green
-        case .requiresApproval, .notFound:
-            return .orange
-        case .notRegistered:
-            return .secondary
-        @unknown default:
-            return .secondary
-        }
-    }
-
-    private func openLoginItemsSettings() {
-        SMAppService.openSystemSettingsLoginItems()
-    }
-
-    private func refreshNotificationAuthorizationStatus() {
+    private func requestNotificationPermission() {
+        guard Bundle.main.bundleIdentifier != nil else { return }
         Task { @MainActor in
             let center = UNUserNotificationCenter.current()
-            let settings = await center.notificationSettings()
-            notificationAuthorizationStatus = settings.authorizationStatus
-        }
-    }
-
-    private func requestNotificationPermissionIfNeeded() {
-        Task { @MainActor in
-            let center = UNUserNotificationCenter.current()
-            let settings = await center.notificationSettings()
-            notificationAuthorizationStatus = settings.authorizationStatus
-
-            guard settings.authorizationStatus == .notDetermined else { return }
-
-            _ = (try? await center.requestAuthorization(options: [.alert, .badge])) ?? false
-            let updated = await center.notificationSettings()
-            notificationAuthorizationStatus = updated.authorizationStatus
+            if await center.notificationSettings().authorizationStatus == .notDetermined {
+                _ = try? await center.requestAuthorization(options: [.alert, .badge])
+            }
+            notificationStatus = await center.notificationSettings().authorizationStatus
         }
     }
 
     private func openNotificationSettings() {
-        let bundleID = Bundle.main.bundleIdentifier ?? "com.citebar.CiteBar"
-        // Try app-targeted notification panes first; fall back to the global Notifications page.
+        let bundleID = Bundle.main.bundleIdentifier ?? "com.hichipli.citebar"
+        // Try the app's own notification pane first; fall back to the Notifications page.
         let candidates = [
             "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(bundleID)",
-            "x-apple.systempreferences:com.apple.Notifications-Settings.extension?bundleID=\(bundleID)",
             "x-apple.systempreferences:com.apple.preference.notifications?id=\(bundleID)",
-            "x-apple.systempreferences:com.apple.preference.notifications?bundleID=\(bundleID)",
-            "x-apple.systempreferences:com.apple.preference.notifications",
-            "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+            "x-apple.systempreferences:com.apple.Notifications-Settings.extension",
+            "x-apple.systempreferences:com.apple.preference.notifications"
         ]
-
         for candidate in candidates {
             if let url = URL(string: candidate), NSWorkspace.shared.open(url) {
                 return
             }
         }
     }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                SettingsCard(
-                    title: "Refresh Schedule",
-                    subtitle: "Recommended: Once daily. Use \"Refresh Now\" when you need an immediate update."
-                ) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        SettingsControlRow("Refresh Interval") {
-                            Picker("Refresh Interval", selection: Binding(
-                                get: { settingsManager.settings.refreshInterval },
-                                set: { interval in
-                                    settingsManager.setRefreshInterval(interval)
-                                }
-                            )) {
-                                ForEach(AppSettings.RefreshInterval.allCases, id: \.self) { interval in
-                                    Text(interval.displayName).tag(interval)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                            .fixedSize(horizontal: true, vertical: false)
-                        }
-
-                        Divider()
-
-                        Text("Short intervals (for example hourly) increase request frequency and may trigger temporary Google Scholar rate limits, including reduced access to profiles or search.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Divider()
-
-                        SettingsActionRow(
-                            text: "Need immediate data? Trigger a refresh now.",
-                            buttonTitle: "Refresh Now"
-                        ) {
-                            if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
-                                appDelegate.refreshCitations()
-                            }
-                        }
-                    }
-                }
-
-                SettingsCard(
-                    title: "Notifications",
-                    subtitle: "Get notified when refresh completes with a citation summary."
-                ) {
-                    SettingsToggleRow(
-                        "Show Notifications",
-                        subtitle: "Use macOS notifications for refresh completion.",
-                        isOn: Binding(
-                            get: { settingsManager.settings.showNotifications },
-                            set: { enabled in
-                                settingsManager.setNotifications(enabled)
-                                if enabled {
-                                    requestNotificationPermissionIfNeeded()
-                                }
-                            }
-                        )
-                    )
-
-                    if settingsManager.settings.showNotifications {
-                        Divider()
-                        switch notificationAuthorizationStatus {
-                        case .authorized, .provisional:
-                            SettingsStatusRow(
-                                icon: "checkmark.seal.fill",
-                                text: "System notification permission is enabled.",
-                                tint: .green
-                            )
-                        case .notDetermined:
-                            SettingsActionRow(
-                                text: "Notification permission has not been requested yet.",
-                                buttonTitle: "Enable Notifications"
-                            ) {
-                                requestNotificationPermissionIfNeeded()
-                            }
-                        case .denied:
-                            SettingsStatusRow(
-                                icon: "exclamationmark.triangle.fill",
-                                text: "System notification permission is currently blocked for CiteBar.",
-                                tint: .orange
-                            )
-                            SettingsActionRow(
-                                text: "Permission is blocked in macOS settings.",
-                                buttonTitle: "Open Notification Settings"
-                            ) {
-                                openNotificationSettings()
-                            }
-                        case .ephemeral:
-                            SettingsStatusRow(
-                                icon: "clock.arrow.trianglehead.counterclockwise.rotate.90",
-                                text: "System notification permission is temporarily available.",
-                                tint: .secondary
-                            )
-                        @unknown default:
-                            EmptyView()
-                        }
-                    }
-                }
-
-                SettingsCard(
-                    title: "Startup",
-                    subtitle: "Control whether CiteBar starts automatically when you sign in."
-                ) {
-                    SettingsToggleRow(
-                        "Launch at Login",
-                        subtitle: "Automatically start CiteBar when you log in.",
-                        isOn: Binding(
-                            get: { settingsManager.settings.autoLaunch },
-                            set: { enabled in
-                                settingsManager.setAutoLaunch(enabled)
-                            }
-                        )
-                    )
-
-                    Divider()
-
-                    let status = SMAppService.mainApp.status
-                    SettingsStatusRow(
-                        icon: autoLaunchStatusIcon(for: status),
-                        text: autoLaunchStatusText(for: status),
-                        tint: autoLaunchStatusTint(for: status)
-                    )
-
-                    switch status {
-                    case .notFound:
-                        SettingsActionRow(
-                            text: "Open Login Items settings, then enable CiteBar in \"Open at Login\".",
-                            buttonTitle: "Open Login Items Settings"
-                        ) {
-                            openLoginItemsSettings()
-                        }
-                    case .requiresApproval:
-                        SettingsActionRow(
-                            text: "Enable CiteBar in \"Open at Login\" to finish setup.",
-                            buttonTitle: "Open Login Items Settings"
-                        ) {
-                            openLoginItemsSettings()
-                        }
-                    case .enabled, .notRegistered:
-                        EmptyView()
-                    @unknown default:
-                        EmptyView()
-                    }
-                }
-
-                SettingsCard(
-                    title: "Menu Bar Display",
-                    subtitle: "Choose which citation metric appears in the menu bar, then toggle optional details below."
-                ) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("To change profile order (and which profile appears first), use the Profiles section and drag rows.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Divider()
-
-                        SettingsControlRow("Primary citation metric") {
-                            Picker("Primary citation metric", selection: Binding(
-                                get: { settingsManager.settings.menuBarPrimaryMetric },
-                                set: { metric in
-                                    settingsManager.setMenuBarPrimaryMetric(metric)
-                                    if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
-                                        appDelegate.updateMenuBarDisplay()
-                                    }
-                                }
-                            )) {
-                                ForEach(AppSettings.MenuBarPrimaryMetric.allCases, id: \.self) { metric in
-                                    Text(metric.displayName).tag(metric)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                            .fixedSize(horizontal: true, vertical: false)
-                        }
-
-                        Divider()
-
-                        SettingsToggleRow(
-                            "Show h-index",
-                            subtitle: "Display h-index under each profile.",
-                            isOn: Binding(
-                                get: { settingsManager.settings.showHIndexInMenu },
-                                set: { enabled in
-                                    settingsManager.setShowHIndexInMenu(enabled)
-                                }
-                            )
-                        )
-
-                        SettingsToggleRow(
-                            "Show i10-index",
-                            subtitle: "Display i10-index under each profile.",
-                            isOn: Binding(
-                                get: { settingsManager.settings.showI10IndexInMenu },
-                                set: { enabled in
-                                    settingsManager.setShowI10IndexInMenu(enabled)
-                                }
-                            )
-                        )
-
-                        SettingsToggleRow(
-                            "Show trend (+X in last Y days)",
-                            subtitle: "Display recent growth information when available.",
-                            isOn: Binding(
-                                get: { settingsManager.settings.showTrendInMenu },
-                                set: { enabled in
-                                    settingsManager.setShowTrendInMenu(enabled)
-                                }
-                            )
-                        )
-                    }
-                }
-
-                SettingsCard(
-                    title: "App",
-                    subtitle: "Advanced app controls."
-                ) {
-                    SettingsActionRow(
-                        text: "Quit CiteBar and stop background refresh until the app is opened again.",
-                        buttonTitle: "Quit CiteBar"
-                    ) {
-                        if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
-                            appDelegate.quitApp()
-                        }
-                    }
-                }
-            }
-            .padding(24)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .onAppear {
-            refreshNotificationAuthorizationStatus()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            refreshNotificationAuthorizationStatus()
-        }
-    }
 }
 
-struct AboutTab: View {
+// MARK: - About
+
+struct AboutPane: View {
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                SettingsCard {
-                    HStack(spacing: 16) {
-                        AppIconView(size: 56)
+        VStack(spacing: 0) {
+            AppIconView(size: 76)
+                .shadow(color: .black.opacity(0.12), radius: 6, y: 3)
+                .padding(.bottom, 14)
 
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("CiteBar")
-                                .font(.title2)
-                                .fontWeight(.bold)
+            Text("CiteBar")
+                .font(Theme.serif(28, .medium))
+            Text("Your Google Scholar citations, in the menu bar.")
+                .font(.system(size: 12.5))
+                .foregroundStyle(.secondary)
+                .padding(.top, 4)
+            Text("Version \(AppVersion.current) (\(AppVersion.build))")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .textSelection(.enabled)
+                .padding(.top, 10)
 
-                            Text("Citation Tracking for Academics")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-
-                            HStack(spacing: 8) {
-                                Text(AppVersion.displayString)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.secondary.opacity(0.12))
-                                    .clipShape(Capsule())
-
-                                Text("macOS")
-                                    .font(.caption)
-                                    .foregroundColor(.accentColor)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.accentColor.opacity(0.14))
-                                    .clipShape(Capsule())
-                            }
-
-                            Button {
-                                if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
-                                    appDelegate.checkForUpdates()
-                                }
-                            } label: {
-                                Label("Check for Updates...", systemImage: "arrow.down.circle")
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .padding(.top, 2)
-                        }
-
-                        Spacer()
-                    }
-                }
-
-                SettingsCard(title: "Key Features") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        FeatureRow(
-                            icon: "chart.line.uptrend.xyaxis",
-                            iconColor: .blue,
-                            title: "Real-time Citation Tracking",
-                            description: "Monitor Google Scholar metrics directly from your menu bar."
-                        )
-
-                        FeatureRow(
-                            icon: "person.2",
-                            iconColor: .green,
-                            title: "Multiple Profile Support",
-                            description: "Track citations for multiple researchers and collaborators."
-                        )
-
-                        FeatureRow(
-                            icon: "clock.arrow.circlepath",
-                            iconColor: .orange,
-                            title: "Configurable Updates",
-                            description: "Set refresh intervals that balance freshness and rate-limit safety."
-                        )
-
-                        FeatureRow(
-                            icon: "chart.xyaxis.line",
-                            iconColor: .purple,
-                            title: "Historical Data",
-                            description: "View citation growth trends over time."
-                        )
-                    }
-                }
-
-                SettingsCard(title: "Support & Feedback") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        SupportRow(
-                            icon: "envelope.fill",
-                            iconColor: .blue,
-                            title: "Email Support",
-                            subtitle: "info@hichipli.com",
-                            action: {
-                                if let url = URL(string: "mailto:info@hichipli.com") {
-                                    NSWorkspace.shared.open(url)
-                                }
-                            }
-                        )
-
-                        SupportRow(
-                            icon: "chevron.left.forwardslash.chevron.right",
-                            iconColor: .purple,
-                            title: "GitHub Repository",
-                            subtitle: "Report issues and contribute",
-                            action: {
-                                if let url = URL(string: "https://github.com/hichipli/CiteBar") {
-                                    NSWorkspace.shared.open(url)
-                                }
-                            }
-                        )
-                    }
-                }
-
-                SettingsCard {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Built with passion for the academic community.")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-
-                        HStack {
-                            Text("© 2026 CiteBar")
-                                .font(.caption)
-                                .foregroundColor(.secondary.opacity(0.75))
-                            Spacer()
-                            Text("Made for macOS")
-                                .font(.caption)
-                                .foregroundColor(.secondary.opacity(0.75))
-                        }
-                    }
-                }
+            Button("Check for Updates…") {
+                (NSApp.delegate as? AppDelegate)?.checkForUpdates()
             }
-            .padding(24)
-            .frame(maxWidth: 760, alignment: .leading)
+            .padding(.top, 14)
+
+            Divider()
+                .frame(width: 240)
+                .padding(.vertical, 22)
+
+            HStack(spacing: 20) {
+                aboutLink("Website", "https://www.citebar.org")
+                aboutLink("Source Code", "https://github.com/hichipli/CiteBar")
+                aboutLink("Report an Issue", "https://github.com/hichipli/CiteBar/issues/new/choose")
+                aboutLink("Email", "mailto:info@hichipli.com")
+            }
+
+            Text("Free and open source under the MIT License.\nCiteBar reads public Scholar pages and keeps everything on this Mac.")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .padding(.top, 22)
         }
-    }
-}
-
-struct FeatureRow: View {
-    let icon: String
-    let iconColor: Color
-    let title: String
-    let description: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(iconColor.opacity(0.14))
-                    .frame(width: 30, height: 30)
-                Image(systemName: icon)
-                    .foregroundColor(iconColor)
-                    .font(.system(size: 14, weight: .semibold))
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-
-                Text(description)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer()
-        }
-    }
-}
-
-struct SupportRow: View {
-    let icon: String
-    let iconColor: Color
-    let title: String
-    let subtitle: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(alignment: .center, spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(iconColor.opacity(0.14))
-                        .frame(width: 30, height: 30)
-                    Image(systemName: icon)
-                        .foregroundColor(iconColor)
-                        .font(.system(size: 14, weight: .semibold))
-                }
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .foregroundColor(.secondary)
-                    .font(.caption)
-            }
-            .padding(.vertical, 2)
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            if hovering {
-                NSCursor.pointingHand.set()
-            } else {
-                NSCursor.arrow.set()
-            }
-        }
-    }
-}
-
-private struct SettingsCard<Content: View>: View {
-    let title: String?
-    let subtitle: String?
-    let expandContent: Bool
-    let content: Content
-
-    init(
-        title: String? = nil,
-        subtitle: String? = nil,
-        expandContent: Bool = false,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.title = title
-        self.subtitle = subtitle
-        self.expandContent = expandContent
-        self.content = content()
+        .padding(.vertical, 34)
+        .frame(width: 520)
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if let title {
-                Text(title)
-                    .font(.headline)
-            }
-
-            if let subtitle {
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if expandContent {
-                content
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            } else {
-                content
+    private func aboutLink(_ title: String, _ urlString: String) -> some View {
+        Button(title) {
+            if let url = URL(string: urlString) {
+                NSWorkspace.shared.open(url)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(maxHeight: expandContent ? .infinity : nil, alignment: .topLeading)
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color(nsColor: .separatorColor).opacity(0.35), lineWidth: 1)
-        )
-    }
-}
-
-private struct SettingsToggleRow: View {
-    let title: String
-    let subtitle: String?
-    @Binding var isOn: Bool
-
-    init(_ title: String, subtitle: String? = nil, isOn: Binding<Bool>) {
-        self.title = title
-        self.subtitle = subtitle
-        self._isOn = isOn
-    }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.body)
-                    .fontWeight(.medium)
-
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            Spacer()
-
-            Toggle("", isOn: $isOn)
-                .labelsHidden()
-                .toggleStyle(.switch)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct SettingsControlRow<Control: View>: View {
-    let title: String
-    let subtitle: String?
-    let control: Control
-
-    init(
-        _ title: String,
-        subtitle: String? = nil,
-        @ViewBuilder control: () -> Control
-    ) {
-        self.title = title
-        self.subtitle = subtitle
-        self.control = control()
-    }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.body)
-                    .fontWeight(.medium)
-
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            Spacer()
-            control
-                .frame(maxWidth: .infinity, alignment: .trailing)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct SettingsActionRow: View {
-    let text: String
-    let buttonTitle: String
-    let action: () -> Void
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Text(text)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer()
-            Button(buttonTitle, action: action)
-                .buttonStyle(.bordered)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct SettingsStatusRow: View {
-    let icon: String
-    let text: String
-    let tint: Color
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-                .foregroundColor(tint)
-
-            Text(text)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Spacer()
-        }
-    }
-}
-
-struct AddProfileSheet: View {
-    @Binding var profileId: String
-    @Binding var profileName: String
-    @Binding var showingError: Bool
-    @Binding var errorMessage: String
-    let onAdd: (String, String, CitationManager.ScholarProfileSnapshot?) -> Void
-    
-    @State private var urlInput = ""
-    @State private var isAutoResolvingName = false
-    @State private var lastAutoResolvedId = ""
-    @State private var prefetchedSnapshot: CitationManager.ScholarProfileSnapshot?
-    @Environment(\.dismiss) private var dismiss
-    @FocusState private var focusedField: Field?
-    
-    enum Field {
-        case name, url, id
-    }
-    
-    var body: some View {
-        VStack(spacing: 24) {
-            // Header
-            HStack {
-                AppIconView(size: 32)
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Add Google Scholar Profile")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                    Text("Track citation metrics for a researcher")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-            }
-            
-            // Profile Name Section
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Profile Name (Optional)", systemImage: "person.circle")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                
-                TextField("Auto-filled from profile page (or type manually)", text: $profileName)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($focusedField, equals: .name)
-                    .onSubmit {
-                        focusedField = .url
-                    }
-
-                Text("Leave blank to add with just the Scholar URL/ID.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            
-            // Scholar URL/ID Section
-            VStack(alignment: .leading, spacing: 12) {
-                Label("Google Scholar Profile", systemImage: "link")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                
-                // URL Input with enhanced paste support
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        TextField("Paste Google Scholar URL here", text: $urlInput)
-                            .textFieldStyle(.roundedBorder)
-                            .focused($focusedField, equals: .url)
-                            .onChange(of: urlInput) { newValue in
-                                extractScholarId(from: newValue)
-                            }
-                            .onSubmit {
-                                if profileId.isEmpty {
-                                    focusedField = .id
-                                } else {
-                                    submitForm()
-                                }
-                            }
-                        
-                        Button(action: {
-                            if let clipboardString = NSPasteboard.general.string(forType: .string) {
-                                urlInput = clipboardString
-                                extractScholarId(from: clipboardString)
-                            }
-                        }) {
-                            Image(systemName: "doc.on.clipboard")
-                        }
-                        .buttonStyle(.bordered)
-                        .help("Paste from clipboard")
-                    }
-                    
-                    Text("Example: https://scholar.google.com/citations?user=ABC123DEF&hl=en")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                // Alternative ID input
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Or enter Scholar ID directly:")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    TextField("e.g., ABC123DEF456", text: $profileId)
-                        .textFieldStyle(.roundedBorder)
-                        .focused($focusedField, equals: .id)
-                        .onSubmit {
-                            submitForm()
-                        }
-                }
-                
-                // Instructions
-                DisclosureGroup {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Image(systemName: "1.circle.fill")
-                                .foregroundColor(.blue)
-                            Text("Go to your Google Scholar profile page")
-                        }
-                        .font(.caption)
-                        
-                        HStack {
-                            Image(systemName: "2.circle.fill")
-                                .foregroundColor(.blue)
-                            Text("Copy the full URL from your browser")
-                        }
-                        .font(.caption)
-                        
-                        HStack {
-                            Image(systemName: "3.circle.fill")
-                                .foregroundColor(.blue)
-                            Text("Paste it above - we'll extract the ID automatically")
-                        }
-                        .font(.caption)
-                    }
-                    .padding(.top, 8)
-                } label: {
-                    Label("How to find your Scholar ID", systemImage: "questionmark.circle")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            // Success indicator
-            if isAutoResolvingName && profileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                HStack(spacing: 10) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Trying to auto-fill profile name...")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-
-            if !profileId.isEmpty {
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                    Text("Scholar ID extracted: \(profileId)")
-                        .font(.callout)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.green.opacity(0.1))
-                .cornerRadius(8)
-            }
-            
-            // Action buttons
-            HStack(spacing: 12) {
-                Button("Cancel") {
-                    clearForm()
-                    dismiss()
-                }
-                .buttonStyle(.bordered)
-                .keyboardShortcut(.cancelAction)
-                
-                Spacer()
-                
-                Button("Add Profile") {
-                    submitForm()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(
-                    profileId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                    (isAutoResolvingName && profileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                )
-                .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding()
-        .frame(width: 560)
-        .onAppear {
-            focusedField = .url
-        }
-        .onChange(of: profileId) { newId in
-            maybeAutoResolveName(for: newId)
-        }
-        .alert("Error", isPresented: $showingError) {
-            Button("OK") { }
-        } message: {
-            Text(errorMessage)
-        }
-    }
-    
-    private func tryAutoPaste() {
-        if let clipboardString = NSPasteboard.general.string(forType: .string) {
-            urlInput = clipboardString
-            extractScholarId(from: clipboardString)
-        }
-    }
-    
-    private func submitForm() {
-        let trimmedId = profileId.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedId.isEmpty {
-            errorMessage = "Please enter a Scholar URL or ID"
-            showingError = true
-        } else if !isValidScholarId(trimmedId) {
-            errorMessage = "Invalid Scholar ID format. Please check your ID."
-            showingError = true
-        } else {
-            let trimmedName = profileName.trimmingCharacters(in: .whitespacesAndNewlines)
-            let fallbackName = "Scholar \(trimmedId)"
-            let snapshotForID = prefetchedSnapshot?.profileID == trimmedId ? prefetchedSnapshot : nil
-            let snapshotName = snapshotForID?.displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let finalName: String
-            if trimmedName.isEmpty,
-               let snapshotName,
-               !snapshotName.isEmpty {
-                finalName = snapshotName
-            } else if trimmedName.isEmpty {
-                finalName = fallbackName
-            } else {
-                finalName = trimmedName
-            }
-            onAdd(trimmedId, finalName, snapshotForID)
-            dismiss()
-        }
-    }
-    
-    private func clearForm() {
-        profileId = ""
-        profileName = ""
-        urlInput = ""
-        isAutoResolvingName = false
-        lastAutoResolvedId = ""
-        prefetchedSnapshot = nil
-    }
-    
-    private func extractScholarId(from url: String) {
-        // Extract Scholar ID from URL
-        if let range = url.range(of: "user=") {
-            var id = String(url[range.upperBound...])
-            
-            // Remove everything after & or # if present
-            if let ampersandRange = id.range(of: "&") {
-                id = String(id[..<ampersandRange.lowerBound])
-            }
-            if let hashRange = id.range(of: "#") {
-                id = String(id[..<hashRange.lowerBound])
-            }
-            
-            if !id.isEmpty && id != profileId {
-                profileId = id
-            }
-        }
-    }
-
-    private func maybeAutoResolveName(for rawId: String) {
-        let trimmedId = rawId.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedName = profileName.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if prefetchedSnapshot?.profileID != trimmedId {
-            prefetchedSnapshot = nil
-        }
-
-        guard !trimmedId.isEmpty, isValidScholarId(trimmedId) else {
-            isAutoResolvingName = false
-            return
-        }
-
-        guard trimmedName.isEmpty else {
-            isAutoResolvingName = false
-            return
-        }
-
-        guard trimmedId != lastAutoResolvedId else {
-            return
-        }
-
-        lastAutoResolvedId = trimmedId
-        isAutoResolvingName = true
-
-        Task {
-            let snapshot = await (NSApplication.shared.delegate as? AppDelegate)?
-                .citationManager?
-                .fetchScholarProfileSnapshot(for: trimmedId)
-
-            await MainActor.run {
-                guard profileId.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedId else {
-                    return
-                }
-
-                isAutoResolvingName = false
-                prefetchedSnapshot = snapshot
-
-                guard profileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                    return
-                }
-
-                if let resolvedName = snapshot?.displayName?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !resolvedName.isEmpty {
-                    profileName = resolvedName
-                }
-            }
-        }
-    }
-    
-    private func isValidScholarId(_ id: String) -> Bool {
-        // Basic validation: should be alphanumeric and reasonable length
-        let pattern = "^[A-Za-z0-9_-]{8,20}$"
-        let regex = try? NSRegularExpression(pattern: pattern)
-        let range = NSRange(location: 0, length: id.count)
-        return regex?.firstMatch(in: id, options: [], range: range) != nil
-    }
-}
-
-struct EditProfileSheet: View {
-    let profile: ScholarProfile
-    let onUpdate: (ScholarProfile) -> Void
-    let onDelete: () -> Void
-    
-    @State private var profileName: String
-    @State private var profileId: String
-    @State private var urlInput: String = ""
-    @State private var showingError = false
-    @State private var errorMessage = ""
-    @State private var showingDeleteConfirmation = false
-    
-    @Environment(\.dismiss) private var dismiss
-    @FocusState private var focusedField: Field?
-    
-    enum Field {
-        case name, url, id
-    }
-    
-    init(profile: ScholarProfile, onUpdate: @escaping (ScholarProfile) -> Void, onDelete: @escaping () -> Void) {
-        self.profile = profile
-        self.onUpdate = onUpdate
-        self.onDelete = onDelete
-        self._profileName = State(initialValue: profile.name)
-        self._profileId = State(initialValue: profile.id)
-    }
-    
-    var body: some View {
-        VStack(spacing: 24) {
-            // Header
-            HStack {
-                AppIconView(size: 32)
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Edit Profile")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                    Text("Update researcher information")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-            }
-            
-            // Profile Name Section
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Profile Name", systemImage: "person.circle")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                
-                TextField("e.g., Dr. Jane Smith", text: $profileName)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($focusedField, equals: .name)
-                    .onSubmit {
-                        focusedField = .url
-                    }
-            }
-            
-            // Scholar URL/ID Section
-            VStack(alignment: .leading, spacing: 12) {
-                Label("Google Scholar Profile", systemImage: "link")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                
-                // URL Input with enhanced paste support
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        TextField("Paste Google Scholar URL here", text: $urlInput)
-                            .textFieldStyle(.roundedBorder)
-                            .focused($focusedField, equals: .url)
-                            .onChange(of: urlInput) { newValue in
-                                extractScholarId(from: newValue)
-                            }
-                            .onSubmit {
-                                if profileId.isEmpty {
-                                    focusedField = .id
-                                } else {
-                                    submitForm()
-                                }
-                            }
-                        
-                        Button(action: {
-                            if let clipboardString = NSPasteboard.general.string(forType: .string) {
-                                urlInput = clipboardString
-                                extractScholarId(from: clipboardString)
-                            }
-                        }) {
-                            Image(systemName: "doc.on.clipboard")
-                        }
-                        .buttonStyle(.bordered)
-                        .help("Paste from clipboard")
-                    }
-                    
-                    Text("Example: https://scholar.google.com/citations?user=ABC123DEF&hl=en")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                // Direct ID input
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Scholar ID:")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    TextField("e.g., ABC123DEF456", text: $profileId)
-                        .textFieldStyle(.roundedBorder)
-                        .focused($focusedField, equals: .id)
-                        .onSubmit {
-                            submitForm()
-                        }
-                }
-            }
-            
-            // Success indicator
-            if !profileId.isEmpty && profileId != profile.id {  
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                    Text("Scholar ID updated: \(profileId)")
-                        .font(.callout)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.green.opacity(0.1))
-                .cornerRadius(8)
-            }
-            
-            // Action buttons
-            HStack(spacing: 12) {
-                Button("Delete Profile") {
-                    showingDeleteConfirmation = true
-                }
-                .buttonStyle(.bordered)
-                .foregroundColor(.red)
-                
-                Spacer()
-                
-                Button("Cancel") {
-                    dismiss()
-                }
-                .buttonStyle(.bordered)
-                .keyboardShortcut(.cancelAction)
-                
-                Button("Save Changes") {
-                    submitForm()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(profileId.isEmpty || profileName.isEmpty)
-                .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding()
-        .frame(width: 560)
-        .onAppear {
-            focusedField = .name
-        }
-        .alert("Error", isPresented: $showingError) {
-            Button("OK") { }
-        } message: {
-            Text(errorMessage)
-        }
-        .confirmationDialog("Delete Profile", isPresented: $showingDeleteConfirmation) {
-            Button("Delete \(profile.name)", role: .destructive) {
-                onDelete()
-                dismiss()
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("Are you sure you want to delete '\(profile.name)'? This action cannot be undone.")
-        }
-    }
-    
-    private func submitForm() {
-        if profileId.isEmpty || profileName.isEmpty {
-            errorMessage = "Please fill in all fields"
-            showingError = true
-        } else if !isValidScholarId(profileId) {
-            errorMessage = "Invalid Scholar ID format. Please check your ID."
-            showingError = true
-        } else {
-            // Create new profile with updated values
-            let updatedProfile = ScholarProfile(id: profileId, name: profileName, sortOrder: profile.sortOrder)
-            var mutableProfile = updatedProfile
-            mutableProfile.isEnabled = profile.isEnabled
-            mutableProfile.recentGrowth = profile.recentGrowth
-            mutableProfile.recentGrowthDays = profile.recentGrowthDays
-            onUpdate(mutableProfile)
-            dismiss()
-        }
-    }
-    
-    private func extractScholarId(from url: String) {
-        // Extract Scholar ID from URL
-        if let range = url.range(of: "user=") {
-            var id = String(url[range.upperBound...])
-            
-            // Remove everything after & or # if present
-            if let ampersandRange = id.range(of: "&") {
-                id = String(id[..<ampersandRange.lowerBound])
-            }
-            if let hashRange = id.range(of: "#") {
-                id = String(id[..<hashRange.lowerBound])
-            }
-            
-            if !id.isEmpty && id != profileId {
-                profileId = id
-            }
-        }
-    }
-    
-    private func isValidScholarId(_ id: String) -> Bool {
-        // Basic validation: should be alphanumeric and reasonable length
-        let pattern = "^[A-Za-z0-9_-]{8,20}$"
-        let regex = try? NSRegularExpression(pattern: pattern)
-        let range = NSRange(location: 0, length: id.count)
-        return regex?.firstMatch(in: id, options: [], range: range) != nil
+        .buttonStyle(.link)
+        .font(.system(size: 12))
     }
 }
 
 struct AppIconView: View {
     let size: CGFloat
-    
+
     var body: some View {
-        if let appIcon = loadAppIcon() {
-            Image(nsImage: appIcon)
+        if let icon = NSImage(named: "AppIcon")
+            ?? Bundle.main.path(forResource: "AppIcon", ofType: "png").flatMap(NSImage.init(contentsOfFile:))
+            ?? NSImage(contentsOfFile: "Assets.xcassets/AppIcon.appiconset/1024.png") {
+            Image(nsImage: icon)
                 .resizable()
                 .frame(width: size, height: size)
-                .cornerRadius(size * 0.176) // iOS/macOS app icon corner radius ratio
         } else {
             Image(systemName: "book.circle.fill")
                 .font(.system(size: size * 0.75))
-                .foregroundColor(.blue)
+                .foregroundStyle(Theme.accent)
         }
-    }
-    
-    private func loadAppIcon() -> NSImage? {
-        // Try different methods to load the app icon
-        if let iconFromBundle = NSImage(named: "AppIcon") {
-            return iconFromBundle
-        }
-        
-        // Try loading from resources
-        if let resourcePath = Bundle.main.path(forResource: "1024", ofType: "png"),
-           let iconFromResource = NSImage(contentsOfFile: resourcePath) {
-            return iconFromResource
-        }
-        
-        // Try loading from asset catalog path
-        let assetPath = "Assets.xcassets/AppIcon.appiconset/1024.png"
-        if let iconFromAsset = NSImage(contentsOfFile: assetPath) {
-            return iconFromAsset
-        }
-        
-        // Try loading the app's icon from the app bundle
-        if let bundleIconPath = Bundle.main.path(forResource: "AppIcon", ofType: "icns"),
-           let iconFromICNS = NSImage(contentsOfFile: bundleIconPath) {
-            return iconFromICNS
-        }
-        
-        return nil
     }
 }

@@ -54,6 +54,57 @@ import ServiceManagement
             save()
         }
     }
+
+    /// Adds profiles that are not tracked yet and returns how many were added.
+    @discardableResult
+    func addProfiles(_ profiles: [ScholarProfile]) -> Int {
+        let existingIDs = Set(settings.profiles.map(\.id))
+        let nextOrder = (settings.profiles.map(\.sortOrder).max() ?? -1) + 1
+        var added = 0
+        for profile in profiles where !existingIDs.contains(profile.id) {
+            var newProfile = profile
+            newProfile.sortOrder = nextOrder + added
+            settings.profiles.append(newProfile)
+            added += 1
+        }
+        if added > 0 {
+            save()
+        }
+        return added
+    }
+
+    /// Group names in the order their first member appears.
+    var groups: [String] {
+        var seen = Set<String>()
+        return settings.profiles
+            .sorted { $0.sortOrder < $1.sortOrder }
+            .compactMap(\.group)
+            .filter { seen.insert($0).inserted }
+    }
+
+    func setGroup(_ group: String?, forProfileID profileID: String) {
+        guard let index = settings.profiles.firstIndex(where: { $0.id == profileID }) else { return }
+        let trimmed = group?.trimmingCharacters(in: .whitespacesAndNewlines)
+        settings.profiles[index].group = (trimmed?.isEmpty ?? true) ? nil : trimmed
+        save()
+    }
+
+    func renameGroup(_ oldName: String, to newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        for index in settings.profiles.indices where settings.profiles[index].group == oldName {
+            settings.profiles[index].group = trimmed
+        }
+        save()
+    }
+
+    /// Ungroups the members; the profiles themselves stay tracked.
+    func dissolveGroup(_ name: String) {
+        for index in settings.profiles.indices where settings.profiles[index].group == name {
+            settings.profiles[index].group = nil
+        }
+        save()
+    }
     
     func setRefreshInterval(_ interval: AppSettings.RefreshInterval) {
         settings.refreshInterval = interval
@@ -115,6 +166,12 @@ import ServiceManagement
     
     func setRefreshing(_ refreshing: Bool) {
         settings.isRefreshing = refreshing
+        save()
+    }
+
+    func setScholarPausedUntil(_ date: Date?) {
+        guard settings.scholarPausedUntil != date else { return }
+        settings.scholarPausedUntil = date
         save()
     }
     

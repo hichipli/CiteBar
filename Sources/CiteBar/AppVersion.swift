@@ -3,10 +3,10 @@ import Foundation
 /// Centralized version management for CiteBar
 struct AppVersion {
     /// Current application version
-    static let current: String = "1.5.0"
+    static let current: String = "1.6.0"
     
     /// Current build number
-    static let build: String = "18"
+    static let build: String = "19"
     
     /// Version display string for UI
     static let displayString: String = "Version \(current)"
@@ -38,18 +38,20 @@ extension AppVersion {
     static let releaseNotes = ReleaseNotes(
         version: current,
         highlights: [
-            "Public releases are now signed with Apple Developer ID and notarized by Apple",
-            "DMG installs now support the standard drag-to-Applications flow without Terminal trust workarounds",
-            "Settings now include clearer recovery paths for launch-at-login and notification permissions",
-            "Menu bar startup behavior is more robust when macOS or third-party menu managers delay status item creation"
+            "Groups for your lab, co-authors, or cohort, with combined citations; add a whole list of Scholar links at once",
+            "A redesigned menu bar panel: headline count, citations per year, 30-day growth, and per-profile details",
+            "See which paper was just cited, and how close your next h-index is",
+            "Notifications name the papers that gained citations and celebrate milestones",
+            "Save a typeset Citation Record card of your profile to share",
+            "Refreshes retry network hiccups on their own and back off gently when Google Scholar limits requests"
         ],
-        description: "This release focuses on distribution trust and first-run reliability, making CiteBar easier for non-technical users to download, install, and keep running.",
+        description: "CiteBar 1.6.0 adds context to the count: which papers are being cited, how a whole group is doing, and how close the next h-index is. Settings were redesigned with native tabs, and refreshes recover from network problems without waiting a day.",
         technicalNotes: [
-            "Added Developer ID signing and Apple notarization support for local and GitHub Actions releases",
-            "Added explicit signing validation for the app bundle, main executable, Sparkle framework binary, nested Sparkle helpers, and DMG container",
-            "Added notarization polling, submission log capture, diagnostics artifacts, and stapled-ticket verification",
-            "Added Apple Events entitlement and usage description for the optional launch-at-login fallback path",
-            "Updated distribution documentation, release workflow checks, and website messaging for the notarized DMG release path"
+            "Profile pages are fetched with pagesize=100 (allowed by Scholar's robots.txt) so per-paper counts come from the same single request",
+            "Transient failures retry after 2 and 5 seconds; unfetched profiles retry automatically with escalating delays (5 to 60 minutes for network problems, 15 to 240 minutes for rate limits)",
+            "Latest paper lists are stored locally in papers.json",
+            "The status item opens a SwiftUI popover; right-click keeps a quick menu",
+            "Settings use native toolbar tabs and grouped forms"
         ]
     )
     

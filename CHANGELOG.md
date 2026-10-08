@@ -5,6 +5,35 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-10-07
+
+### Added
+- **Groups**: Put profiles into groups such as a lab, co-authors, or a cohort. The panel shows each group with its member count, combined citations, and 30-day growth, and groups collapse
+- **Bulk Add**: Add Profiles accepts one or many Scholar links or IDs, resolves names one at a time, and can place them all in a group. "Copy Profile Links" on a group produces a list that pastes straight back into Add Profiles on another Mac
+- **Menu Bar Panel**: A redesigned panel replaces the text menu, with a serif headline count, citations per year, 30-day growth, h-index, i10-index, and expandable per-profile details. Right-click the menu bar item for a quick menu
+- **Per-Paper Citation Gains**: Each refresh compares the profile's papers with the previous refresh, so notifications and the panel name the papers that gained citations; clicking opens that paper's "Cited by" page
+- **h-index Progress**: The panel shows when the next h-index is within 5 citations
+- **Milestone Notifications**: Notifications for passing citation milestones (10, 25, 50, 100, 250, 500, 1,000, ...) and for h-index or i10-index increases
+- **Stats Card**: Save a 3:4 "Citation Record" image (total, this year, 30-day growth, h-index, i10-index, citations per year, most cited papers) to Downloads; it is also copied to the clipboard
+
+### Changed
+- **Refresh Intervals**: Choose every 12 hours, once daily (default), or every 2 days. Google Scholar updates every day or two, so shorter intervals only added requests; settings saved with 1-hour or 6-hour intervals move to 12 hours
+- **Settings**: Native toolbar tabs (Profiles, General, About) with grouped forms. First launch opens straight into Add Profiles
+- **Change-Only Notifications**: Refresh notifications are posted only when citations changed, including after startup refreshes; "no change" notifications are gone
+
+### Fixed
+- **Network Hiccups**: Requests retry after 2 and 5 seconds on timeouts, dropped connections, and server errors
+- **Automatic Retries**: Profiles left unfetched are retried on their own, after 5, 10, 20, 40, then 60 minutes for network problems
+- **Google Scholar Rate Limits**: A 429, `/sorry` redirect, or CAPTCHA page stops the cycle instead of requesting the remaining profiles back to back, and retries after 15, 30, 60, 120, then 240 minutes. Refresh Now always works
+- **Request Spacing**: The 2-second delay between profile requests now also applies after a failed request
+- **Failed Profiles**: A profile that fails a refresh keeps showing its last known data instead of disappearing from the menu
+- **Editing Profiles**: Profile editing no longer offers a Scholar ID change, which never saved
+
+### Technical
+- Profile pages are fetched with `pagesize=100` (allowed by Scholar's robots.txt) so per-paper counts come from the same single request
+- Latest paper lists are stored in `~/Library/Application Support/CiteBar/papers.json`
+- Debug builds accept `-CiteBarDebugOpen panel|profiles|general|about` and `-CiteBarDebugDark YES` to open UI at launch for screenshots
+
 ## [1.5.0] - 2026-04-27
 
 ### Added

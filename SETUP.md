@@ -44,7 +44,7 @@ make install-sudo
 1. Click the book icon in your menu bar
 2. Select "Settings..."
 3. Add your Google Scholar profile
-4. Set refresh interval (recommended 1 hour or more)
+4. Set refresh interval (every 12 hours, once daily, or every 2 days; once daily is the default)
 
 ## Troubleshooting
 

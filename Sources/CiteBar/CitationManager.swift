@@ -14,6 +14,11 @@ import UserNotifications
     private let storageManager = StorageManager()
     private var refreshTimer: Timer?
     private let urlSession: URLSession
+    private var isChecking = false
+    private var retryTimer: Timer?
+    private var consecutiveFailedCycles = 0
+    /// Waits before the 2nd and 3rd attempt of a request that failed on a network blip.
+    var requestRetryDelays: [TimeInterval] = [2, 5]
     
     private static func makeURLSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
@@ -68,14 +73,37 @@ import UserNotifications
         }
     }
     
-    func checkCitations(isStartup: Bool = false) {
-        let profiles = settingsManager.settings.profiles.filter { $0.isEnabled }
-        
+    /// Scheduled and startup refreshes wait out a Scholar rate-limit pause (and make sure a
+    /// retry is queued for when it ends); a refresh the user asked for runs anyway.
+    /// `onlyProfileIDs` limits an automatic retry to the profiles that failed.
+    func checkCitations(userInitiated: Bool = false, onlyProfileIDs: Set<String>? = nil) {
+        guard !isChecking else { return }
+
+        var profiles = settingsManager.settings.profiles.filter { $0.isEnabled }
+        if let onlyProfileIDs {
+            profiles = profiles.filter { onlyProfileIDs.contains($0.id) }
+            guard !profiles.isEmpty else { return }
+        }
+
         guard !profiles.isEmpty else {
             delegate?.citationsUpdated([:])
             return
         }
-        
+
+        if !userInitiated, let pausedUntil = settingsManager.settings.scholarPausedUntil, pausedUntil > Date() {
+            AppLog.debug("Skipping refresh; Google Scholar rate-limit pause until \(pausedUntil)")
+            if retryTimer == nil {
+                scheduleRetry(at: pausedUntil, profileIDs: onlyProfileIDs)
+            }
+            return
+        }
+
+        if userInitiated {
+            retryTimer?.invalidate()
+            retryTimer = nil
+        }
+
+        isChecking = true
         // Set refreshing state
         settingsManager.setRefreshing(true)
         
@@ -83,12 +111,12 @@ import UserNotifications
         delegate?.refreshingStateChanged(true)
         
         Task {
-            await performCitationCheck(for: profiles, isStartup: isStartup)
+            await performCitationCheck(for: profiles)
         }
     }
 
     func fetchScholarProfileSnapshot(for profileID: String) async -> ScholarProfileSnapshot? {
-        guard let url = scholarProfileURL(for: profileID) else {
+        guard let url = Self.scholarProfileURL(for: profileID) else {
             return nil
         }
 
@@ -152,6 +180,8 @@ import UserNotifications
             citationsByYear: metrics.citationsByYear
         )
         await storageManager.saveCitationRecord(record)
+        // Baseline for per-paper gains on the next refresh.
+        _ = await storageManager.updatePapers(metrics.papers, for: profile.id)
         settingsManager.setLastUpdateTime(Date())
 
         return snapshot
@@ -205,27 +235,35 @@ import UserNotifications
         return shouldRefresh
     }
     
-    private func performCitationCheck(for profiles: [ScholarProfile], isStartup: Bool) async {
-        var results: [ScholarProfile: ProfileMetrics] = [:]
-        var successfulProfiles = 0
-        var changedProfiles = 0
-        var totalCitationDelta = 0
-        
-        for profile in profiles {
+    struct ProfileChange {
+        let name: String
+        let citationDelta: Int
+        let paperGains: [PaperGain]
+        let profileURL: String
+    }
+
+    static let recentPaperGainWindow: TimeInterval = 7 * 24 * 60 * 60
+    nonisolated static let citationMilestones = [10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 25_000, 50_000, 100_000]
+
+    private func performCitationCheck(for profiles: [ScholarProfile]) async {
+        var changes: [ProfileChange] = []
+        var milestones: [String] = []
+        var rateLimited = false
+        var succeeded = 0
+        // Profiles still worth retrying: not yet fetched, or failed on a network blip.
+        var pending = Set(profiles.map(\.id))
+
+        for (index, profile) in profiles.enumerated() {
+            // Be respectful to Google's servers, including after a failed request.
+            if index > 0 {
+                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+            }
+
             do {
                 let metrics = try await fetchScholarMetrics(for: profile)
-                let previousCitationCount = await storageManager.getLatestCitationCount(for: profile.id)
-                successfulProfiles += 1
-                
-                if let previousCitationCount = previousCitationCount {
-                    let delta = metrics.citationCount - previousCitationCount
-                    totalCitationDelta += delta
-                    if delta != 0 {
-                        changedProfiles += 1
-                    }
-                }
-                
-                // Store the record
+                let previousRecord = await storageManager.getLatestRecord(for: profile.id)
+                let paperGains = await storageManager.updatePapers(metrics.papers, for: profile.id)
+
                 let record = CitationRecord(
                     profileId: profile.id,
                     citationCount: metrics.citationCount,
@@ -234,155 +272,228 @@ import UserNotifications
                     citationsByYear: metrics.citationsByYear
                 )
                 await storageManager.saveCitationRecord(record)
-                
-                // Calculate recent growth and baseline days
-                let growthSummary = await storageManager.calculateRecentGrowthSummary(for: profile.id)
-                var updatedProfile = profile
-                updatedProfile.recentGrowth = growthSummary?.growth
-                updatedProfile.recentGrowthDays = growthSummary?.baselineDays
-                
-                // Only add the updated profile with growth data to results
-                results[updatedProfile] = ProfileMetrics(
-                    citationCount: metrics.citationCount,
-                    hIndex: metrics.hIndex,
-                    i10Index: metrics.i10Index,
-                    citationsByYear: metrics.citationsByYear
-                )
 
-                AppLog.debug("Successfully fetched \(metrics.citationCount) citations for \(profile.name)")
-                if let hIndex = metrics.hIndex {
-                    AppLog.debug("h-index for \(profile.name): \(hIndex)")
+                if let previousRecord {
+                    let delta = metrics.citationCount - previousRecord.citationCount
+                    if delta != 0 || !paperGains.isEmpty {
+                        changes.append(ProfileChange(
+                            name: profile.name,
+                            citationDelta: delta,
+                            paperGains: paperGains,
+                            profileURL: profile.url
+                        ))
+                    }
+                    milestones += Self.milestoneMessages(name: profile.name, previous: previousRecord, current: record)
                 }
-                if let i10Index = metrics.i10Index {
-                    AppLog.debug("i10-index for \(profile.name): \(i10Index)")
-                }
-                if let citationsByYear = metrics.citationsByYear {
-                    let currentYear = Calendar.current.component(.year, from: Date())
-                    let currentYearCitations = citationsByYear[currentYear] ?? 0
-                    AppLog.debug("Current-year citations for \(profile.name) (\(currentYear)): \(currentYearCitations)")
-                } else {
-                    AppLog.debug("Current-year citations unavailable for \(profile.name) (yearly histogram parse failed)")
-                }
-                if let growthSummary = growthSummary {
-                    let growth = growthSummary.growth
-                    let dayLabel = growthSummary.baselineDays == 1 ? "day" : "days"
-                    AppLog.debug("Recent growth for \(profile.name): \(growth > 0 ? "+\(growth)" : "\(growth)") in last \(growthSummary.baselineDays) \(dayLabel)")
-                } else {
-                    AppLog.debug("No recent growth data available for \(profile.name) (insufficient historical data)")
-                }
-                
-                // Add delay to be respectful to Google's servers
-                try await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
-                
+
+                succeeded += 1
+                pending.remove(profile.id)
+
+                AppLog.debug(
+                    "Fetched \(profile.name): citations=\(metrics.citationCount), h=\(metrics.hIndex ?? -1), i10=\(metrics.i10Index ?? -1), papers=\(metrics.papers.count), paperGains=\(paperGains.count)"
+                )
+            } catch CitationError.rateLimited {
+                // Further requests would only extend the block, so stop this cycle.
+                AppLog.error("Google Scholar is rate-limiting this network; stopping refresh cycle")
+                rateLimited = true
+                break
             } catch {
                 AppLog.error("Failed to fetch citations for \(profile.name): \(error)")
-                AppLog.debug("Error details: \(error.localizedDescription)")
-                
-                // Don't let one profile failure stop the whole process
-                // Continue with other profiles
-            }
-        }
-        
-        // Update last refresh time and clear refreshing state on main actor
-        await MainActor.run {
-            settingsManager.setLastUpdateTime(Date())
-            settingsManager.setRefreshing(false)
-            
-            // Notify delegate that refreshing is complete
-            delegate?.refreshingStateChanged(false)
-            
-            if !results.isEmpty {
-                delegate?.citationsUpdated(results)
-                
-                // Keep startup refresh low-noise; notify only for manual/timed refreshes.
-                if !isStartup {
-                    sendRefreshCompletionNotificationIfNeeded(
-                        attemptedProfiles: profiles.count,
-                        successfulProfiles: successfulProfiles,
-                        changedProfiles: changedProfiles,
-                        totalCitationDelta: totalCitationDelta
-                    )
-                }
-            } else {
-                // If network request failed but we might have historical data showing,
-                // don't call citationCheckFailed as it would show error and hide historical data
-                // Instead, just log the issue
-                AppLog.debug("Network request completed but no new data retrieved")
-                
-                // Only show error if we have no historical data available
-                // Check if we have any stored data for current profiles
-                let activeProfileIDs = Set(profiles.map(\.id))
-                Task {
-                    let hasHistoricalData = await storageManager.hasHistoricalData(for: activeProfileIDs)
-                    
-                    if !hasHistoricalData {
-                        await MainActor.run {
-                            delegate?.citationCheckFailed(CitationError.noDataAvailable)
-                        }
-                    }
+                // Don't let one profile failure stop the whole process; only network
+                // failures are worth an automatic retry.
+                if !Self.isTransient(error) {
+                    pending.remove(profile.id)
                 }
             }
         }
-    }
 
-    private func sendRefreshCompletionNotificationIfNeeded(
-        attemptedProfiles: Int,
-        successfulProfiles: Int,
-        changedProfiles: Int,
-        totalCitationDelta: Int
-    ) {
-        guard settingsManager.settings.showNotifications else { return }
-        guard successfulProfiles > 0 else { return }
-
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            let center = UNUserNotificationCenter.current()
-            let settings = await center.notificationSettings()
-            
-            switch settings.authorizationStatus {
-            case .authorized, .provisional:
-                await self.postRefreshCompletionNotification(
-                    attemptedProfiles: attemptedProfiles,
-                    successfulProfiles: successfulProfiles,
-                    changedProfiles: changedProfiles,
-                    totalCitationDelta: totalCitationDelta
-                )
-            case .notDetermined:
-                // Permission is requested from a user-facing flow (Settings / onboarding prompt),
-                // not during background refresh completion.
-                return
-            case .denied:
-                return
-            @unknown default:
-                return
-            }
-        }
-    }
-
-    private func postRefreshCompletionNotification(
-        attemptedProfiles: Int,
-        successfulProfiles: Int,
-        changedProfiles: Int,
-        totalCitationDelta: Int
-    ) async {
-        let profileWord = successfulProfiles == 1 ? "profile" : "profiles"
-        let changedWord = changedProfiles == 1 ? "profile" : "profiles"
-
-        let detailText: String
-        if totalCitationDelta > 0 {
-            detailText = "+\(totalCitationDelta) citations across \(changedProfiles) \(changedWord)."
-        } else if totalCitationDelta < 0 {
-            detailText = "\(totalCitationDelta) citations net across \(changedProfiles) \(changedWord)."
-        } else if changedProfiles > 0 {
-            detailText = "Citation totals changed in \(changedProfiles) \(changedWord)."
+        let issue: RefreshIssue?
+        if pending.isEmpty {
+            consecutiveFailedCycles = 0
+            retryTimer?.invalidate()
+            retryTimer = nil
+            settingsManager.setScholarPausedUntil(nil)
+            issue = nil
         } else {
-            detailText = "No citation changes this cycle."
+            consecutiveFailedCycles += 1
+            let retryAt = Date().addingTimeInterval(
+                Self.retryDelay(afterFailedCycles: consecutiveFailedCycles, rateLimited: rateLimited)
+            )
+            settingsManager.setScholarPausedUntil(rateLimited ? retryAt : nil)
+            scheduleRetry(at: retryAt, profileIDs: pending)
+            issue = rateLimited ? .rateLimited(retryAt: retryAt) : .networkUnavailable(retryAt: retryAt)
         }
 
+        if succeeded > 0 {
+            settingsManager.setLastUpdateTime(Date())
+        }
+        settingsManager.setRefreshing(false)
+        isChecking = false
+        delegate?.refreshingStateChanged(false)
+        delegate?.refreshIssueChanged(issue, failedProfileIDs: pending)
+
+        if succeeded > 0 {
+            // Reload every profile from storage so ones that failed this cycle keep showing
+            // their last known data.
+            updateMenuBarWithCurrentData()
+            notifyIfNeeded(changes: changes, milestones: milestones)
+        } else {
+            // Keep showing historical data when the network fails; only surface an
+            // error when there is nothing stored for the active profiles.
+            AppLog.debug("Refresh completed but no new data retrieved")
+            let hasHistoricalData = await storageManager.hasHistoricalData(for: Set(profiles.map(\.id)))
+            if !hasHistoricalData {
+                delegate?.citationCheckFailed(rateLimited ? CitationError.rateLimited : CitationError.noDataAvailable)
+            }
+        }
+    }
+
+    private func scheduleRetry(at date: Date, profileIDs: Set<String>?) {
+        retryTimer?.invalidate()
+        let timer = Timer(fire: date, interval: 0, repeats: false) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.retryTimer = nil
+                self?.checkCitations(onlyProfileIDs: profileIDs)
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        retryTimer = timer
+        AppLog.debug("Scheduled automatic retry at \(date) for \(profileIDs?.count ?? -1) profiles")
+    }
+
+    /// Wait before automatically retrying a cycle that left profiles unfetched. Network blips
+    /// retry after 5, 10, 20, 40, then 60 minutes; Scholar rate limits after 15, 30, 60, 120,
+    /// then 240 minutes. Refresh Now always works in the meantime.
+    nonisolated static func retryDelay(afterFailedCycles count: Int, rateLimited: Bool) -> TimeInterval {
+        let base: TimeInterval = rateLimited ? 15 * 60 : 5 * 60
+        let cap: TimeInterval = rateLimited ? 4 * 60 * 60 : 60 * 60
+        return min(cap, base * pow(2, Double(max(0, count - 1))))
+    }
+
+    /// Failures worth retrying soon: dropped or missing connections, timeouts, and 5xx.
+    nonisolated static func isTransient(_ error: Error) -> Bool {
+        if (error as? CitationError) == .serverError {
+            return true
+        }
+        guard let urlError = error as? URLError else { return false }
+        switch urlError.code {
+        case .timedOut, .networkConnectionLost, .notConnectedToInternet, .cannotConnectToHost,
+             .cannotFindHost, .dnsLookupFailed, .internationalRoamingOff, .dataNotAllowed:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Menu data for a profile: stored metrics plus growth and paper insights.
+    private func displayData(for profile: ScholarProfile, record: CitationRecord) async -> (ScholarProfile, ProfileMetrics) {
+        let growthSummary = await storageManager.calculateRecentGrowthSummary(for: profile.id)
+        var updatedProfile = profile
+        updatedProfile.recentGrowth = growthSummary?.growth
+        updatedProfile.recentGrowthDays = growthSummary?.baselineDays
+
+        var metrics = ProfileMetrics(
+            citationCount: record.citationCount,
+            hIndex: record.hIndex,
+            i10Index: record.i10Index,
+            citationsByYear: record.citationsByYear
+        )
+        if let profilePapers = await storageManager.getProfilePapers(for: profile.id) {
+            if let hIndex = record.hIndex {
+                metrics.citationsToNextHIndex = StorageManager.computeCitationsToNextHIndex(
+                    hIndex: hIndex,
+                    papers: profilePapers.papers
+                )
+            }
+            metrics.topPapers = Array(profilePapers.papers.sorted { $0.citations > $1.citations }.prefix(3))
+            if let gainDate = profilePapers.lastGainDate,
+               Date().timeIntervalSince(gainDate) < Self.recentPaperGainWindow {
+                metrics.recentPaperGains = profilePapers.lastGains
+            }
+        }
+        return (updatedProfile, metrics)
+    }
+
+    nonisolated static func milestoneMessages(name: String, previous: CitationRecord, current: CitationRecord) -> [String] {
+        var messages: [String] = []
+        if let reached = citationMilestones.last(where: { previous.citationCount < $0 && current.citationCount >= $0 }) {
+            let formatted = NumberFormatter.localizedString(from: NSNumber(value: reached), number: .decimal)
+            messages.append("\(name) passed \(formatted) citations")
+        }
+        if let old = previous.hIndex, let new = current.hIndex, new > old {
+            messages.append("\(name)'s h-index rose to \(new)")
+        }
+        if let old = previous.i10Index, let new = current.i10Index, new > old {
+            messages.append("\(name)'s i10-index rose to \(new)")
+        }
+        return messages
+    }
+
+    /// Notification for a refresh that changed something; nil when nothing changed.
+    nonisolated static func changeNotificationText(for changes: [ProfileChange]) -> (title: String, body: String, url: String?)? {
+        guard let first = changes.first else { return nil }
+
+        let totalDelta = changes.reduce(0) { $0 + $1.citationDelta }
+        let title: String
+        if totalDelta > 0 {
+            title = totalDelta == 1 ? "+1 new citation" : "+\(totalDelta) new citations"
+        } else {
+            title = "Citation counts changed"
+        }
+
+        let showNames = changes.count > 1
+        let lines = changes.prefix(3).map { change -> String in
+            let prefix = showNames ? "\(change.name): " : ""
+            guard let topGain = change.paperGains.first else {
+                let signedDelta = change.citationDelta > 0 ? "+\(change.citationDelta)" : "\(change.citationDelta)"
+                return "\(change.name) \(signedDelta)"
+            }
+            let others = change.paperGains.count - 1
+            let suffix = others > 0 ? " · \(others) more \(others == 1 ? "paper" : "papers")" : ""
+            return "\(prefix)\(topGain.shortTitle) +\(topGain.delta)\(suffix)"
+        }
+        var body = lines.joined(separator: "\n")
+        if changes.count > 3 {
+            body += "\n…and \(changes.count - 3) more profiles"
+        }
+
+        return (title, body, first.paperGains.first?.citedByURL ?? first.profileURL)
+    }
+
+    private func notifyIfNeeded(changes: [ProfileChange], milestones: [String]) {
+        guard settingsManager.settings.showNotifications, Bundle.main.bundleIdentifier != nil else { return }
+        let changeText = Self.changeNotificationText(for: changes)
+        guard changeText != nil || !milestones.isEmpty else { return }
+
+        Task { @MainActor in
+            let center = UNUserNotificationCenter.current()
+            let status = await center.notificationSettings().authorizationStatus
+            // Permission is requested from a user-facing flow (Settings / onboarding prompt),
+            // not during background refresh completion.
+            guard status == .authorized || status == .provisional else { return }
+
+            if !milestones.isEmpty {
+                await Self.postNotification(
+                    title: "🎉 Milestone reached",
+                    body: milestones.joined(separator: "\n"),
+                    url: changeText?.url
+                )
+            }
+            if let changeText {
+                await Self.postNotification(title: changeText.title, body: changeText.body, url: changeText.url)
+            }
+        }
+    }
+
+    private static func postNotification(title: String, body: String, url: String?) async {
         let content = UNMutableNotificationContent()
-        content.title = "CiteBar Refresh Complete"
-        content.body = "Updated \(successfulProfiles)/\(attemptedProfiles) \(profileWord). \(detailText)"
+        content.title = title
+        content.body = body
         content.threadIdentifier = "com.hichipli.citebar.refresh"
+        if let url {
+            // Opened by AppDelegate when the notification is clicked.
+            content.userInfo = ["url": url]
+        }
 
         let request = UNNotificationRequest(
             identifier: "citebar-refresh-\(UUID().uuidString)",
@@ -393,24 +504,38 @@ import UserNotifications
         do {
             try await UNUserNotificationCenter.current().add(request)
         } catch {
-            AppLog.error("Failed to post refresh notification: \(error)")
+            AppLog.error("Failed to post notification: \(error)")
         }
     }
     
     func fetchScholarMetrics(for profile: ScholarProfile) async throws -> ScholarMetrics {
-        guard let url = URL(string: profile.url) else {
+        guard let url = Self.scholarProfileURL(for: profile.id) else {
             throw CitationError.invalidURL
         }
         let html = try await fetchScholarHTML(from: url)
-        
+
         // Debug: Print first 500 characters of HTML
         AppLog.debug("HTML Preview: \(String(html.prefix(500)))")
-        
+
         return try parseScholarMetrics(from: html)
     }
 
-    private func scholarProfileURL(for profileID: String) -> URL? {
-        URL(string: "https://scholar.google.com/citations?user=\(profileID)&hl=en")
+    /// First profile page with up to 100 papers, so per-paper counts come from the same single
+    /// request. robots.txt allows `/citations?user=`; it disallows `cstart=` pagination, so
+    /// papers beyond the first 100 (the least cited ones) are not tracked.
+    nonisolated static func scholarProfileURL(for profileID: String) -> URL? {
+        URL(string: "https://scholar.google.com/citations?user=\(profileID)&hl=en&pagesize=100")
+    }
+
+    /// Google answers rate-limited clients with HTTP 429, a redirect to its /sorry page, or a
+    /// CAPTCHA page that can come back as 200.
+    nonisolated static func isRateLimitResponse(statusCode: Int, url: URL?, html: String) -> Bool {
+        if statusCode == 429 || url?.path.hasPrefix("/sorry") == true {
+            return true
+        }
+        // A real profile page always has the stats table, so markers elsewhere on it are ignored.
+        guard !html.contains("gsc_rsb_st") else { return false }
+        return html.contains("gs_captcha") || html.contains("unusual traffic from your computer network")
     }
 
     private func makeScholarRequest(for url: URL) -> URLRequest {
@@ -424,6 +549,19 @@ import UserNotifications
     }
 
     private func fetchScholarHTML(from url: URL) async throws -> String {
+        var attempt = 0
+        while true {
+            do {
+                return try await fetchScholarHTMLOnce(from: url)
+            } catch let error where attempt < requestRetryDelays.count && Self.isTransient(error) {
+                AppLog.debug("Request failed (\(error)); retrying in \(requestRetryDelays[attempt])s")
+                try? await Task.sleep(nanoseconds: UInt64(requestRetryDelays[attempt] * 1_000_000_000))
+                attempt += 1
+            }
+        }
+    }
+
+    private func fetchScholarHTMLOnce(from url: URL) async throws -> String {
         let request = makeScholarRequest(for: url)
         let (data, response) = try await urlSession.data(for: request)
 
@@ -433,11 +571,23 @@ import UserNotifications
 
         AppLog.debug("HTTP Status Code: \(httpResponse.statusCode)")
 
-        guard httpResponse.statusCode == 200 else {
+        let html = String(data: data, encoding: .utf8)
+        if Self.isRateLimitResponse(statusCode: httpResponse.statusCode, url: httpResponse.url, html: html ?? "") {
+            throw CitationError.rateLimited
+        }
+
+        switch httpResponse.statusCode {
+        case 200:
+            break
+        case 404:
+            throw CitationError.profileNotFound
+        case 500...599:
+            throw CitationError.serverError
+        default:
             throw CitationError.networkError
         }
 
-        guard let html = String(data: data, encoding: .utf8) else {
+        guard let html else {
             throw CitationError.invalidResponse
         }
 
@@ -503,6 +653,7 @@ import UserNotifications
         do {
             let doc = try SwiftSoup.parse(html)
             let citationsByYear = parseCitationsByYear(from: doc)
+            let papers = parsePapers(from: doc)
             
             // Try multiple selectors for the statistics table
             let possibleSelectors = [
@@ -522,7 +673,8 @@ import UserNotifications
                                 citationCount: metrics.citationCount,
                                 hIndex: metrics.hIndex,
                                 i10Index: metrics.i10Index,
-                                citationsByYear: citationsByYear
+                                citationsByYear: citationsByYear,
+                                papers: papers
                             )
                         }
                     }
@@ -561,7 +713,8 @@ import UserNotifications
                             citationCount: metrics.citationCount,
                             hIndex: metrics.hIndex,
                             i10Index: metrics.i10Index,
-                            citationsByYear: citationsByYear
+                            citationsByYear: citationsByYear,
+                            papers: papers
                         )
                     }
                 }
@@ -573,7 +726,7 @@ import UserNotifications
                 let text = try element.text()
                 if let number = extractValidCitationCount(from: text) {
                     AppLog.debug("Found potential citation count in fallback: \(text) -> \(number)")
-                    return ScholarMetrics(citationCount: number, hIndex: nil, i10Index: nil, citationsByYear: citationsByYear)
+                    return ScholarMetrics(citationCount: number, hIndex: nil, i10Index: nil, citationsByYear: citationsByYear, papers: papers)
                 }
             }
             
@@ -621,6 +774,27 @@ import UserNotifications
         } catch {
             AppLog.debug("Citation histogram parsing failed: \(error)")
             return nil
+        }
+    }
+
+    private func parsePapers(from doc: Document) -> [ScholarPaper] {
+        guard let rows = try? doc.select("tr.gsc_a_tr") else { return [] }
+
+        return rows.compactMap { row -> ScholarPaper? in
+            guard let titleLink = try? row.select("a.gsc_a_at").first(),
+                  let title = try? titleLink.text(), !title.isEmpty,
+                  let href = try? titleLink.attr("href"),
+                  let id = href.components(separatedBy: "citation_for_view=").dropFirst().first?
+                    .components(separatedBy: "&").first, !id.isEmpty else {
+                return nil
+            }
+
+            // Uncited papers have an empty count link.
+            let countLink = try? row.select("a.gsc_a_ac").first()
+            let citations = (try? countLink?.text()).flatMap { extractNumber(from: $0) } ?? 0
+            let citedByURL = (try? countLink?.attr("href")).flatMap { $0.isEmpty ? nil : $0 }
+
+            return ScholarPaper(id: id, title: title, citations: citations, citedByURL: citedByURL)
         }
     }
 
@@ -798,35 +972,8 @@ import UserNotifications
                 
                 for profile in profiles {
                     if let latestRecord = await storageManager.getLatestRecord(for: profile.id) {
-                        // Calculate recent growth for historical data
-                        let growthSummary = await storageManager.calculateRecentGrowthSummary(for: profile.id)
-                        var updatedProfile = profile
-                        updatedProfile.recentGrowth = growthSummary?.growth
-                        updatedProfile.recentGrowthDays = growthSummary?.baselineDays
-                        currentData[updatedProfile] = ProfileMetrics(
-                            citationCount: latestRecord.citationCount,
-                            hIndex: latestRecord.hIndex,
-                            i10Index: latestRecord.i10Index,
-                            citationsByYear: latestRecord.citationsByYear
-                        )
-
-                        AppLog.debug("Loaded historical data for \(profile.name): \(latestRecord.citationCount) citations")
-                        if let hIndex = latestRecord.hIndex {
-                            AppLog.debug("Historical h-index for \(profile.name): \(hIndex)")
-                        }
-                        if let i10Index = latestRecord.i10Index {
-                            AppLog.debug("Historical i10-index for \(profile.name): \(i10Index)")
-                        }
-                        if let citationsByYear = latestRecord.citationsByYear {
-                            let currentYear = Calendar.current.component(.year, from: Date())
-                            let currentYearCitations = citationsByYear[currentYear] ?? 0
-                            AppLog.debug("Historical current-year citations for \(profile.name) (\(currentYear)): \(currentYearCitations)")
-                        }
-                        if let growthSummary = growthSummary {
-                            let growth = growthSummary.growth
-                            let dayLabel = growthSummary.baselineDays == 1 ? "day" : "days"
-                            AppLog.debug("Historical growth for \(profile.name): \(growth > 0 ? "+\(growth)" : "\(growth)") in last \(growthSummary.baselineDays) \(dayLabel)")
-                        }
+                        let (updatedProfile, metrics) = await displayData(for: profile, record: latestRecord)
+                        currentData[updatedProfile] = metrics
                     }
                 }
                 
@@ -856,6 +1003,9 @@ enum CitationError: Error, LocalizedError {
     case invalidCitationFormat
     case parsingError
     case noDataAvailable
+    case rateLimited
+    case profileNotFound
+    case serverError
     
     var errorDescription: String? {
         switch self {
@@ -873,6 +1023,12 @@ enum CitationError: Error, LocalizedError {
             return "Failed to parse HTML content"
         case .noDataAvailable:
             return "No citation data available"
+        case .rateLimited:
+            return "Google Scholar is temporarily limiting requests from this network"
+        case .profileNotFound:
+            return "Google Scholar profile not found"
+        case .serverError:
+            return "Google Scholar is temporarily unavailable"
         }
     }
 }

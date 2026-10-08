@@ -1,468 +1,295 @@
 import Cocoa
+import SwiftUI
 
-@MainActor class MenuBarManager: NSObject, NSMenuDelegate {
+/// Owns the status item and the panel that opens from it.
+@MainActor class MenuBarManager: NSObject, NSPopoverDelegate {
     private let statusItem: NSStatusItem
-    private var currentCitations: [ScholarProfile: ProfileMetrics] = [:]
-    private var lastError: String?
     private let settingsManager = SettingsManager.shared
-    
-    private static let specificTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        formatter.timeStyle = .short
-        return formatter
-    }()
-    
-    private static let relativeTimeFormatter: RelativeDateTimeFormatter = {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.dateTimeStyle = .named
-        return formatter
-    }()
-    
+    let model = DashboardModel()
+    private var currentCitations: [ScholarProfile: ProfileMetrics] = [:]
+    private var popover: NSPopover?
+    private var appActiveBeforePopover: NSRunningApplication?
+    private var lastPanelClose = Date.distantPast
+    private var footerNoteReset: DispatchWorkItem?
+
+    private var appDelegate: AppDelegate? { NSApp.delegate as? AppDelegate }
+
     init(statusItem: NSStatusItem) {
         self.statusItem = statusItem
+        super.init()
+        if let button = statusItem.button {
+            button.target = self
+            button.action = #selector(statusItemClicked(_:))
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        }
     }
-    
+
     /// Show an immediate, visible startup state so users know the app launched.
     func showLaunchingState() {
-        applyStatusIcon(
-            symbolName: "arrow.clockwise",
-            accessibilityDescription: "CiteBar - Launching",
-            preferredTitle: " ...",
-            fallbackTitle: " ..."
-        )
+        applyStatusIcon(symbolName: "book.circle", accessibilityDescription: "CiteBar - Launching", title: " …")
     }
-    
-    func createMenu() -> NSMenu {
-        let menu = NSMenu()
-        
-        // Citation display section with dynamic header - this will be updated in updateMenu()
-        let profileCount = settingsManager.settings.profiles.count
-        let headerTitle = profileCount == 1 ? "Scholar Metrics (1 Profile)" : "Scholar Metrics (\(profileCount) Profiles)"
-        let citationHeader = NSMenuItem(title: headerTitle, action: nil, keyEquivalent: "")
-        citationHeader.tag = 999 // Special tag for header
-        citationHeader.isEnabled = false
-        menu.addItem(citationHeader)
-        
-        menu.addItem(NSMenuItem.separator())
-        
-        // Status section (refreshing indicator, last update time)
-        // This will be updated dynamically in updateMenu()
-        
-        // Refresh option
-        let refreshItem = NSMenuItem(title: "Refresh Now", action: #selector(AppDelegate.refreshCitations), keyEquivalent: "r")
-        refreshItem.target = NSApplication.shared.delegate
-        refreshItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Refresh")
-        menu.addItem(refreshItem)
-        
-        // Settings option
-        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(AppDelegate.showSettings), keyEquivalent: ",")
-        settingsItem.target = NSApplication.shared.delegate
-        settingsItem.image = NSImage(systemSymbolName: "gear", accessibilityDescription: "Settings")
-        menu.addItem(settingsItem)
-        
-        // Check for Updates option (only show if bundle identifier exists)
-        if Bundle.main.bundleIdentifier != nil && !Bundle.main.bundleIdentifier!.isEmpty {
-            let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(AppDelegate.checkForUpdates), keyEquivalent: "")
-            updateItem.target = NSApplication.shared.delegate
-            updateItem.image = NSImage(systemSymbolName: "arrow.down.circle", accessibilityDescription: "Check for Updates")
-            menu.addItem(updateItem)
-        } else {
-            let debugItem = NSMenuItem(title: "Debug Mode (No Updates)", action: nil, keyEquivalent: "")
-            debugItem.isEnabled = false
-            debugItem.image = NSImage(systemSymbolName: "ladybug", accessibilityDescription: "Debug Mode")
-            menu.addItem(debugItem)
-        }
-        
-        // Support/Feedback option
-        let supportItem = NSMenuItem(title: "Support & Feedback", action: #selector(AppDelegate.showSupport), keyEquivalent: "")
-        supportItem.target = NSApplication.shared.delegate
-        supportItem.image = NSImage(systemSymbolName: "questionmark.circle", accessibilityDescription: "Support")
-        menu.addItem(supportItem)
-        
-        menu.addItem(NSMenuItem.separator())
-        
-        // Quit option
-        let quitItem = NSMenuItem(title: "Quit CiteBar", action: #selector(AppDelegate.quitApp), keyEquivalent: "q")
-        quitItem.target = NSApplication.shared.delegate
-        quitItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: "Quit")
-        menu.addItem(quitItem)
-        
-        // Set delegate to handle menu updates
-        menu.delegate = self
-        
-        return menu
-    }
-    
+
+    // MARK: - Data
+
     func updateDisplayWith(_ citations: [ScholarProfile: ProfileMetrics]) {
         currentCitations = citations
-        clearError() // Clear any previous errors
-        
-        // Check if refreshing to show appropriate icon
-        if settingsManager.settings.isRefreshing {
-            applyStatusIcon(
-                symbolName: "arrow.clockwise",
-                accessibilityDescription: "CiteBar - Refreshing",
-                preferredTitle: " ...",
-                fallbackTitle: " ..."
-            )
-        } else {
-            // Update menu bar display - show first profile by sort order
-            let sortedProfiles = citations.keys.sorted { $0.sortOrder < $1.sortOrder }
-            if let primaryProfile = sortedProfiles.first,
-               let metrics = citations[primaryProfile] {
-                updateMenuBarWithMetrics(metrics)
-            } else {
-                applyStatusIcon(
-                    symbolName: "book.circle",
-                    accessibilityDescription: "CiteBar - No data",
-                    preferredTitle: " --",
-                    fallbackTitle: " --"
-                )
-            }
-        }
-        
-        // Update menu with all profiles
-        updateMenu()
+        model.errorMessage = nil
+        model.loadingProfileIDs.subtract(citations.filter { $0.value.citationCount >= 0 }.map(\.key.id))
+        rebuildEntries()
     }
-    
-    private func updateMenu() {
-        guard let menu = statusItem.menu else { return }
-        
-        // Update header with current profile count
-        if let headerItem = menu.items.first(where: { $0.tag == 999 }) {
-            let profileCount = settingsManager.settings.profiles.count
-            let headerTitle = profileCount == 1 ? "Scholar Metrics (1 Profile)" : "Scholar Metrics (\(profileCount) Profiles)"
-            headerItem.title = headerTitle
-        }
-        
-        // Remove existing citation items (keep header, separator, and control items)
-        let itemsToRemove = menu.items.filter { item in
-            return item.tag == 100 // Citation items will have tag 100
-        }
-        
-        for item in itemsToRemove {
-            menu.removeItem(item)
-        }
-        
-        // Add status information (refreshing indicator, last update time)
-        var insertIndex = 1 // After header
-        
-        if settingsManager.settings.isRefreshing {
-            let refreshingItem = NSMenuItem(title: "Refreshing citations...", action: nil, keyEquivalent: "")
-            refreshingItem.tag = 100
-            refreshingItem.isEnabled = false
-            refreshingItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Refreshing")
-            menu.insertItem(refreshingItem, at: insertIndex)
-            insertIndex += 1
-        } else if let lastUpdate = settingsManager.settings.lastUpdateTime {
-            // Reuse formatters to avoid repeated heavyweight formatter allocations.
-            Self.specificTimeFormatter.locale = Locale.current
-            Self.specificTimeFormatter.timeZone = .current
-            let specificTime = Self.specificTimeFormatter.string(from: lastUpdate)
-            
-            Self.relativeTimeFormatter.locale = Locale.current
-            let relativeTime = Self.relativeTimeFormatter.localizedString(for: lastUpdate, relativeTo: Date())
-            
-            // Add specific time item
-            let specificTimeItem = NSMenuItem(title: "Last updated: \(specificTime)", action: nil, keyEquivalent: "")
-            specificTimeItem.tag = 100
-            specificTimeItem.isEnabled = false
-            specificTimeItem.image = NSImage(systemSymbolName: "clock", accessibilityDescription: "Last updated")
-            menu.insertItem(specificTimeItem, at: insertIndex)
-            insertIndex += 1
-            
-            // Add relative time item
-            let relativeTimeItem = NSMenuItem(title: "  (\(relativeTime))", action: nil, keyEquivalent: "")
-            relativeTimeItem.tag = 100
-            relativeTimeItem.isEnabled = false
-            relativeTimeItem.image = NSImage(systemSymbolName: "timer", accessibilityDescription: "Time ago")
-            menu.insertItem(relativeTimeItem, at: insertIndex)
-            insertIndex += 1
-        }
-        
-        if !currentCitations.isEmpty || settingsManager.settings.isRefreshing {
-            menu.insertItem(NSMenuItem.separator(), at: insertIndex)
-            insertIndex += 1
-            
-            // Add clickable hint for profiles (shorter text)
-            if !currentCitations.isEmpty {
-                let hintItem = NSMenuItem(title: "Click names to open Scholar", action: nil, keyEquivalent: "")
-                hintItem.tag = 100
-                hintItem.isEnabled = false
-                hintItem.image = NSImage(systemSymbolName: "hand.point.up.left", accessibilityDescription: "Tip")
-                menu.insertItem(hintItem, at: insertIndex)
-                insertIndex += 1
-                
-                menu.insertItem(NSMenuItem.separator(), at: insertIndex)
-                insertIndex += 1
-            }
-        }
-        
-        // Add current citation data - sorted by profile order, then by citation count
-        let sortedCitations = currentCitations.sorted { (lhs, rhs) -> Bool in
-            if lhs.key.sortOrder == rhs.key.sortOrder {
-                return lhs.value.citationCount > rhs.value.citationCount
-            }
-            return lhs.key.sortOrder < rhs.key.sortOrder
-        }
-        
-        for (profile, metrics) in sortedCitations {
-            // Create a more detailed display for each profile
-            let citationItem = NSMenuItem(title: "\(profile.name)", 
-                                        action: #selector(AppDelegate.openScholarProfile(_:)), 
-                                        keyEquivalent: "")
-            citationItem.tag = 100
-            citationItem.target = NSApplication.shared.delegate
-            citationItem.representedObject = profile
-            citationItem.image = NSImage(systemSymbolName: "person.circle", accessibilityDescription: "Profile")
-            menu.insertItem(citationItem, at: insertIndex)
-            insertIndex += 1
-            
-            // Add citation count as sub-item
-            let countText: String
-            let countIcon: String
-            var totalSummaryText: String?
-            if metrics.citationCount == -1 {
-                countText = "    Loading citations..."
-                countIcon = "arrow.clockwise"
-            } else {
-                let formattedTotal = NumberFormatter.localizedString(from: NSNumber(value: metrics.citationCount), number: .decimal)
-                let currentYear = Calendar.current.component(.year, from: Date())
-                switch settingsManager.settings.menuBarPrimaryMetric {
-                case .totalCitations:
-                    countText = "    \(formattedTotal) citations"
-                    countIcon = "book.closed"
-                case .currentYearCitations:
-                    if let currentYearCitations = metrics.currentYearCitations {
-                        let formattedCurrentYear = NumberFormatter.localizedString(
-                            from: NSNumber(value: currentYearCitations),
-                            number: .decimal
-                        )
-                        countText = "    \(formattedCurrentYear) citations in \(currentYear)"
-                        countIcon = "calendar"
-                    } else {
-                        countText = "    Current-year citations unavailable"
-                        countIcon = "calendar.badge.exclamationmark"
-                    }
-                    totalSummaryText = "    \(formattedTotal) total citations"
-                }
-            }
-            
-            let countItem = NSMenuItem(title: countText, action: nil, keyEquivalent: "")
-            countItem.tag = 100
-            countItem.isEnabled = false
-            countItem.image = NSImage(systemSymbolName: countIcon, accessibilityDescription: "Citations")
-            menu.insertItem(countItem, at: insertIndex)
-            insertIndex += 1
 
-            if let totalSummaryText {
-                let totalItem = NSMenuItem(title: totalSummaryText, action: nil, keyEquivalent: "")
-                totalItem.tag = 100
-                totalItem.isEnabled = false
-                totalItem.image = NSImage(systemSymbolName: "book.closed", accessibilityDescription: "Total citations")
-                menu.insertItem(totalItem, at: insertIndex)
-                insertIndex += 1
-            }
-            
-            // Add h-index if available
-            if settingsManager.settings.showHIndexInMenu, let hIndex = metrics.hIndex {
-                let hIndexText = "    h-index: \(hIndex)"
-                let hIndexItem = NSMenuItem(title: hIndexText, action: nil, keyEquivalent: "")
-                hIndexItem.tag = 100
-                hIndexItem.isEnabled = false
-                hIndexItem.image = NSImage(systemSymbolName: "number.square", accessibilityDescription: "h-index")
-                menu.insertItem(hIndexItem, at: insertIndex)
-                insertIndex += 1
-            }
-
-            // Add i10-index if available
-            if settingsManager.settings.showI10IndexInMenu, let i10Index = metrics.i10Index {
-                let i10IndexText = "    i10-index: \(i10Index)"
-                let i10IndexItem = NSMenuItem(title: i10IndexText, action: nil, keyEquivalent: "")
-                i10IndexItem.tag = 100
-                i10IndexItem.isEnabled = false
-                i10IndexItem.image = NSImage(systemSymbolName: "number.square", accessibilityDescription: "i10-index")
-                menu.insertItem(i10IndexItem, at: insertIndex)
-                insertIndex += 1
-            }
-            
-            // Add growth info if available
-            if settingsManager.settings.showTrendInMenu, let growth = profile.recentGrowth {
-                let growthSymbol = growth > 0 ? "arrow.up.right" : (growth < 0 ? "arrow.down.right" : "minus")
-                let growthText = growth > 0 ? "+\(growth)" : "\(growth)"
-                let growthDays = max(1, profile.recentGrowthDays ?? 30)
-                let dayLabel = growthDays == 1 ? "day" : "days"
-                let growthItem = NSMenuItem(title: "    \(growthText) in last \(growthDays) \(dayLabel)", action: nil, keyEquivalent: "")
-                growthItem.tag = 100
-                growthItem.isEnabled = false
-                growthItem.image = NSImage(systemSymbolName: growthSymbol, accessibilityDescription: "Growth trend")
-                menu.insertItem(growthItem, at: insertIndex)
-                insertIndex += 1
-            }
-            
-            // Add separator between profiles if there are multiple and this is not the last profile
-            let currentProfileIndex = sortedCitations.firstIndex(where: { $0.key.id == profile.id }) ?? 0
-            if sortedCitations.count > 1 && currentProfileIndex < sortedCitations.count - 1 {
-                let separator = NSMenuItem.separator()
-                separator.tag = 100
-                menu.insertItem(separator, at: insertIndex)
-                insertIndex += 1
-            }
-        }
-        
-        if currentCitations.isEmpty {
-            if let error = lastError {
-                let errorItem = NSMenuItem(title: "Error: \(error)", action: nil, keyEquivalent: "")
-                errorItem.tag = 100
-                errorItem.isEnabled = false
-                menu.insertItem(errorItem, at: insertIndex)
-                insertIndex += 1
-                
-                let helpItem = NSMenuItem(title: "  Check Settings or try Refresh", action: nil, keyEquivalent: "")
-                helpItem.tag = 100
-                helpItem.isEnabled = false
-                menu.insertItem(helpItem, at: insertIndex)
-            } else {
-                // Check if we have any profiles configured
-                if !settingsManager.settings.profiles.isEmpty {
-                    let noDataItem = NSMenuItem(title: "Loading historical data...", action: nil, keyEquivalent: "")
-                    noDataItem.tag = 100
-                    noDataItem.isEnabled = false
-                    noDataItem.image = NSImage(systemSymbolName: "clock", accessibilityDescription: "Loading")
-                    menu.insertItem(noDataItem, at: insertIndex)
-                    insertIndex += 1
-                    
-                    let helpItem = NSMenuItem(title: "  Try Refresh if data doesn't appear", action: nil, keyEquivalent: "")
-                    helpItem.tag = 100
-                    helpItem.isEnabled = false
-                    menu.insertItem(helpItem, at: insertIndex)
-                } else {
-                    let noDataItem = NSMenuItem(title: "No profiles configured", action: nil, keyEquivalent: "")
-                    noDataItem.tag = 100
-                    noDataItem.isEnabled = false
-                    menu.insertItem(noDataItem, at: insertIndex)
-                }
-            }
-        }
-    }
-    
     func updateError(_ error: String) {
-        lastError = error
-        applyStatusIcon(
-            symbolName: "exclamationmark.triangle.fill",
-            accessibilityDescription: "CiteBar - Error",
-            preferredTitle: " !",
-            fallbackTitle: " !"
-        )
-        updateMenu()
+        model.errorMessage = error
+        if model.entries.allSatisfy({ $0.metrics == nil }) {
+            applyStatusIcon(symbolName: "exclamationmark.triangle", accessibilityDescription: "CiteBar - Error", title: "")
+        }
     }
-    
+
     func clearError() {
-        lastError = nil
+        model.errorMessage = nil
     }
-    
+
     func updateRefreshingState() {
-        // Update the display and menu to reflect current refreshing state
-        updateDisplayWith(currentCitations)
+        model.isRefreshing = settingsManager.settings.isRefreshing
     }
-    
-    private func updateMenuBarWithMetrics(_ metrics: ProfileMetrics) {
-        // Display count as text next to icon. If the SF Symbol fails to render,
-        // keep the title visible so users still see launch/refresh progress.
-        let displayValue: Int
-        let symbolName: String
-        let accessibilityDescription: String
 
-        switch settingsManager.settings.menuBarPrimaryMetric {
-        case .totalCitations:
-            displayValue = metrics.citationCount
-            symbolName = "book.circle.fill"
-            accessibilityDescription = "CiteBar"
-        case .currentYearCitations:
-            if let currentYearCitations = metrics.currentYearCitations {
-                displayValue = currentYearCitations
-                symbolName = "calendar.circle.fill"
-                accessibilityDescription = "CiteBar - Current year citations"
-            } else {
-                // Fall back to the total count when yearly histogram data is unavailable.
-                displayValue = metrics.citationCount
-                symbolName = "book.circle.fill"
-                accessibilityDescription = "CiteBar"
-            }
-        }
-
-        let title: String
-        if displayValue >= 0 {
-            let formattedValue = NumberFormatter.localizedString(from: NSNumber(value: displayValue), number: .decimal)
-            title = " \(formattedValue)"
-        } else {
-            title = " --"
-        }
-
-        applyStatusIcon(
-            symbolName: symbolName,
-            accessibilityDescription: accessibilityDescription,
-            preferredTitle: title,
-            fallbackTitle: title
-        )
+    func updateRefreshIssue(_ issue: RefreshIssue?, failedProfileIDs: Set<String>) {
+        model.issue = issue
+        model.failedProfileIDs = failedProfileIDs
     }
-    
+
     func showProfileLoading(_ profile: ScholarProfile) {
-        // Add the new profile to current citations with a loading indicator
-        currentCitations[profile] = ProfileMetrics(citationCount: -1, hIndex: nil, i10Index: nil) // Use -1 to indicate loading
-        applyStatusIcon(
-            symbolName: "arrow.clockwise",
-            accessibilityDescription: "CiteBar - Refreshing",
-            preferredTitle: " ...",
-            fallbackTitle: " ..."
-        )
-        updateMenu()
+        model.loadingProfileIDs.insert(profile.id)
+        rebuildEntries()
     }
-    
-    private func applyStatusIcon(
-        symbolName: String,
-        accessibilityDescription: String,
-        preferredTitle: String,
-        fallbackTitle: String
-    ) {
+
+    /// Settings own the name, group, and order of each profile; the latest citation data
+    /// carries recent growth.
+    private func rebuildEntries() {
+        let byID = Dictionary(
+            currentCitations.map { ($0.key.id, (profile: $0.key, metrics: $0.value)) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        model.entries = settingsManager.settings.profiles
+            .filter(\.isEnabled)
+            .sorted { $0.sortOrder < $1.sortOrder }
+            .map { profile in
+                guard let data = byID[profile.id], data.metrics.citationCount >= 0 else {
+                    return DashboardModel.Entry(profile: profile, metrics: nil)
+                }
+                var merged = profile
+                merged.recentGrowth = data.profile.recentGrowth
+                merged.recentGrowthDays = data.profile.recentGrowthDays
+                return DashboardModel.Entry(profile: merged, metrics: data.metrics)
+            }
+        updateStatusItemTitle()
+    }
+
+    private func updateStatusItemTitle() {
+        guard let metrics = model.entries.first?.metrics else {
+            applyStatusIcon(
+                symbolName: "book.circle",
+                accessibilityDescription: "CiteBar - No data",
+                title: model.entries.isEmpty ? "" : " --"
+            )
+            return
+        }
+
+        let showCurrentYear = settingsManager.settings.menuBarPrimaryMetric == .currentYearCitations
+            && metrics.currentYearCitations != nil
+        let value = showCurrentYear ? (metrics.currentYearCitations ?? 0) : metrics.citationCount
+        applyStatusIcon(
+            symbolName: showCurrentYear ? "calendar.circle.fill" : "book.circle.fill",
+            accessibilityDescription: showCurrentYear ? "CiteBar - Current year citations" : "CiteBar",
+            title: " \(value.decimalString)"
+        )
+    }
+
+    private func applyStatusIcon(symbolName: String, accessibilityDescription: String, title: String) {
         guard let button = statusItem.button else {
             AppLog.error("Status item button unavailable; cannot update menu bar display")
             return
         }
-        
-        if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: accessibilityDescription) {
-            button.image = image
-            button.title = preferredTitle
+        // If the SF Symbol fails to render, keep the title visible so users still see the count.
+        button.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: accessibilityDescription)
+        button.title = title
+        button.imagePosition = title.isEmpty ? .imageOnly : .imageLeading
+    }
+
+    // MARK: - Panel
+
+    @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
+        let event = NSApp.currentEvent
+        if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
+            showContextMenu()
         } else {
-            button.image = nil
-            button.title = fallbackTitle
+            togglePanel()
         }
     }
-    
-    // MARK: - NSMenuDelegate
-    
-    func menuWillOpen(_ menu: NSMenu) {
-        // Rebuild menu on open so display toggles from Settings apply immediately.
-        updateMenu()
-        // Update relative time whenever menu is about to open
-        updateRelativeTime(in: menu)
+
+    func togglePanel() {
+        if let popover, popover.isShown {
+            popover.performClose(nil)
+        } else if Date().timeIntervalSince(lastPanelClose) > 0.3 {
+            // A click on the icon first closes the transient popover; don't reopen it.
+            showPanel()
+        }
     }
-    
-    private func updateRelativeTime(in menu: NSMenu) {
-        guard let lastUpdate = settingsManager.settings.lastUpdateTime else { return }
-        
-        // Find the relative time menu item (it has a specific pattern)
-        for item in menu.items {
-            if item.tag == 100 && item.title.hasPrefix("  (") && item.title.hasSuffix(")") {
-                // This is the relative time item, update it
-                let relativeFormatter = RelativeDateTimeFormatter()
-                relativeFormatter.dateTimeStyle = .named
-                relativeFormatter.locale = Locale.current
-                let relativeTime = relativeFormatter.localizedString(for: lastUpdate, relativeTo: Date())
-                item.title = "  (\(relativeTime))"
-                break
+
+    private func showPanel() {
+        guard let button = statusItem.button else { return }
+        let popover = self.popover ?? makePopover()
+        self.popover = popover
+
+        // Activate so the panel takes keyboard shortcuts; focus goes back on close.
+        appActiveBeforePopover = NSWorkspace.shared.frontmostApplication
+        if #available(macOS 14.0, *) {
+            NSApp.activate()
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        popover.contentViewController?.view.window?.makeKey()
+    }
+
+    /// Actions that hand focus to something else (a browser, Settings) skip giving focus
+    /// back to the app that was frontmost before the panel opened.
+    func closePanel(restoringFocus: Bool = true) {
+        if !restoringFocus {
+            appActiveBeforePopover = nil
+        }
+        popover?.performClose(nil)
+    }
+
+    private func makePopover() -> NSPopover {
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.animates = true
+        popover.delegate = self
+        let host = NSHostingController(rootView: PanelView(model: model, actions: makeActions()))
+        host.sizingOptions = [.preferredContentSize]
+        popover.contentViewController = host
+#if DEBUG
+        if UserDefaults.standard.bool(forKey: "CiteBarDebugDark") {
+            popover.appearance = NSAppearance(named: .darkAqua)
+        }
+#endif
+        return popover
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        lastPanelClose = Date()
+        defer { appActiveBeforePopover = nil }
+        // Hand focus back to the app the user was in, unless they already switched away
+        // or opened a CiteBar window.
+        guard NSApp.isActive,
+              !NSApp.windows.contains(where: { $0.isVisible && $0.styleMask.contains(.titled) }),
+              let previous = appActiveBeforePopover,
+              previous != NSRunningApplication.current else { return }
+        previous.activate(options: [])
+    }
+
+    private func makeActions() -> PanelActions {
+        PanelActions(
+            refresh: { [weak self] in
+                self?.appDelegate?.refreshCitations()
+            },
+            openSettings: { [weak self] in
+                self?.closePanel(restoringFocus: false)
+                self?.appDelegate?.showSettings()
+            },
+            addProfile: { [weak self] in
+                self?.closePanel(restoringFocus: false)
+                self?.appDelegate?.showSettings(addingProfile: true)
+            },
+            openURL: { [weak self] urlString in
+                guard let url = URL(string: urlString), !urlString.isEmpty else { return }
+                self?.closePanel(restoringFocus: false)
+                NSWorkspace.shared.open(url)
+            },
+            saveStatsCard: { [weak self] in
+                self?.saveStatsCard()
+            },
+            checkForUpdates: { [weak self] in
+                self?.closePanel(restoringFocus: false)
+                self?.appDelegate?.checkForUpdates()
+            },
+            showSupport: { [weak self] in
+                self?.closePanel(restoringFocus: false)
+                self?.appDelegate?.showSupport()
+            },
+            quit: { [weak self] in
+                self?.appDelegate?.quitApp()
             }
+        )
+    }
+
+    /// Right-click (or Control-click) keeps a classic menu for quick actions.
+    private func showContextMenu() {
+        let menu = NSMenu()
+        let items: [(String, Selector, String)] = [
+            ("Refresh Now", #selector(AppDelegate.refreshCitations), "r"),
+            ("Settings…", #selector(AppDelegate.showSettings), ","),
+        ]
+        for (title, action, key) in items {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+            item.target = appDelegate
+            menu.addItem(item)
         }
+        menu.addItem(.separator())
+        let quit = NSMenuItem(title: "Quit CiteBar", action: #selector(AppDelegate.quitApp), keyEquivalent: "q")
+        quit.target = appDelegate
+        menu.addItem(quit)
+
+        statusItem.menu = menu
+        statusItem.button?.performClick(nil)
+        statusItem.menu = nil
+    }
+
+    // MARK: - Stats card
+
+    /// Saves a share image of the primary profile to Downloads and copies it.
+    func saveStatsCard() {
+        guard let entry = model.entries.first,
+              let metrics = entry.metrics,
+              let png = StatsCard(
+                name: entry.profile.name,
+                metrics: metrics,
+                recentGrowth: entry.profile.recentGrowth,
+                recentGrowthDays: entry.profile.recentGrowthDays
+              ).pngData(),
+              let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first else {
+            NSSound.beep()
+            return
+        }
+
+        let safeName = entry.profile.name
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: "-")
+        let day = ISO8601DateFormatter.string(from: Date(), timeZone: .current, formatOptions: [.withFullDate])
+        let fileURL = downloads.appendingPathComponent("CiteBar-\(safeName)-\(day).png")
+
+        do {
+            try png.write(to: fileURL, options: .atomic)
+        } catch {
+            AppLog.error("Failed to save stats card: \(error)")
+            NSSound.beep()
+            return
+        }
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setData(png, forType: .png)
+        showFooterNote("Card copied · saved to Downloads", revealing: fileURL)
+    }
+
+    private func showFooterNote(_ text: String, revealing fileURL: URL?) {
+        footerNoteReset?.cancel()
+        model.footerNote = DashboardModel.FooterNote(text: text, fileURL: fileURL)
+        let reset = DispatchWorkItem { [weak self] in
+            self?.model.footerNote = nil
+        }
+        footerNoteReset = reset
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: reset)
     }
 }
