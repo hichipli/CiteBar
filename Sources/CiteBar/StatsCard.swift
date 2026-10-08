@@ -112,7 +112,15 @@ struct StatsCard: View {
             items.append(("In \(String(year))", current.decimalString))
         }
         if let recentGrowth, recentGrowth > 0, let recentGrowthDays {
-            items.append(("Last \(recentGrowthDays) days", "+\(recentGrowth.decimalString)"))
+            // A profile tracked for under 30 days shows when its window started (#21).
+            let label: String
+            if recentGrowthDays < Theme.growthWindowDays,
+               let start = Calendar.current.date(byAdding: .day, value: -recentGrowthDays, to: date) {
+                label = "Since \(start.formatted(.dateTime.month(.abbreviated).day()))"
+            } else {
+                label = "Last \(recentGrowthDays) days"
+            }
+            items.append((label, "+\(recentGrowth.decimalString)"))
         }
         if let hIndex = metrics.hIndex {
             items.append(("h-index", "\(hIndex)"))

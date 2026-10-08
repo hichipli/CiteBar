@@ -5,6 +5,11 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Short Growth Windows** ([#21](https://github.com/hichipli/CiteBar/issues/21)): Profiles tracked for less than 30 days no longer read as 30-day growth. Their numbers carry a small day count (like +4³ᵈ), group totals that include them get an asterisk, the column reads "so far" until any profile has a month of history, and the top stats and stats card say "since Oct 5". Hovering explains each one
+
 ## [1.6.1] - 2026-10-08
 
 ### Added
