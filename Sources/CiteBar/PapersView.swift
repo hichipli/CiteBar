@@ -47,6 +47,9 @@ struct PapersView: View {
             } else if (profilePapers?.papers ?? []).isEmpty {
                 emptyState
             } else {
+                if sort == .newest && !hasYears {
+                    missingYearsNotice
+                }
                 List(rows, id: \.id) { paper in
                     PaperRow(
                         paper: paper,
@@ -73,11 +76,47 @@ struct PapersView: View {
         }
         .frame(width: 640, height: 580)
         .task(id: profileID) {
-            isLoaded = false
-            profilePapers = await (NSApp.delegate as? AppDelegate)?.citationManager?.storageManager.getProfilePapers(for: profileID)
-            isLoaded = true
+            await load()
+        }
+        // Pick up years and new citations as soon as a refresh finishes.
+        .onChange(of: model.isRefreshing) { refreshing in
+            if !refreshing {
+                Task { await load() }
+            }
         }
         .onExitCommand { NSApp.keyWindow?.close() }
+    }
+
+    /// Paper lists saved by CiteBar 1.6 have no years until the next refresh.
+    private var hasYears: Bool {
+        profilePapers?.papers.contains { $0.year != nil } ?? false
+    }
+
+    private var missingYearsNotice: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "calendar.badge.clock")
+                .foregroundStyle(.secondary)
+            Text("Publication years arrive with the next refresh. Until then, Newest can't sort by year.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            if model.isRefreshing {
+                ProgressView().controlSize(.small)
+            } else {
+                Button("Refresh Now") {
+                    (NSApp.delegate as? AppDelegate)?.refreshCitations()
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
+        .background(Color.primary.opacity(0.04))
+    }
+
+    private func load() async {
+        profilePapers = await (NSApp.delegate as? AppDelegate)?.citationManager?.storageManager.getProfilePapers(for: profileID)
+        isLoaded = true
     }
 
     private var header: some View {
