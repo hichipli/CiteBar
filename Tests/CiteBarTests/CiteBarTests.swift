@@ -310,7 +310,7 @@ final class CiteBarTests: XCTestCase {
         settings.profiles = [ScholarProfile(id: "_5pgNWgAAAAJ", name: "Ada", group: "Lab")]
         let archive = CiteBarArchive(
             exportedAt: Date(timeIntervalSince1970: 1_700_000_000),
-            appVersion: "1.7.0",
+            appVersion: "1.6.1",
             deviceName: "Test Mac",
             settings: settings,
             history: [CitationRecord(profileId: "_5pgNWgAAAAJ", citationCount: 98, hIndex: 4, timestamp: Date(timeIntervalSince1970: 1_700_000_000))],

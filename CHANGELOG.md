@@ -5,7 +5,7 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.7.0] - 2026-10-08
+## [1.6.1] - 2026-10-08
 
 ### Added
 - **Watch Papers**: A Papers window lists every paper on a profile with year, citations, and latest gain, searchable and sortable by most cited or newest, and marks papers near the next h-index. Star a paper to watch it: it appears in the panel under that profile, and its new citations lead notifications with a ★ ([#20](https://github.com/hichipli/CiteBar/issues/20))

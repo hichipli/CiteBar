@@ -3,7 +3,7 @@ import Foundation
 /// Centralized version management for CiteBar
 struct AppVersion {
     /// Current application version
-    static let current: String = "1.7.0"
+    static let current: String = "1.6.1"
     
     /// Current build number
     static let build: String = "20"
@@ -46,7 +46,7 @@ extension AppVersion {
             "Export and import everything (profiles, groups, settings, full history) to move to a new Mac",
             "Optional automatic backup to iCloud Drive or any folder you choose"
         ],
-        description: "CiteBar 1.7.0 makes your citation history portable and safe, and turns sharing into a one-click preview.",
+        description: "CiteBar 1.6.1 makes your citation history portable and safe, and turns sharing into a one-click preview.",
         technicalNotes: [
             "Backups and exports are one JSON file with settings, history, and paper lists; importing merges and never deletes",
             "Automatic backups write one file per Mac after each refresh, to iCloud Drive › CiteBar or a chosen folder",
