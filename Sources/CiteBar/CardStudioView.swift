@@ -447,16 +447,7 @@ private struct TimeMachineView: View {
                 .frame(height: 118)
 
             if !timeline.moments.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(timeline.moments.reversed()) { moment in
-                            MomentChip(moment: moment, isSelected: isSelected(moment)) {
-                                selectedDate = moment.date
-                            }
-                        }
-                    }
-                    .padding(.vertical, 2)
-                }
+                momentsRow
             }
 
             if let first = timeline.firstTrackedDate, timeline.points.first?.isEstimate == true {
@@ -529,6 +520,61 @@ private struct TimeMachineView: View {
         .help("Drag to choose a day. The card above updates to that day.")
     }
 
+    /// Moments in time order, with ‹ › to step between them; the row follows the selection.
+    private var momentsRow: some View {
+        ScrollViewReader { proxy in
+            HStack(spacing: 6) {
+                StepButton(symbol: "chevron.left", help: "Previous moment", moment: previousMoment) { jump(to: $0) }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(timeline.moments) { moment in
+                            MomentChip(moment: moment, isSelected: isSelected(moment)) {
+                                jump(to: moment)
+                            }
+                            .id(moment.id)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+                StepButton(symbol: "chevron.right", help: "Next moment", moment: nextMoment) { jump(to: $0) }
+            }
+            .onAppear {
+                if let moment = momentInView { proxy.scrollTo(moment.id, anchor: .center) }
+            }
+            .onChange(of: selectedDate) { _ in
+                guard let moment = momentInView else { return }
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    proxy.scrollTo(moment.id, anchor: .center)
+                }
+            }
+        }
+    }
+
+    /// The chip to keep visible: the selected day's moment, or the newest one for today.
+    private var momentInView: CitationTimeline.Moment? {
+        guard let selectedDate else { return timeline.moments.last }
+        return timeline.moments.last { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
+    }
+
+    /// The day the card currently shows; today when nothing is selected.
+    private var currentDay: Date {
+        Calendar.current.startOfDay(for: selectedDate ?? Date())
+    }
+
+    private var previousMoment: CitationTimeline.Moment? {
+        timeline.moments.last { $0.date < currentDay }
+    }
+
+    private var nextMoment: CitationTimeline.Moment? {
+        guard selectedDate != nil,
+              let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: currentDay) else { return nil }
+        return timeline.moments.first { $0.date >= endOfDay }
+    }
+
+    private func jump(to moment: CitationTimeline.Moment) {
+        selectedDate = moment.date
+    }
+
     private func select(near date: Date) {
         guard let nearest = timeline.points.min(by: {
             abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
@@ -551,6 +597,30 @@ private struct TimeMachineView: View {
             text += " · h-index \(hIndex)"
         }
         return text
+    }
+}
+
+/// ‹ or › beside the moments; disabled when there is no moment that way.
+private struct StepButton: View {
+    let symbol: String
+    let help: String
+    let moment: CitationTimeline.Moment?
+    let action: (CitationTimeline.Moment) -> Void
+
+    var body: some View {
+        Button {
+            if let moment { action(moment) }
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .semibold))
+                .frame(width: 22, height: 36)
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.primary.opacity(0.05)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(moment == nil ? Color.secondary.opacity(0.35) : Color.secondary)
+        .disabled(moment == nil)
+        .help(moment.map { "\(help): \($0.title)" } ?? help)
     }
 }
 
