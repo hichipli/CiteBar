@@ -10,6 +10,7 @@ import Carbon
     var citationManager: CitationManager?
     var settingsWindow: NSWindow?
     private var cardWindow: NSWindow?
+    private var papersWindow: NSWindow?
     
     // Shared settings manager for checking first launch
     private let settingsManager = SettingsManager.shared
@@ -169,7 +170,7 @@ import Carbon
     
     private func finishStartupFlow() {
 #if DEBUG
-        // `-CiteBarDebugOpen panel|card|profiles|general|data|backup|about` opens that UI at launch
+        // `-CiteBarDebugOpen panel|card|papers|profiles|general|data|backup|about` opens that UI at launch
         // (`backup` also runs a backup first);
         // `-CiteBarDebugDark YES` forces dark mode.
         if UserDefaults.standard.bool(forKey: "CiteBarDebugDark") {
@@ -190,6 +191,7 @@ import Carbon
                 switch target {
                 case "panel": self?.menuBarManager?.togglePanel()
                 case "card": self?.showCardStudio()
+                case "papers": self?.showPapers()
                 case "general": self?.showSettings(pane: .general)
                 case "about": self?.showSettings(pane: .about)
                 case "data": self?.showSettings(pane: .data)
@@ -564,6 +566,25 @@ import Carbon
         window.isReleasedWhenClosed = false
         window.isRestorable = false
         cardWindow = window
+        positionSettingsWindowAtScreenCenter(window)
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Opens the Papers window for a profile, defaulting to the menu bar profile.
+    func showPapers(profileID: String? = nil) {
+        papersWindow?.close()
+        let model = menuBarManager?.model ?? DashboardModel()
+        guard let id = profileID ?? model.entries.first?.id else { return }
+        let host = NSHostingController(rootView: PapersView(model: model, profileID: id))
+        host.sizingOptions = [.preferredContentSize]
+        let window = NSWindow(contentViewController: host)
+        window.title = "Papers"
+        window.titleVisibility = .hidden
+        window.styleMask = [.titled, .closable, .miniaturizable]
+        window.isReleasedWhenClosed = false
+        window.isRestorable = false
+        papersWindow = window
         positionSettingsWindowAtScreenCenter(window)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

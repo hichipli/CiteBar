@@ -57,6 +57,13 @@ actor StorageManager {
         if !gains.isEmpty {
             entry.lastGains = gains
             entry.lastGainDate = now
+            var changes = entry.lastChanges ?? [:]
+            for gain in gains {
+                if let id = gain.paperID {
+                    changes[id] = PaperChange(delta: gain.delta, date: now)
+                }
+            }
+            entry.lastChanges = changes
         }
         profilePapers[profileId] = entry
         saveProfilePapers()
@@ -121,7 +128,7 @@ actor StorageManager {
         let previousCitations = Dictionary(previous.map { ($0.id, $0.citations) }, uniquingKeysWith: max)
         return current.compactMap { paper -> PaperGain? in
             guard let old = previousCitations[paper.id], paper.citations > old else { return nil }
-            return PaperGain(title: paper.title, delta: paper.citations - old, citedByURL: paper.citedByURL)
+            return PaperGain(title: paper.title, delta: paper.citations - old, citedByURL: paper.citedByURL, paperID: paper.id)
         }
         .sorted { $0.delta > $1.delta }
     }

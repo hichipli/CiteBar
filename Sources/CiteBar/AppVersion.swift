@@ -38,6 +38,7 @@ extension AppVersion {
     static let releaseNotes = ReleaseNotes(
         version: current,
         highlights: [
+            "Watch specific papers: star them in the new Papers window to follow their citations in the panel and notifications",
             "Share opens a Citation Record window: preview the card, pick any profile, then share, copy, or save",
             "The next h-index now names the exact papers that need citations, with progress for each",
             "The panel labels its columns, so totals and 30-day growth are clear at a glance",
@@ -50,7 +51,8 @@ extension AppVersion {
             "Backups and exports are one JSON file with settings, history, and paper lists; importing merges and never deletes",
             "Automatic backups write one file per Mac after each refresh, to iCloud Drive › CiteBar or a chosen folder",
             "Citation history is written as compact JSON, roughly halving its size on disk",
-            "The h-index step uses the top h+1 papers by citations, so it names the papers that would raise it soonest"
+            "The h-index step uses the top h+1 papers by citations, so it names the papers that would raise it soonest",
+            "Paper years and each paper's latest gain are stored with the paper list; watched papers are saved by Scholar paper ID"
         ]
     )
     

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.7.0] - 2026-10-08
 
 ### Added
+- **Watch Papers**: A Papers window lists every paper on a profile with year, citations, and latest gain, searchable and sortable by most cited or newest, and marks papers near the next h-index. Star a paper to watch it: it appears in the panel under that profile, and its new citations lead notifications with a ★ ([#20](https://github.com/hichipli/CiteBar/issues/20))
 - **Citation Record Window**: The share button opens a preview of the card with a profile picker and Share, Copy Image, and Save to Downloads, instead of silently saving a file
 - **Data Settings**: A Data tab shows where CiteBar keeps its data, how much disk space it uses, and how much history it holds, with Show in Finder
 - **Export and Import**: Save profiles, groups, settings, and full history to one file, and import it on another Mac. Importing only adds; nothing is deleted. The first-run Add Profiles sheet links to restoring a backup

@@ -206,6 +206,10 @@ import SwiftUI
                 self?.closePanel(restoringFocus: false)
                 NSWorkspace.shared.open(url)
             },
+            openPapers: { [weak self] profileID in
+                self?.closePanel(restoringFocus: false)
+                self?.appDelegate?.showPapers(profileID: profileID)
+            },
             openCardStudio: { [weak self] in
                 self?.closePanel(restoringFocus: false)
                 self?.appDelegate?.showCardStudio()

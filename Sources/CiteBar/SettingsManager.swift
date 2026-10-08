@@ -96,6 +96,14 @@ import ServiceManagement
         save()
     }
 
+    func setWatched(_ watched: Bool, paperID: String) {
+        settings.watchedPaperIDs.removeAll { $0 == paperID }
+        if watched {
+            settings.watchedPaperIDs.append(paperID)
+        }
+        save()
+    }
+
     func setBackupFolder(_ url: URL?) {
         settings.backupFolderPath = url?.path
         settings.iCloudBackupError = nil

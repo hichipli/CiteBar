@@ -240,6 +240,7 @@ final class CiteBarTests: XCTestCase {
             metrics.papers.first?.citedByURL,
             "https://scholar.google.com/scholar?oi=bibs&hl=en&cites=10836885476083945808"
         )
+        XCTAssertEqual(metrics.papers.first?.year, 2024)
         XCTAssertEqual(metrics.papers.last?.citations, 0, "Uncited papers have an empty count link.")
         XCTAssertNil(metrics.papers.last?.citedByURL)
         // Sorted counts 50, 21, 7, 7, 3: h=4, and h=5 needs the fifth paper to gain 2.
@@ -265,6 +266,7 @@ final class CiteBarTests: XCTestCase {
         let gains = StorageManager.computePaperGains(previous: previous, current: current)
 
         XCTAssertEqual(gains.map(\.title), ["C", "A"], "Largest gain first")
+        XCTAssertEqual(gains.map(\.paperID), ["c", "a"])
         XCTAssertEqual(gains.map(\.delta), [3, 2])
         XCTAssertEqual(StorageManager.computePaperGains(previous: [], current: current), [], "First sight is a baseline")
     }
@@ -367,6 +369,16 @@ final class CiteBarTests: XCTestCase {
         XCTAssertEqual(multiple?.body, "Ada: “Attention Is All You Need” +2\nBob -1")
 
         XCTAssertNil(CitationManager.changeNotificationText(for: []))
+
+        // A watched paper's gain leads, marked with a star, even when it is smaller.
+        let big = PaperGain(title: "Big", delta: 5, citedByURL: nil, paperID: "u:1")
+        let watched = PaperGain(title: "Mine", delta: 1, citedByURL: "https://mine", paperID: "u:2")
+        let starred = CitationManager.changeNotificationText(
+            for: [.init(name: "Ada", citationDelta: 6, paperGains: [big, watched], profileURL: "https://ada")],
+            watchedPaperIDs: ["u:2"]
+        )
+        XCTAssertEqual(starred?.body, "★ “Mine” +1 · 1 more paper")
+        XCTAssertEqual(starred?.url, "https://mine")
     }
 
     @MainActor

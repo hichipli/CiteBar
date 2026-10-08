@@ -273,6 +273,7 @@ struct ProfilesPane: View {
             Button("New Group…") { groupingProfile = profile }
         }
         Button("Rename…") { renamingProfile = profile }
+        Button("Papers…") { (NSApp.delegate as? AppDelegate)?.showPapers(profileID: profile.id) }
         Button("Open Scholar Profile") {
             if let url = URL(string: profile.url) {
                 NSWorkspace.shared.open(url)

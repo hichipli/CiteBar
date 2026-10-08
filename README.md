@@ -62,6 +62,7 @@ Having trouble installing? See the [Install Guide](DISTRIBUTION.md).
 - Citations per year, this year's count, 30-day growth, h-index, and i10-index
 - See which paper was just cited, and click through to who cited it
 - When your next h-index is close, see exactly which papers need citations, and how many each
+- Watch specific papers: star them in the Papers window to keep them in the panel, with their newest citations first in notifications
 - Column labels and hover hints explain every number
 
 **Groups for labs and collaborators**

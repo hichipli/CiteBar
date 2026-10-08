@@ -60,6 +60,7 @@ struct ScholarPaper: Codable, Equatable {
     let title: String
     let citations: Int
     let citedByURL: String?
+    var year: Int? = nil
 
     /// The paper's page on Google Scholar.
     var scholarURL: String {
@@ -85,6 +86,7 @@ struct PaperGain: Codable, Equatable {
     let title: String
     let delta: Int
     let citedByURL: String?
+    var paperID: String? = nil
 
     /// Quoted title short enough for a menu line or notification.
     var shortTitle: String {
@@ -94,11 +96,25 @@ struct PaperGain: Codable, Equatable {
     }
 }
 
+/// The most recent time a paper's citation count went up.
+struct PaperChange: Codable, Equatable {
+    let delta: Int
+    let date: Date
+}
+
 /// Latest publication list for a profile plus the most recent per-paper gains.
 struct ProfilePapers: Codable {
     var papers: [ScholarPaper]
     var lastGains: [PaperGain] = []
     var lastGainDate: Date?
+    /// Latest gain per paper ID; optional so files from 1.6 still decode.
+    var lastChanges: [String: PaperChange]?
+}
+
+/// A paper the user starred, with its latest gain, for the panel.
+struct WatchedPaper: Equatable {
+    let paper: ScholarPaper
+    let lastChange: PaperChange?
 }
 
 struct CitationRecord: Codable {
@@ -137,6 +153,8 @@ struct AppSettings: Codable {
     var iCloudBackupError: String?
     /// A folder the user picked for backups; nil means iCloud Drive › CiteBar.
     var backupFolderPath: String?
+    /// Papers the user starred, by Scholar paper ID ("USER:PAPER").
+    var watchedPaperIDs: [String] = []
 
     enum CodingKeys: String, CodingKey {
         case profiles
@@ -154,6 +172,7 @@ struct AppSettings: Codable {
         case lastICloudBackup
         case iCloudBackupError
         case backupFolderPath
+        case watchedPaperIDs
     }
 
     enum MenuBarPrimaryMetric: String, CaseIterable, Codable {
@@ -200,6 +219,7 @@ struct AppSettings: Codable {
         lastICloudBackup = try container.decodeIfPresent(Date.self, forKey: .lastICloudBackup)
         iCloudBackupError = try container.decodeIfPresent(String.self, forKey: .iCloudBackupError)
         backupFolderPath = try container.decodeIfPresent(String.self, forKey: .backupFolderPath)
+        watchedPaperIDs = try container.decodeIfPresent([String].self, forKey: .watchedPaperIDs) ?? []
     }
     
     enum RefreshInterval: String, CaseIterable, Codable {
@@ -255,6 +275,7 @@ struct ProfileMetrics {
     var recentPaperGains: [PaperGain] = []
     /// Most cited papers, for the stats card.
     var topPapers: [ScholarPaper] = []
+    var watchedPapers: [WatchedPaper] = []
 
     init(citationCount: Int, hIndex: Int? = nil, i10Index: Int? = nil, citationsByYear: [Int: Int]? = nil) {
         self.citationCount = citationCount

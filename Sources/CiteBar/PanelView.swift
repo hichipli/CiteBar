@@ -54,6 +54,7 @@ struct PanelActions {
     let openSettings: @MainActor () -> Void
     let addProfile: @MainActor () -> Void
     let openURL: @MainActor (String) -> Void
+    let openPapers: @MainActor (String) -> Void
     let openCardStudio: @MainActor () -> Void
     let checkForUpdates: @MainActor () -> Void
     let showSupport: @MainActor () -> Void
@@ -212,6 +213,11 @@ private struct HeroView: View {
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                 }
+                LinkText(text: "Papers", font: .system(size: 11)) {
+                    actions.openPapers(entry.profile.id)
+                }
+                .foregroundStyle(.secondary)
+                .help("All papers; star one to watch it here")
             }
 
             if let metrics = entry.metrics, metrics.citationCount >= 0 {
@@ -240,6 +246,7 @@ private struct HeroView: View {
                 if settings.showTrendInMenu {
                     InsightRows(metrics: metrics, actions: actions)
                 }
+                WatchingView(papers: metrics.watchedPapers, actions: actions)
             } else {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
@@ -350,6 +357,66 @@ private struct InsightRows: View {
         let others = metrics.recentPaperGains.count - 1
         let more = others > 0 ? " (and \(others) more \(others == 1 ? "paper" : "papers"))" : ""
         return "Newly cited\(more). Click to see who cited it."
+    }
+}
+
+/// Papers the user starred in the Papers window, with their latest gain.
+private struct WatchingView: View {
+    let papers: [WatchedPaper]
+    let actions: PanelActions
+
+    private static let recentWindow: TimeInterval = 30 * 24 * 60 * 60
+
+    var body: some View {
+        if !papers.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(papers.prefix(5), id: \.paper.id) { watched in
+                    HoverRow(action: { actions.openURL(watched.paper.scholarURL) }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 8))
+                                .foregroundStyle(Theme.accent)
+                                .frame(width: 5)
+                            Text("“\(watched.paper.title)”")
+                                .font(.system(size: 12))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            Spacer(minLength: 6)
+                            if let change = recentChange(watched) {
+                                Text("+\(change.delta)")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .monospacedDigit()
+                                    .foregroundStyle(Theme.accent)
+                            }
+                            Text(watched.paper.citations.decimalString)
+                                .font(.system(size: 12, weight: .medium))
+                                .monospacedDigit()
+                        }
+                    }
+                    .help(help(for: watched))
+                }
+                if papers.count > 5 {
+                    Text("and \(papers.count - 5) more watched papers")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .padding(.leading, 19)
+                }
+            }
+        }
+    }
+
+    private func recentChange(_ watched: WatchedPaper) -> PaperChange? {
+        guard let change = watched.lastChange,
+              Date().timeIntervalSince(change.date) < Self.recentWindow else { return nil }
+        return change
+    }
+
+    private func help(for watched: WatchedPaper) -> String {
+        var text = "Watching “\(watched.paper.title)”: \(watched.paper.citations) citations"
+        if let change = watched.lastChange {
+            text += ", +\(change.delta) on \(change.date.formatted(date: .abbreviated, time: .omitted))"
+        }
+        return text + ". Click to open it on Google Scholar."
     }
 }
 
@@ -611,9 +678,16 @@ private struct ProfileDetail: View {
 
             InsightRows(metrics: metrics, actions: actions)
                 .padding(.leading, -6)
+            WatchingView(papers: metrics.watchedPapers, actions: actions)
+                .padding(.leading, -6)
 
-            LinkText(text: "Open Scholar profile ↗", font: .system(size: 11.5)) {
-                actions.openURL(entry.profile.url)
+            HStack(spacing: 14) {
+                LinkText(text: "Papers", font: .system(size: 11.5)) {
+                    actions.openPapers(entry.profile.id)
+                }
+                LinkText(text: "Open Scholar profile ↗", font: .system(size: 11.5)) {
+                    actions.openURL(entry.profile.url)
+                }
             }
             .foregroundStyle(.secondary)
         }
