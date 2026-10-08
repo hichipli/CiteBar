@@ -35,6 +35,15 @@
     yearEl.textContent = String(new Date().getFullYear());
   }
 
+  // Respect reduced motion: show the demo's poster frame with controls instead of autoplaying.
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    document.querySelectorAll("video[autoplay]").forEach(function (video) {
+      video.removeAttribute("autoplay");
+      video.pause();
+      video.controls = true;
+    });
+  }
+
   function setText(element, value) {
     if (element) {
       element.textContent = value;

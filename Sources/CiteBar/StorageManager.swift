@@ -65,9 +65,22 @@ actor StorageManager {
             }
             entry.lastChanges = changes
         }
+        entry.yearStarts = Self.recordingYearStart(entry.yearStarts, papers: papers, now: now)
         profilePapers[profileId] = entry
         saveProfilePapers()
         return gains
+    }
+
+    /// Adds this year's snapshot on the first refresh of the year; later refreshes leave it alone.
+    static func recordingYearStart(_ yearStarts: [Int: PaperSnapshot]?, papers: [ScholarPaper],
+                                   now: Date) -> [Int: PaperSnapshot] {
+        var yearStarts = yearStarts ?? [:]
+        let year = Calendar.current.component(.year, from: now)
+        if yearStarts[year] == nil {
+            let citations = Dictionary(papers.map { ($0.id, $0.citations) }) { first, _ in first }
+            yearStarts[year] = PaperSnapshot(date: now, citations: citations)
+        }
+        return yearStarts
     }
 
     func getProfilePapers(for profileId: String) -> ProfilePapers? {
@@ -96,8 +109,15 @@ actor StorageManager {
         citationHistory = merged
         saveCitationHistory()
 
-        // Paper lists on this Mac are the most recent baseline, so they win.
-        profilePapers.merge(papers) { current, _ in current }
+        // Paper lists on this Mac are the most recent baseline, so they win, but each year
+        // keeps its earliest snapshot from either Mac.
+        profilePapers.merge(papers) { current, incoming in
+            var merged = current
+            merged.yearStarts = (current.yearStarts ?? [:]).merging(incoming.yearStarts ?? [:]) {
+                $0.date <= $1.date ? $0 : $1
+            }
+            return merged
+        }
         saveProfilePapers()
         return max(0, added)
     }

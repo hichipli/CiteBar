@@ -109,6 +109,14 @@ struct ProfilePapers: Codable {
     var lastGainDate: Date?
     /// Latest gain per paper ID; optional so files from 1.6 still decode.
     var lastChanges: [String: PaperChange]?
+    /// Each paper's citations on the first refresh of each year, for looking back at a year.
+    var yearStarts: [Int: PaperSnapshot]?
+}
+
+struct PaperSnapshot: Codable, Equatable {
+    let date: Date
+    /// Citations by paper ID.
+    let citations: [String: Int]
 }
 
 /// A paper the user starred, with its latest gain, for the panel.

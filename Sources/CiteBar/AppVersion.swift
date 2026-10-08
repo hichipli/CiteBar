@@ -3,10 +3,10 @@ import Foundation
 /// Centralized version management for CiteBar
 struct AppVersion {
     /// Current application version
-    static let current: String = "1.6.2"
+    static let current: String = "1.6.3"
     
     /// Current build number
-    static let build: String = "21"
+    static let build: String = "22"
     
     /// Version display string for UI
     static let displayString: String = "Version \(current)"
@@ -38,17 +38,14 @@ extension AppVersion {
     static let releaseNotes = ReleaseNotes(
         version: current,
         highlights: [
-            "Four card themes: Record, Night, Gazette (a front page with your headline), and Certificate",
-            "Choose what the card shows: chart, h-index, papers or one featured paper, growth from 7 to 365 days, and a note",
-            "A time machine: go back to any day, see the milestones you passed, and share that moment",
-            "Milestone notifications open a card of the moment",
-            "Growth from profiles tracked for less than 30 days is now marked instead of labeled as 30 days"
+            "Install with Homebrew: brew install --cask hichipli/tap/citebar",
+            "The Citation Record studio keeps its size as you move through time",
+            "CiteBar now saves each paper's citations at the start of every year, ready for looking back on a year"
         ],
-        description: "CiteBar 1.6.2 turns sharing into something worth doing: four card styles, full control over what they show, and a time machine for any day in your citation history.",
+        description: "CiteBar 1.6.3 is a small update: Homebrew install, a steadier share studio, and a yearly paper snapshot for looking back on your year.",
         technicalNotes: [
-            "The timeline keeps one point per tracked day and estimates earlier year-ends from Google Scholar's yearly counts, capped at the first tracked total",
-            "Card previews render live; the share file renders after a short pause",
-            "Short growth windows carry a day-count marker on rows and an asterisk on group totals"
+            "papers.json gains yearStarts: each paper's citations on the first refresh of each year; importing a backup keeps the earliest snapshot for each year",
+            "Past days show \"today only\" next to Papers instead of a note that changed the window's height"
         ]
     )
     

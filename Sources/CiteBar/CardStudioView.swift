@@ -129,6 +129,9 @@ struct CardStudioView: View {
                         .write(to: downloads.appendingPathComponent("card-\(theme.rawValue).png"))
                 }
             }
+            if let folder = UserDefaults.standard.string(forKey: "CiteBarDebugRecord") {
+                await recordTour(to: URL(fileURLWithPath: folder))
+            }
 #endif
         }
         .task(id: renderKey) {
@@ -196,12 +199,13 @@ struct CardStudioView: View {
                 Toggle("Citations per year", isOn: $showChart)
                     .disabled(!theme.showsChart)
                 Toggle("h-index and i10-index", isOn: $showIndices)
-                LabeledPicker(title: "Papers") {
+                // Only the latest paper list is kept, so past days leave papers off.
+                LabeledPicker(title: "Papers", detail: isToday || papersMode == .none ? nil : "today only") {
                     Picker("Papers", selection: $papersRaw) {
                         ForEach(CardPapers.allCases) { Text($0.title).tag($0.rawValue) }
                     }
                 }
-                if papersMode == .featured && isToday && !paperChoices.isEmpty {
+                if papersMode == .featured && !paperChoices.isEmpty {
                     Picker("Paper", selection: $featuredPaperID) {
                         ForEach(paperChoices.prefix(40), id: \.id) { paper in
                             Text(paper.title).tag(paper.id)
@@ -223,14 +227,6 @@ struct CardStudioView: View {
                 .textFieldStyle(.roundedBorder)
                 .font(.system(size: 12))
                 .padding(.top, 12)
-
-            if !isToday {
-                Text(pastDayNote)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 10)
-            }
 
             Spacer(minLength: 16)
 
@@ -268,18 +264,9 @@ struct CardStudioView: View {
                 .padding(.top, 8)
             }
         }
-        // At least as tall as the preview; taller when the past-day note shows.
+        // At least as tall as the preview, so moving through time never resizes the window.
         .frame(minHeight: Self.previewWidth * 4 / 3, alignment: .topLeading)
         .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private var pastDayNote: String {
-        let isEstimate = selectedDate.flatMap { timeline?.point(at: $0)?.isEstimate } ?? false
-        let record = isEstimate
-            ? "This day is before CiteBar started tracking, so the total is estimated from Google Scholar's yearly counts."
-            : "Showing the record as of this day."
-        // Only the latest paper list is kept.
-        return papersMode == .none ? record : record + " Papers appear on today's card only."
     }
 
     private func label(_ text: String) -> some View {
@@ -346,14 +333,81 @@ struct CardStudioView: View {
     }
 }
 
+#if DEBUG
+extension CardStudioView {
+    /// `-CiteBarDebugRecord <folder>` plays a short tour of the studio for the demo video: back in
+    /// time to the latest citation milestone, then through the themes. It saves a screenshot of
+    /// the window per step, plus `frames.txt` (an ffmpeg concat list with each frame's duration),
+    /// then quits.
+    static let isRecording = UserDefaults.standard.string(forKey: "CiteBarDebugRecord") != nil
+
+    func recordTour(to folder: URL) async {
+        guard let timeline, let today = timeline.points.last?.date,
+              let milestone = timeline.moments.last(where: { if case .citations = $0.kind { return true }; return false }),
+              let window = NSApp.windows.first(where: { $0.title == "Citation Record" }) else { return }
+        var list = ""
+        var index = 0
+        var frameSize: CGSize?
+        func shot(holding seconds: Double) async {
+            let name = String(format: "frame-%03d.png", index)
+            let url = folder.appendingPathComponent(name)
+            // An inactive window has a smaller shadow and grey controls, which flickers in the
+            // video, so wait for the window to be key and retake any frame that comes out a
+            // different size.
+            for _ in 0..<20 {
+                NSApp.activate(ignoringOtherApps: true)
+                window.makeKeyAndOrderFront(nil)
+                try? await Task.sleep(nanoseconds: 350_000_000)  // let SwiftUI draw
+                guard NSApp.isActive, window.isKeyWindow else { continue }
+                let capture = Process()
+                capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+                capture.arguments = ["-x", "-l", String(window.windowNumber), url.path]
+                try? capture.run()
+                capture.waitUntilExit()
+                guard let size = NSImageRep(contentsOf: url).map({ CGSize(width: $0.pixelsWide, height: $0.pixelsHigh) }) else { continue }
+                if frameSize == nil { frameSize = size }
+                if size == frameSize { break }
+            }
+            list += "file '\(name)'\nduration \(seconds)\n"
+            index += 1
+        }
+
+        themeRaw = CardTheme.record.rawValue
+        selectedDate = nil
+        try? await Task.sleep(nanoseconds: 800_000_000)  // the Share button appears once the file is written
+        await shot(holding: 1.0)
+        let steps = 36
+        for step in 1...steps {
+            let t = Double(step) / Double(steps)
+            let eased = t < 0.5 ? 2 * t * t : 1 - pow(-2 * t + 2, 2) / 2
+            selectedDate = today.addingTimeInterval(milestone.date.timeIntervalSince(today) * eased)
+            await shot(holding: step == steps ? 1.6 : 1.0 / 30)
+        }
+        for theme in [CardTheme.gazette, .certificate, .night] {
+            themeRaw = theme.rawValue
+            await shot(holding: 1.3)
+        }
+        // The concat demuxer needs the last file repeated to honour its duration.
+        list += "file '\(String(format: "frame-%03d.png", index - 1))'\n"
+        try? list.write(to: folder.appendingPathComponent("frames.txt"), atomically: true, encoding: .utf8)
+        NSApp.terminate(nil)
+    }
+}
+#endif
+
 /// Label on the left, menu picker on the right, matching the checkbox rows.
 private struct LabeledPicker<Content: View>: View {
     let title: String
+    var detail: String?
     @ViewBuilder let picker: Content
 
     var body: some View {
         HStack {
             Text(title)
+            if let detail {
+                Text(detail)
+                    .foregroundStyle(.tertiary)
+            }
             Spacer()
             picker
                 .labelsHidden()
@@ -520,6 +574,22 @@ private struct TimeMachineView: View {
                     }
             }
         }
+#if DEBUG
+        // The demo video shows a pointer dragging along the timeline.
+        .chartOverlay { proxy in
+            GeometryReader { geometry in
+                if CardStudioView.isRecording, let point = selectedPoint,
+                   let x = proxy.position(forX: point.date), let y = proxy.position(forY: point.citations) {
+                    let cursor = NSCursor.arrow
+                    let origin = geometry[proxy.plotAreaFrame].origin
+                    Image(nsImage: cursor.image)
+                        .position(x: origin.x + x + cursor.image.size.width / 2 - cursor.hotSpot.x,
+                                  y: origin.y + y + cursor.image.size.height / 2 - cursor.hotSpot.y)
+                }
+            }
+            .allowsHitTesting(false)
+        }
+#endif
         .help("Drag to choose a day. The card above updates to that day.")
     }
 

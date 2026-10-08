@@ -1,26 +1,31 @@
+<div align="center">
+
+**English** · [简体中文](README.zh-CN.md)
+
+<img src="Assets.xcassets/AppIcon.appiconset/256.png" alt="CiteBar Logo" width="112" height="112">
+
 # CiteBar
 
-<div align="center">
-  <img src="Assets.xcassets/AppIcon.appiconset/256.png" alt="CiteBar Logo" width="128" height="128">
+**Stop refreshing Google Scholar.**<br>
+For everyone who checks their citations a little too often.
 
-  **Track Your Academic Impact in Real Time**
-
-  An elegant macOS menu bar app that keeps your Google Scholar citation metrics at your fingertips.
-
-  <img src="website/assets/panel.png" alt="The CiteBar panel: a profile with 1,284 citations, citations per year, a newly cited paper, the two papers that would lift the h-index to 14, and a lab group with combined citations" width="411">
+[Download](https://github.com/hichipli/CiteBar/releases/latest) · [Website](https://www.citebar.org/) · `brew install --cask hichipli/tap/citebar`
 
   [![Latest Release](https://img.shields.io/github/v/release/hichipli/CiteBar?style=flat-square)](https://github.com/hichipli/CiteBar/releases)
   [![macOS](https://img.shields.io/badge/macOS-13.0+-blue?style=flat-square)](https://www.apple.com/macos/)
   [![Swift](https://img.shields.io/badge/Swift-6.0-orange?style=flat-square)](https://swift.org)
   [![License](https://img.shields.io/github/license/hichipli/CiteBar?style=flat-square)](LICENSE)
   [![Downloads](https://img.shields.io/github/downloads/hichipli/CiteBar/total?style=flat-square)](https://github.com/hichipli/CiteBar/releases)
+
+<img src="website/assets/demo.gif" alt="From the menu bar panel to the Citation Record studio: dragging the time machine back to the day of 1,000 citations, then trying the Gazette, Certificate, and Night themes" width="420">
+
 </div>
 
 ---
 
 ## Why CiteBar?
 
-Because refreshing your Google Scholar profile every 20 minutes is not productive research. CiteBar turns citation tracking from an obsessive browser tab into a quiet menu bar companion: visible when you want it, out of the way when you do not.
+Because refreshing your Google Scholar profile every 20 minutes is not productive research. CiteBar turns citation tracking from an obsessive browser tab into a quiet menu bar companion: it checks once a day, tells you which paper was just cited, and stays out of the way the rest of the time.
 
 Perfect for researchers tracking paper impact, PhD students celebrating their first citations, lab leads following a whole group, and anyone who has ever wondered, "Did my h-index just move?"
 
@@ -32,6 +37,7 @@ Perfect for researchers tracking paper impact, PhD students celebrating their fi
    - Go to [GitHub Releases](https://github.com/hichipli/CiteBar/releases/latest).
    - Download the `CiteBar-x.x.x-universal-[date].dmg` file.
    - The universal DMG works on both Apple Silicon and Intel Macs.
+   - Prefer Homebrew? `brew install --cask hichipli/tap/citebar` does steps 1 and 2 for you.
 
 2. **Install CiteBar**
    - Open the DMG.
@@ -56,6 +62,8 @@ If you are upgrading from `1.3.x` or `1.4.1`, install the latest DMG manually on
 Having trouble installing? See the [Install Guide](DISTRIBUTION.md).
 
 ## Features That Matter
+
+<img src="website/assets/panel.png" alt="The CiteBar panel: a profile with 1,284 citations, citations per year, a newly cited paper, the two papers that would lift the h-index to 14, two watched papers, and a lab group with combined citations" width="360">
 
 **The count, with context**
 - Your citation count lives in the menu bar; click it for the panel
@@ -105,7 +113,7 @@ Having trouble installing? See the [Install Guide](DISTRIBUTION.md).
 
 **Native macOS experience**
 - Lightweight menu bar presence, light and dark mode
-- Native Settings with Profiles, General, and About tabs
+- Native Settings with Profiles, General, Data, and About tabs
 - Launch-at-login support
 - Apple Silicon and Intel support
 
