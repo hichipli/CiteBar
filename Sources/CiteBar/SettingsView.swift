@@ -791,6 +791,9 @@ struct GeneralPane: View {
 
 struct DataPane: View {
     @ObservedObject private var settingsManager = SettingsManager.shared
+    /// Re-checked whenever CiteBar becomes active, so turning on iCloud Drive in System
+    /// Settings shows up here as soon as the user comes back.
+    @State private var iCloudDriveAvailable = DataManager.iCloudDriveURL != nil
     @State private var folderSize: Int64 = 0
     @State private var recordCount = 0
     @State private var earliestRecord: Date?
@@ -831,7 +834,7 @@ struct DataPane: View {
                 Toggle(isOn: Binding(
                     get: { settingsManager.settings.iCloudBackupEnabled },
                     set: { enabled in
-                        if enabled && DataManager.backupFolderURL == nil {
+                        if enabled && backupFolderName == nil {
                             // No iCloud Drive here: ask where to keep backups first.
                             guard chooseBackupFolder() else { return }
                         }
@@ -846,14 +849,14 @@ struct DataPane: View {
                 }
 
                 LabeledContent {
-                    Button(DataManager.backupFolderURL == nil ? "Choose…" : "Change…") {
+                    Button(backupFolderName == nil ? "Choose…" : "Change…") {
                         if chooseBackupFolder(), settingsManager.settings.iCloudBackupEnabled {
                             backUpNow()
                         }
                     }
                 } label: {
                     Text("Folder")
-                    if let folder = DataManager.backupFolderDisplayName {
+                    if let folder = backupFolderName {
                         Text(folder)
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -924,6 +927,9 @@ struct DataPane: View {
         .formStyle(.grouped)
         .frame(width: 520, height: 640)
         .onAppear(perform: reload)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            reload()
+        }
         .alert(
             "Import this backup?",
             isPresented: Binding(get: { pendingImport != nil }, set: { if !$0 { pendingImport = nil } }),
@@ -944,6 +950,12 @@ struct DataPane: View {
         }
     }
 
+    /// nil when there is nowhere to back up yet (no iCloud Drive and no chosen folder).
+    private var backupFolderName: String? {
+        guard iCloudDriveAvailable || settingsManager.settings.backupFolderPath != nil else { return nil }
+        return DataManager.backupFolderDisplayName
+    }
+
     private var historyText: String {
         guard recordCount > 0 else { return "No snapshots yet" }
         let count = "\(recordCount.decimalString) \(recordCount == 1 ? "snapshot" : "snapshots")"
@@ -957,6 +969,7 @@ struct DataPane: View {
     }
 
     private func reload() {
+        iCloudDriveAvailable = DataManager.iCloudDriveURL != nil
         folderSize = DataManager.folderSize()
         Task { @MainActor in
             if let summary = await storage?.historySummary() {
