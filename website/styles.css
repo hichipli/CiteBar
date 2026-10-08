@@ -357,7 +357,7 @@ a:hover {
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 4px;
-  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  background: #8f2a1f;
 }
 
 .card-header {
@@ -961,5 +961,85 @@ code {
   
   .card-header, .card-footer {
     padding: 1.25rem 1.5rem;
+  }
+}
+
+/* Product screenshot in the hero */
+.hero-shot {
+  display: flex;
+  justify-content: center;
+}
+
+.hero-shot img {
+  width: min(100%, 411px);
+  height: auto;
+  filter: drop-shadow(0 30px 40px rgba(15, 23, 42, 0.14));
+}
+
+/* Citation Record showcase */
+.showcase {
+  display: grid;
+  grid-template-columns: 0.8fr 1fr;
+  gap: 4rem;
+  align-items: center;
+  margin-top: 4rem;
+}
+
+.showcase-card {
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+  box-shadow: var(--shadow-float);
+  border: 1px solid var(--border);
+}
+
+.showcase-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #8f2a1f;
+  margin-bottom: 0.75rem;
+}
+
+.showcase-text h3 {
+  font-family: "New York", "Iowan Old Style", Georgia, serif;
+  font-weight: 500;
+  font-size: clamp(1.75rem, 3vw, 2.5rem);
+  margin-bottom: 1rem;
+}
+
+.showcase-text p:not(.showcase-label) {
+  font-size: 1.125rem;
+  line-height: 1.65;
+  max-width: 460px;
+}
+
+.release-section {
+  display: flex;
+  justify-content: center;
+}
+
+.release-section .release-card {
+  width: min(100%, 520px);
+}
+
+@media (max-width: 980px) {
+  .showcase {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+  }
+
+  .showcase-card {
+    max-width: 420px;
+    margin: 0 auto;
+  }
+
+  .showcase-text {
+    text-align: center;
+  }
+
+  .showcase-text p:not(.showcase-label) {
+    margin: 0 auto;
   }
 }

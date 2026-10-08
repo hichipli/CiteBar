@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CiteBar | Google Scholar Citation Tracker for macOS</title>
-  <meta name="description" content="CiteBar is a notarized native macOS menu bar app for tracking Google Scholar citations. Check updates at a glance, open profiles in one click, and see recent 30-day changes.">
+  <meta name="description" content="CiteBar is a free, notarized macOS menu bar app for Google Scholar citations. See which paper was just cited, follow your whole lab, and watch your next h-index.">
   <meta name="keywords" content="CiteBar, Google Scholar, citation tracker, h-index, i10-index, macOS menu bar app, academic tool">
   <meta name="author" content="CiteBar Contributors">
   <meta name="robots" content="index,follow,max-image-preview:large">
@@ -23,13 +23,13 @@
 
   <meta property="og:type" content="website">
   <meta property="og:title" content="CiteBar | Google Scholar Citation Tracker for macOS">
-  <meta property="og:description" content="Track Google Scholar citations from your menu bar with a notarized macOS app. Check updates at a glance, open profiles in one click, and see recent 30-day changes.">
+  <meta property="og:description" content="Your Google Scholar citations in the macOS menu bar: see which paper was just cited, follow your whole lab, and watch your next h-index. Free and open source.">
   <meta property="og:url" content="https://www.citebar.org/">
   <meta property="og:image" content="https://www.citebar.org/assets/logo-512.png">
 
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="CiteBar | Google Scholar Citation Tracker for macOS">
-  <meta name="twitter:description" content="Track Google Scholar citations from your menu bar with a notarized macOS app. Check updates at a glance, open profiles in one click, and see recent 30-day changes.">
+  <meta name="twitter:description" content="Your Google Scholar citations in the macOS menu bar: see which paper was just cited, follow your whole lab, and watch your next h-index. Free and open source.">
   <meta name="twitter:image" content="https://www.citebar.org/assets/logo-512.png">
 
   <link rel="icon" type="image/png" sizes="32x32" href="assets/logo-128.png">
@@ -48,7 +48,7 @@
     "name": "CiteBar",
     "applicationCategory": "BusinessApplication",
     "operatingSystem": "macOS 13.0+",
-    "description": "A notarized native macOS menu bar application that tracks Google Scholar citation metrics, opens profiles quickly, and shows recent 30-day changes.",
+    "description": "A free, notarized macOS menu bar app for Google Scholar citations: per-paper citation alerts, lab groups, h-index progress, and a shareable citation record.",
     "softwareVersion": "Dynamic (latest release)",
     "downloadUrl": "https://github.com/hichipli/CiteBar/releases/latest",
     "offers": {
@@ -160,12 +160,12 @@
       <div class="section-inner">
         <div class="hero-inner">
           <div class="hero-content reveal">
-            <div class="hero-badge">macOS Native App</div>
+            <div class="hero-badge">Free for macOS</div>
             <h1>Track citations,<br>skip browser.</h1>
             <p class="subhead">
-              CiteBar brings Google Scholar updates directly to your menu bar. 
-              Check your h-index at a glance, jump to profiles instantly, and monitor 30-day citation growth. 
-              Open source, free, notarized by Apple, and designed specifically for macOS.
+              CiteBar keeps your Google Scholar citations in the menu bar. See which paper was just cited,
+              how your whole lab is doing, and how close your next h-index is.
+              Open source, notarized by Apple, and everything stays on your Mac.
             </p>
             <div class="hero-actions">
               <a id="download-button" class="btn btn-primary" href="https://github.com/hichipli/CiteBar/releases/latest">Download Free</a>
@@ -188,28 +188,9 @@
             </div>
           </div>
 
-          <aside class="release-card reveal" aria-live="polite">
-            <div class="card-header">
-              <div class="status-dot"></div>
-              <p class="card-label">Latest Release</p>
-            </div>
-            <div class="card-body">
-              <h2 id="release-version" class="release-version">Loading...</h2>
-              <p id="release-title" class="release-title">Fetching latest release notes...</p>
-              <p class="release-date">Published <time id="release-date">Checking...</time></p>
-              
-              <div class="divider"></div>
-              
-              <p class="card-subtitle">What's New</p>
-              <ul id="release-highlights" class="release-highlights">
-                <li>Loading release highlights...</li>
-              </ul>
-            </div>
-            <div class="card-footer">
-              <a id="release-notes-link" class="link-muted" href="https://github.com/hichipli/CiteBar/releases/latest" target="_blank" rel="noreferrer">Release Notes</a>
-              <a id="release-history-link" class="link-muted" href="https://github.com/hichipli/CiteBar/releases" target="_blank" rel="noreferrer">All Releases</a>
-            </div>
-          </aside>
+          <figure class="hero-shot reveal">
+            <img src="assets/panel.png" width="411" height="594" alt="The CiteBar panel under the menu bar: a profile with 1,284 citations, citations per year, a newly cited paper, the next h-index 1 citation away, and a lab group with combined citations.">
+          </figure>
         </div>
       </div>
     </section>
@@ -225,35 +206,72 @@
         <div class="feature-grid">
           <div class="feature-box primary reveal">
             <div class="feature-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="9" y1="13" x2="15" y2="13"></line><line x1="9" y1="17" x2="13" y2="17"></line></svg>
             </div>
             <div>
-              <h3>See recent momentum</h3>
-              <p>Spot short-term citation movement quickly. CiteBar tracks 30-day changes so you can see recent growth instead of relying on total counts alone.</p>
+              <h3>Know which paper was cited</h3>
+              <p>Each refresh compares your papers with the last one, so the notification and the panel name the paper that gained citations. Click it to see who cited you.</p>
             </div>
           </div>
           <div class="feature-box reveal">
             <div class="feature-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
             </div>
-            <h3>Follow multiple profiles</h3>
-            <p>Keep your own profile, collaborators, advisors, or lab pages all inside one lightweight app.</p>
+            <h3>Your whole lab at a glance</h3>
+            <p>Group profiles into a lab, co-authors, or a cohort, with combined citations and 30-day growth. Paste a whole list of Scholar links at once.</p>
+          </div>
+          <div class="feature-box reveal">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+            </div>
+            <h3>Your next h-index, in sight</h3>
+            <p>When the next h-index is a few citations away, CiteBar says so, and it celebrates milestones like 1,000 citations.</p>
           </div>
           <div class="feature-box reveal">
             <div class="feature-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
             </div>
-            <h3>Privacy at the core</h3>
-            <p>Settings and history are stored locally on your Mac and never sent as telemetry to any external servers.</p>
-          </div>
-          <div class="feature-box reveal">
-            <div class="feature-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
-            </div>
-            <h3>Open Source</h3>
-            <p>The code is fully public on GitHub and the project is released under the permissive MIT License.</p>
+            <h3>Private and gentle</h3>
+            <p>Everything stays on your Mac. CiteBar checks once a day by default, retries network hiccups on its own, and backs off when Google Scholar asks.</p>
           </div>
         </div>
+
+        <div class="showcase reveal">
+          <img class="showcase-card" src="assets/stats-card.png" width="900" height="1200" alt="A Citation Record card: 1,284 citations, 312 in 2026, h-index 13, a citations-per-year chart, and the three most cited papers.">
+          <div class="showcase-text">
+            <p class="showcase-label">Citation Record</p>
+            <h3>A card worth sharing.</h3>
+            <p>One click saves a typeset card of your profile: total citations, this year, your h-index, citations per year, and your most cited papers. It is copied too, ready for a milestone post.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- release -->
+    <section id="release" class="section">
+      <div class="section-inner release-section">
+        <aside class="release-card reveal" aria-live="polite">
+          <div class="card-header">
+            <div class="status-dot"></div>
+            <p class="card-label">Latest Release</p>
+          </div>
+          <div class="card-body">
+            <h2 id="release-version" class="release-version">Loading...</h2>
+            <p id="release-title" class="release-title">Fetching latest release notes...</p>
+            <p class="release-date">Published <time id="release-date">Checking...</time></p>
+            
+            <div class="divider"></div>
+            
+            <p class="card-subtitle">What's New</p>
+            <ul id="release-highlights" class="release-highlights">
+              <li>Loading release highlights...</li>
+            </ul>
+          </div>
+          <div class="card-footer">
+            <a id="release-notes-link" class="link-muted" href="https://github.com/hichipli/CiteBar/releases/latest" target="_blank" rel="noreferrer">Release Notes</a>
+            <a id="release-history-link" class="link-muted" href="https://github.com/hichipli/CiteBar/releases" target="_blank" rel="noreferrer">All Releases</a>
+          </div>
+        </aside>
       </div>
     </section>
 
@@ -291,8 +309,8 @@
             <div class="step">
               <div class="step-num">4</div>
               <div class="step-content">
-                <h4>Add Profile</h4>
-                <p>Paste a Google Scholar profile URL into Settings, choose your refresh schedule, and you're all set.</p>
+                <h4>Add Profiles</h4>
+                <p>Paste your Google Scholar profile link, or a whole list for your lab. CiteBar takes it from there.</p>
               </div>
             </div>
           </div>

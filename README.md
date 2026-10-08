@@ -7,6 +7,8 @@
 
   An elegant macOS menu bar app that keeps your Google Scholar citation metrics at your fingertips.
 
+  <img src="website/assets/panel.png" alt="The CiteBar panel: a profile with 1,284 citations, citations per year, a newly cited paper, the next h-index one citation away, and a lab group with combined citations" width="411">
+
   [![Latest Release](https://img.shields.io/github/v/release/hichipli/CiteBar?style=flat-square)](https://github.com/hichipli/CiteBar/releases)
   [![macOS](https://img.shields.io/badge/macOS-13.0+-blue?style=flat-square)](https://www.apple.com/macos/)
   [![Swift](https://img.shields.io/badge/Swift-6.0-orange?style=flat-square)](https://swift.org)
@@ -20,7 +22,7 @@
 
 Because refreshing your Google Scholar profile every 20 minutes is not productive research. CiteBar turns citation tracking from an obsessive browser tab into a quiet menu bar companion: visible when you want it, out of the way when you do not.
 
-Perfect for researchers tracking paper impact, PhD students celebrating their first citations, lab leads following team profiles, and anyone who has ever wondered, "Did my h-index just move?"
+Perfect for researchers tracking paper impact, PhD students celebrating their first citations, lab leads following a whole group, and anyone who has ever wondered, "Did my h-index just move?"
 
 ## Quick Start
 
@@ -37,11 +39,11 @@ Perfect for researchers tracking paper impact, PhD students celebrating their fi
    - Launch CiteBar from `Applications`.
 
 3. **Add your profile**
-   - Click the CiteBar icon in the menu bar.
-   - Add your Google Scholar profile ID.
-   - Choose a refresh interval. Daily refresh is recommended for most users.
+   - On first launch, CiteBar opens Add Profiles. Paste your Google Scholar profile link.
+   - Following a lab or co-authors? Paste all their links at once, one per line, and put them in a group.
+   - Daily refresh is the default. Google Scholar itself updates every day or two, so this keeps CiteBar current.
 
-Your Google Scholar ID is the `user` value in your profile URL:
+You can paste a full profile link or just the ID, which is the `user` value in the URL:
 
 ```text
 https://scholar.google.com/citations?user=YOUR_ID_HERE
@@ -55,19 +57,32 @@ Having trouble installing? See the [Install Guide](DISTRIBUTION.md).
 
 ## Features That Matter
 
-**Citation tracking without the browser tab**
-- Citation counts live in your macOS menu bar
-- Citation history and growth indicators
-- Configurable refresh intervals
+**The count, with context**
+- Your citation count lives in the menu bar; click it for the panel
+- Citations per year, this year's count, 30-day growth, h-index, and i10-index
+- See which paper was just cited, and click through to who cited it
+- Know when your next h-index is a few citations away
 
-**Multi-profile support**
-- Track yourself, collaborators, or other public Scholar profiles
-- Reorder profiles with drag and drop
-- Switch between profiles quickly
+**Groups for labs and collaborators**
+- Group profiles into a lab, co-authors, or a cohort, with combined citations and 30-day growth
+- Paste a whole list of Scholar links at once
+- Copy a group's links to share with labmates, who paste them into their own CiteBar
+
+**Notifications worth opening**
+- Notifications name the papers that gained citations
+- Milestones such as 100 or 1,000 citations, or a higher h-index, get their own note
+- No "nothing changed" noise
+
+**A citation record worth sharing**
+- One click saves a typeset card of your profile: totals, citations per year, and your most cited papers
+- The card is copied to the clipboard too, ready for a post
+
+<img src="website/assets/stats-card.png" alt="A Citation Record card with 1,284 citations, a citations-per-year chart, and the three most cited papers" width="360">
 
 **Respectful and reliable**
-- Built-in delays between requests
-- Backoff after errors
+- One request per profile, spaced two seconds apart
+- Network hiccups retry automatically; Google Scholar rate limits back off gradually (15 minutes up to 4 hours) and resume on their own
+- Refresh Now works any time
 - Automatic updates via Sparkle
 
 **Privacy-first by default**
@@ -77,15 +92,14 @@ Having trouble installing? See the [Install Guide](DISTRIBUTION.md).
 - No account required
 
 **Native macOS experience**
-- Lightweight menu bar presence
-- SwiftUI settings
+- Lightweight menu bar presence, light and dark mode
+- Native Settings with Profiles, General, and About tabs
 - Launch-at-login support
 - Apple Silicon and Intel support
 
 **Light enough to leave running**
 - Near-zero CPU usage when idle
 - Minimal network activity at user-controlled intervals
-- Typical Activity Monitor footprint around 90-150 MB, with an active working set commonly around 25-70 MB
 - More implementation details in [Technical Notes](TECHNICAL.md)
 
 ## Privacy
