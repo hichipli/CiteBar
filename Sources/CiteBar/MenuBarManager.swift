@@ -9,6 +9,7 @@ import SwiftUI
     private var currentCitations: [ScholarProfile: ProfileMetrics] = [:]
     private var popover: NSPopover?
     private var appActiveBeforePopover: NSRunningApplication?
+    private var lastPanelClose = Date.distantPast
     private var footerNoteReset: DispatchWorkItem?
 
     private var appDelegate: AppDelegate? { NSApp.delegate as? AppDelegate }
@@ -129,7 +130,8 @@ import SwiftUI
     func togglePanel() {
         if let popover, popover.isShown {
             popover.performClose(nil)
-        } else {
+        } else if Date().timeIntervalSince(lastPanelClose) > 0.3 {
+            // A click on the icon first closes the transient popover; don't reopen it.
             showPanel()
         }
     }
@@ -150,7 +152,12 @@ import SwiftUI
         popover.contentViewController?.view.window?.makeKey()
     }
 
-    func closePanel() {
+    /// Actions that hand focus to something else (a browser, Settings) skip giving focus
+    /// back to the app that was frontmost before the panel opened.
+    func closePanel(restoringFocus: Bool = true) {
+        if !restoringFocus {
+            appActiveBeforePopover = nil
+        }
         popover?.performClose(nil)
     }
 
@@ -171,6 +178,7 @@ import SwiftUI
     }
 
     func popoverDidClose(_ notification: Notification) {
+        lastPanelClose = Date()
         defer { appActiveBeforePopover = nil }
         // Hand focus back to the app the user was in, unless they already switched away
         // or opened a CiteBar window.
@@ -187,27 +195,27 @@ import SwiftUI
                 self?.appDelegate?.refreshCitations()
             },
             openSettings: { [weak self] in
-                self?.closePanel()
+                self?.closePanel(restoringFocus: false)
                 self?.appDelegate?.showSettings()
             },
             addProfile: { [weak self] in
-                self?.closePanel()
+                self?.closePanel(restoringFocus: false)
                 self?.appDelegate?.showSettings(addingProfile: true)
             },
             openURL: { [weak self] urlString in
                 guard let url = URL(string: urlString), !urlString.isEmpty else { return }
-                self?.closePanel()
+                self?.closePanel(restoringFocus: false)
                 NSWorkspace.shared.open(url)
             },
             saveStatsCard: { [weak self] in
                 self?.saveStatsCard()
             },
             checkForUpdates: { [weak self] in
-                self?.closePanel()
+                self?.closePanel(restoringFocus: false)
                 self?.appDelegate?.checkForUpdates()
             },
             showSupport: { [weak self] in
-                self?.closePanel()
+                self?.closePanel(restoringFocus: false)
                 self?.appDelegate?.showSupport()
             },
             quit: { [weak self] in
