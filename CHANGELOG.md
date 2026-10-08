@@ -5,6 +5,19 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-10-08
+
+### Added
+- **Citation Record Window**: The share button opens a preview of the card with a profile picker and Share, Copy Image, and Save to Downloads, instead of silently saving a file
+- **Data Settings**: A Data tab shows where CiteBar keeps its data, how much disk space it uses, and how much history it holds, with Show in Finder
+- **Export and Import**: Save profiles, groups, settings, and full history to one file, and import it on another Mac. Importing only adds; nothing is deleted. The first-run Add Profiles sheet links to restoring a backup
+- **Automatic Backup**: Optionally save a backup after each refresh to iCloud Drive › CiteBar, or to any folder such as Google Drive or Dropbox. One file per Mac; restore picks any of them
+
+### Changed
+- **Next h-index**: Instead of a total, the panel names the papers that need citations for the next h-index, with each paper's progress (for example 3/6); clicking opens the paper on Google Scholar
+- **Panel Columns**: Column labels mark citations and 30-day growth, group totals line up with the rows, and hovering a number explains it
+- **Disk Usage**: Citation history is stored as compact JSON, about half the previous size
+
 ## [1.6.0] - 2026-10-07
 
 ### Added

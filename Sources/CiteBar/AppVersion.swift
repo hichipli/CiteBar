@@ -3,10 +3,10 @@ import Foundation
 /// Centralized version management for CiteBar
 struct AppVersion {
     /// Current application version
-    static let current: String = "1.6.0"
+    static let current: String = "1.7.0"
     
     /// Current build number
-    static let build: String = "19"
+    static let build: String = "20"
     
     /// Version display string for UI
     static let displayString: String = "Version \(current)"
@@ -38,20 +38,19 @@ extension AppVersion {
     static let releaseNotes = ReleaseNotes(
         version: current,
         highlights: [
-            "Groups for your lab, co-authors, or cohort, with combined citations; add a whole list of Scholar links at once",
-            "A redesigned menu bar panel: headline count, citations per year, 30-day growth, and per-profile details",
-            "See which paper was just cited, and how close your next h-index is",
-            "Notifications name the papers that gained citations and celebrate milestones",
-            "Save a typeset Citation Record card of your profile to share",
-            "Refreshes retry network hiccups on their own and back off gently when Google Scholar limits requests"
+            "Share opens a Citation Record window: preview the card, pick any profile, then share, copy, or save",
+            "The next h-index now names the exact papers that need citations, with progress for each",
+            "The panel labels its columns, so totals and 30-day growth are clear at a glance",
+            "A new Data tab shows where your data lives and how much space it uses",
+            "Export and import everything (profiles, groups, settings, full history) to move to a new Mac",
+            "Optional automatic backup to iCloud Drive or any folder you choose"
         ],
-        description: "CiteBar 1.6.0 adds context to the count: which papers are being cited, how a whole group is doing, and how close the next h-index is. Settings were redesigned with native tabs, and refreshes recover from network problems without waiting a day.",
+        description: "CiteBar 1.7.0 makes your citation history portable and safe, and turns sharing into a one-click preview.",
         technicalNotes: [
-            "Profile pages are fetched with pagesize=100 (allowed by Scholar's robots.txt) so per-paper counts come from the same single request",
-            "Transient failures retry after 2 and 5 seconds; unfetched profiles retry automatically with escalating delays (5 to 60 minutes for network problems, 15 to 240 minutes for rate limits)",
-            "Latest paper lists are stored locally in papers.json",
-            "The status item opens a SwiftUI popover; right-click keeps a quick menu",
-            "Settings use native toolbar tabs and grouped forms"
+            "Backups and exports are one JSON file with settings, history, and paper lists; importing merges and never deletes",
+            "Automatic backups write one file per Mac after each refresh, to iCloud Drive › CiteBar or a chosen folder",
+            "Citation history is written as compact JSON, roughly halving its size on disk",
+            "The h-index step uses the top h+1 papers by citations, so it names the papers that would raise it soonest"
         ]
     )
     
