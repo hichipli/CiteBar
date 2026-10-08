@@ -5,7 +5,16 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.6.2] - 2026-10-08
+
+### Added
+- **Card Themes**: The Citation Record studio offers four themes: Record, Night, Gazette (a newspaper front page with a headline written from the numbers), and Certificate (with a seal, the date in words, and an option to certify a single paper)
+- **Card Options**: Choose what the card shows: citations per year, h-index and i10-index, papers (none, most cited, or one featured paper), growth over 7, 30, 90, or 365 days, and an optional note. Choices are remembered, and the preview updates live
+- **Time Machine**: A timeline of citations in the studio. Drag to any day and the card shows the record as of that day. Citation milestones and h-index increases are marked and listed; before tracking began, year-end estimates from Google Scholar's yearly counts fill in the timeline
+- **Milestone Cards**: Clicking a milestone notification opens the studio, ready to share the moment
+
+### Changed
+- **Website**: Rebuilt around everyday frustrations, with real screenshots of papers, groups, the time machine, the four card themes, and data settings, plus FAQ answers about data, backups, and how CiteBar reads Google Scholar
 
 ### Fixed
 - **Short Growth Windows** ([#21](https://github.com/hichipli/CiteBar/issues/21)): Profiles tracked for less than 30 days no longer read as 30-day growth. Their numbers carry a small day count (like +4³ᵈ), group totals that include them get an asterisk, the column reads "so far" until any profile has a month of history, and the top stats and stats card say "since Oct 5". Hovering explains each one

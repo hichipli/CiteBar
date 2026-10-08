@@ -120,6 +120,16 @@ struct CardStudioView: View {
         .frame(width: 656)
         .task(id: entry?.id) {
             await loadProfile()
+#if DEBUG
+            // `-CiteBarDebugExportThemes YES` saves this card in every theme to Downloads.
+            if UserDefaults.standard.bool(forKey: "CiteBarDebugExportThemes"), let content,
+               let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first {
+                for theme in CardTheme.allCases {
+                    try? StatsCard(content: content, theme: theme).pngData()?
+                        .write(to: downloads.appendingPathComponent("card-\(theme.rawValue).png"))
+                }
+            }
+#endif
         }
         .task(id: renderKey) {
             // Debounced so scrubbing the time machine stays smooth.
