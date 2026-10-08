@@ -1089,3 +1089,8 @@ code {
     grid-template-columns: 1fr;
   }
 }
+
+.feature-video {
+  border-radius: var(--radius-lg);
+  background: #f2eee7;
+}

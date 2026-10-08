@@ -10,6 +10,14 @@
 
 The `universal` DMG works on both Apple Silicon and Intel Macs, so there is no chip-specific download.
 
+### Install with Homebrew
+
+```bash
+brew install --cask hichipli/tap/citebar
+```
+
+CiteBar updates itself through Sparkle, so there's no need to run `brew upgrade` for it.
+
 ## Troubleshooting Common Issues
 
 ### "CiteBar is damaged and can't be opened"

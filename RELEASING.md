@@ -101,6 +101,12 @@ curl -fsSL https://github.com/hichipli/CiteBar/releases/latest/download/appcast.
   | grep -E "sparkle:edSignature|sparkle:shortVersionString|sparkle:version"
 ```
 
+The Homebrew cask in [hichipli/homebrew-tap](https://github.com/hichipli/homebrew-tap) picks up the new DMG within six hours. To update it right away:
+
+```bash
+gh workflow run update-citebar.yml -R hichipli/homebrew-tap
+```
+
 For local release candidate verification:
 
 ```bash
