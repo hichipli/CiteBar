@@ -240,10 +240,14 @@ final class CiteBarTests: XCTestCase {
             metrics.papers.first?.citedByURL,
             "https://scholar.google.com/scholar?oi=bibs&hl=en&cites=10836885476083945808"
         )
+        XCTAssertEqual(metrics.papers.first?.year, 2024)
         XCTAssertEqual(metrics.papers.last?.citations, 0, "Uncited papers have an empty count link.")
         XCTAssertNil(metrics.papers.last?.citedByURL)
         // Sorted counts 50, 21, 7, 7, 3: h=4, and h=5 needs the fifth paper to gain 2.
-        XCTAssertEqual(StorageManager.computeCitationsToNextHIndex(hIndex: 4, papers: metrics.papers), 2)
+        let step = try XCTUnwrap(StorageManager.computeNextHIndexStep(hIndex: 4, papers: metrics.papers))
+        XCTAssertEqual(step.target, 5)
+        XCTAssertEqual(step.needs.map(\.needed), [2])
+        XCTAssertEqual(step.needs.first?.paper.citations, 3)
     }
 
     func testComputePaperGains_ReportsOnlyIncreasesOnKnownPapers() {
@@ -262,17 +266,66 @@ final class CiteBarTests: XCTestCase {
         let gains = StorageManager.computePaperGains(previous: previous, current: current)
 
         XCTAssertEqual(gains.map(\.title), ["C", "A"], "Largest gain first")
+        XCTAssertEqual(gains.map(\.paperID), ["c", "a"])
         XCTAssertEqual(gains.map(\.delta), [3, 2])
         XCTAssertEqual(StorageManager.computePaperGains(previous: [], current: current), [], "First sight is a baseline")
     }
 
-    func testComputeCitationsToNextHIndex() {
+    func testComputeNextHIndexStep() {
         func papers(_ counts: [Int]) -> [ScholarPaper] {
-            counts.enumerated().map { ScholarPaper(id: "\($0.offset)", title: "", citations: $0.element, citedByURL: nil) }
+            counts.enumerated().map { ScholarPaper(id: "u:\($0.offset)", title: "P\($0.offset)", citations: $0.element, citedByURL: nil) }
         }
-        XCTAssertEqual(StorageManager.computeCitationsToNextHIndex(hIndex: 3, papers: papers([9, 4, 3, 3, 1])), 2)
-        XCTAssertEqual(StorageManager.computeCitationsToNextHIndex(hIndex: 0, papers: papers([0])), 1)
-        XCTAssertNil(StorageManager.computeCitationsToNextHIndex(hIndex: 2, papers: papers([5, 5])), "Needs h+1 papers")
+        // h=3 -> 4: the top four are 9, 4, 3, 3, so the two 3s need one more each.
+        let step = StorageManager.computeNextHIndexStep(hIndex: 3, papers: papers([9, 4, 3, 3, 1]))
+        XCTAssertEqual(step?.target, 4)
+        XCTAssertEqual(step?.needs.map(\.paper.title), ["P2", "P3"])
+        XCTAssertEqual(step?.total, 2)
+        XCTAssertEqual(StorageManager.computeNextHIndexStep(hIndex: 0, papers: papers([0]))?.total, 1)
+        XCTAssertNil(StorageManager.computeNextHIndexStep(hIndex: 2, papers: papers([5, 5])), "Needs h+1 papers")
+        XCTAssertNil(StorageManager.computeNextHIndexStep(hIndex: 1, papers: papers([5, 5])), "Already qualifies")
+        XCTAssertEqual(
+            ScholarPaper(id: "USER1:PAPER9", title: "", citations: 0, citedByURL: nil).scholarURL,
+            "https://scholar.google.com/citations?view_op=view_citation&hl=en&user=USER1&citation_for_view=USER1:PAPER9"
+        )
+    }
+
+    func testMergeHistoryDeduplicatesAndKeepsNewest() {
+        let base = Date(timeIntervalSince1970: 1_700_000_000)
+        func record(_ id: String, _ count: Int, _ day: Double) -> CitationRecord {
+            CitationRecord(profileId: id, citationCount: count, timestamp: base.addingTimeInterval(day * 86_400))
+        }
+        let existing = [record("a", 10, 0), record("a", 12, 2)]
+        let incoming = [record("a", 10, 0), record("a", 11, 1), record("b", 5, 1)]
+
+        let merged = StorageManager.mergeHistory(existing: existing, incoming: incoming, limitPerProfile: 1000)
+        XCTAssertEqual(merged.map(\.citationCount), [10, 11, 5, 12], "Union in time order, duplicate dropped")
+
+        let trimmed = StorageManager.mergeHistory(existing: existing, incoming: incoming, limitPerProfile: 2)
+        XCTAssertEqual(trimmed.filter { $0.profileId == "a" }.map(\.citationCount), [11, 12])
+    }
+
+    @MainActor
+    func testArchiveRoundTrip() throws {
+        var settings = AppSettings()
+        settings.profiles = [ScholarProfile(id: "_5pgNWgAAAAJ", name: "Ada", group: "Lab")]
+        let archive = CiteBarArchive(
+            exportedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            appVersion: "1.6.1",
+            deviceName: "Test Mac",
+            settings: settings,
+            history: [CitationRecord(profileId: "_5pgNWgAAAAJ", citationCount: 98, hIndex: 4, timestamp: Date(timeIntervalSince1970: 1_700_000_000))],
+            papers: ["_5pgNWgAAAAJ": ProfilePapers(papers: [ScholarPaper(id: "x:1", title: "T", citations: 3, citedByURL: nil)])]
+        )
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("citebar-archive-test.json")
+        try DataManager.encode(archive).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let decoded = try DataManager.readArchive(at: url)
+        XCTAssertEqual(decoded.format, 1)
+        XCTAssertEqual(decoded.settings.profiles.first?.group, "Lab")
+        XCTAssertEqual(decoded.history.first?.citationCount, 98)
+        XCTAssertEqual(decoded.papers["_5pgNWgAAAAJ"]?.papers.first?.citations, 3)
+        XCTAssertEqual(decoded.exportedAt, archive.exportedAt)
     }
 
     func testIsRateLimitResponse() {
@@ -316,6 +369,16 @@ final class CiteBarTests: XCTestCase {
         XCTAssertEqual(multiple?.body, "Ada: “Attention Is All You Need” +2\nBob -1")
 
         XCTAssertNil(CitationManager.changeNotificationText(for: []))
+
+        // A watched paper's gain leads, marked with a star, even when it is smaller.
+        let big = PaperGain(title: "Big", delta: 5, citedByURL: nil, paperID: "u:1")
+        let watched = PaperGain(title: "Mine", delta: 1, citedByURL: "https://mine", paperID: "u:2")
+        let starred = CitationManager.changeNotificationText(
+            for: [.init(name: "Ada", citationDelta: 6, paperGains: [big, watched], profileURL: "https://ada")],
+            watchedPaperIDs: ["u:2"]
+        )
+        XCTAssertEqual(starred?.body, "★ “Mine” +1 · 1 more paper")
+        XCTAssertEqual(starred?.url, "https://mine")
     }
 
     @MainActor

@@ -7,7 +7,7 @@
 
   An elegant macOS menu bar app that keeps your Google Scholar citation metrics at your fingertips.
 
-  <img src="website/assets/panel.png" alt="The CiteBar panel: a profile with 1,284 citations, citations per year, a newly cited paper, the next h-index one citation away, and a lab group with combined citations" width="411">
+  <img src="website/assets/panel.png" alt="The CiteBar panel: a profile with 1,284 citations, citations per year, a newly cited paper, the two papers that would lift the h-index to 14, and a lab group with combined citations" width="411">
 
   [![Latest Release](https://img.shields.io/github/v/release/hichipli/CiteBar?style=flat-square)](https://github.com/hichipli/CiteBar/releases)
   [![macOS](https://img.shields.io/badge/macOS-13.0+-blue?style=flat-square)](https://www.apple.com/macos/)
@@ -61,7 +61,9 @@ Having trouble installing? See the [Install Guide](DISTRIBUTION.md).
 - Your citation count lives in the menu bar; click it for the panel
 - Citations per year, this year's count, 30-day growth, h-index, and i10-index
 - See which paper was just cited, and click through to who cited it
-- Know when your next h-index is a few citations away
+- When your next h-index is close, see exactly which papers need citations, and how many each
+- Watch specific papers: star them in the Papers window to keep them in the panel, with their newest citations first in notifications
+- Column labels and hover hints explain every number
 
 **Groups for labs and collaborators**
 - Group profiles into a lab, co-authors, or a cohort, with combined citations and 30-day growth
@@ -74,8 +76,8 @@ Having trouble installing? See the [Install Guide](DISTRIBUTION.md).
 - No "nothing changed" noise
 
 **A citation record worth sharing**
-- One click saves a typeset card of your profile: totals, citations per year, and your most cited papers
-- The card is copied to the clipboard too, ready for a post
+- One click opens a preview of a typeset card: totals, citations per year, and the most cited papers
+- Pick any tracked profile, then Share (AirDrop, Messages, Mail), Copy, or Save to Downloads
 
 <img src="website/assets/stats-card.png" alt="A Citation Record card with 1,284 citations, a citations-per-year chart, and the three most cited papers" width="360">
 
@@ -88,8 +90,12 @@ Having trouble installing? See the [Install Guide](DISTRIBUTION.md).
 **Privacy-first by default**
 - All data stays on your Mac
 - No telemetry
-- No cloud sync
-- No account required
+- No CiteBar servers or accounts
+
+**Your data, portable**
+- Settings › Data shows where data lives (`~/Library/Application Support/CiteBar/`) and how much space it uses
+- Export everything (profiles, groups, settings, full history) to one file and import it on a new Mac; importing only adds, never deletes
+- Optional automatic backup after each refresh to iCloud Drive or any folder you choose, such as Google Drive or Dropbox
 
 **Native macOS experience**
 - Lightweight menu bar presence, light and dark mode

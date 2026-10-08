@@ -10,7 +10,6 @@ import SwiftUI
     private var popover: NSPopover?
     private var appActiveBeforePopover: NSRunningApplication?
     private var lastPanelClose = Date.distantPast
-    private var footerNoteReset: DispatchWorkItem?
 
     private var appDelegate: AppDelegate? { NSApp.delegate as? AppDelegate }
 
@@ -207,8 +206,13 @@ import SwiftUI
                 self?.closePanel(restoringFocus: false)
                 NSWorkspace.shared.open(url)
             },
-            saveStatsCard: { [weak self] in
-                self?.saveStatsCard()
+            openPapers: { [weak self] profileID in
+                self?.closePanel(restoringFocus: false)
+                self?.appDelegate?.showPapers(profileID: profileID)
+            },
+            openCardStudio: { [weak self] in
+                self?.closePanel(restoringFocus: false)
+                self?.appDelegate?.showCardStudio()
             },
             checkForUpdates: { [weak self] in
                 self?.closePanel(restoringFocus: false)
@@ -244,52 +248,5 @@ import SwiftUI
         statusItem.menu = menu
         statusItem.button?.performClick(nil)
         statusItem.menu = nil
-    }
-
-    // MARK: - Stats card
-
-    /// Saves a share image of the primary profile to Downloads and copies it.
-    func saveStatsCard() {
-        guard let entry = model.entries.first,
-              let metrics = entry.metrics,
-              let png = StatsCard(
-                name: entry.profile.name,
-                metrics: metrics,
-                recentGrowth: entry.profile.recentGrowth,
-                recentGrowthDays: entry.profile.recentGrowthDays
-              ).pngData(),
-              let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first else {
-            NSSound.beep()
-            return
-        }
-
-        let safeName = entry.profile.name
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { !$0.isEmpty }
-            .joined(separator: "-")
-        let day = ISO8601DateFormatter.string(from: Date(), timeZone: .current, formatOptions: [.withFullDate])
-        let fileURL = downloads.appendingPathComponent("CiteBar-\(safeName)-\(day).png")
-
-        do {
-            try png.write(to: fileURL, options: .atomic)
-        } catch {
-            AppLog.error("Failed to save stats card: \(error)")
-            NSSound.beep()
-            return
-        }
-
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setData(png, forType: .png)
-        showFooterNote("Card copied · saved to Downloads", revealing: fileURL)
-    }
-
-    private func showFooterNote(_ text: String, revealing fileURL: URL?) {
-        footerNoteReset?.cancel()
-        model.footerNote = DashboardModel.FooterNote(text: text, fileURL: fileURL)
-        let reset = DispatchWorkItem { [weak self] in
-            self?.model.footerNote = nil
-        }
-        footerNoteReset = reset
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: reset)
     }
 }

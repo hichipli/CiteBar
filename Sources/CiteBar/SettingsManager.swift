@@ -73,6 +73,52 @@ import ServiceManagement
         return added
     }
 
+    /// Adds a backup's profiles (with their groups) that aren't tracked here. On a Mac with no
+    /// profiles yet, also adopts the backup's display and refresh preferences.
+    /// Returns how many profiles were added.
+    func importSettings(_ incoming: AppSettings) -> Int {
+        let wasEmpty = settings.profiles.isEmpty
+        let added = addProfiles(incoming.profiles.sorted { $0.sortOrder < $1.sortOrder })
+        if wasEmpty {
+            settings.refreshInterval = incoming.refreshInterval
+            settings.showNotifications = incoming.showNotifications
+            settings.showHIndexInMenu = incoming.showHIndexInMenu
+            settings.showI10IndexInMenu = incoming.showI10IndexInMenu
+            settings.showTrendInMenu = incoming.showTrendInMenu
+            settings.menuBarPrimaryMetric = incoming.menuBarPrimaryMetric
+            save()
+        }
+        return added
+    }
+
+    func setICloudBackupEnabled(_ enabled: Bool) {
+        settings.iCloudBackupEnabled = enabled
+        save()
+    }
+
+    func setWatched(_ watched: Bool, paperID: String) {
+        settings.watchedPaperIDs.removeAll { $0 == paperID }
+        if watched {
+            settings.watchedPaperIDs.append(paperID)
+        }
+        save()
+    }
+
+    func setBackupFolder(_ url: URL?) {
+        settings.backupFolderPath = url?.path
+        settings.iCloudBackupError = nil
+        save()
+    }
+
+    /// Records the outcome of a backup; a failure keeps the date of the last good one.
+    func setICloudBackupResult(date: Date?, error: String?) {
+        if let date {
+            settings.lastICloudBackup = date
+        }
+        settings.iCloudBackupError = error
+        save()
+    }
+
     /// Group names in the order their first member appears.
     var groups: [String] {
         var seen = Set<String>()

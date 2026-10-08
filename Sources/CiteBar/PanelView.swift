@@ -16,6 +16,8 @@ enum Theme {
     }
 
     static let sectionLabel = Font.system(size: 10.5, weight: .semibold)
+    /// Shared by the column header, group headers, and rows so the 30-day numbers line up.
+    static let growthColumnWidth: CGFloat = 42
 }
 
 extension Int {
@@ -45,13 +47,6 @@ extension Int {
     @Published var failedProfileIDs: Set<String> = []
     @Published var errorMessage: String?
     @Published var loadingProfileIDs: Set<String> = []
-    @Published var footerNote: FooterNote?
-
-    struct FooterNote: Equatable {
-        let text: String
-        /// Clicking the note reveals this file in Finder.
-        let fileURL: URL?
-    }
 }
 
 struct PanelActions {
@@ -59,7 +54,8 @@ struct PanelActions {
     let openSettings: @MainActor () -> Void
     let addProfile: @MainActor () -> Void
     let openURL: @MainActor (String) -> Void
-    let saveStatsCard: @MainActor () -> Void
+    let openPapers: @MainActor (String) -> Void
+    let openCardStudio: @MainActor () -> Void
     let checkForUpdates: @MainActor () -> Void
     let showSupport: @MainActor () -> Void
     let quit: @MainActor () -> Void
@@ -119,6 +115,10 @@ struct PanelView: View {
     private var profileList: some View {
         ScrollView(.vertical, showsIndicators: listHeight > Self.maxListHeight) {
             VStack(alignment: .leading, spacing: 2) {
+                ColumnHeader(
+                    metricLabel: settings.settings.menuBarPrimaryMetric == .currentYearCitations ? "this year" : "citations",
+                    showsGrowth: settings.settings.showTrendInMenu
+                )
                 ForEach(groupNames, id: \.self) { group in
                     let members = model.entries.filter { $0.profile.group == group }
                     GroupHeader(
@@ -213,6 +213,11 @@ private struct HeroView: View {
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                 }
+                LinkText(text: "Papers", font: .system(size: 11)) {
+                    actions.openPapers(entry.profile.id)
+                }
+                .foregroundStyle(.secondary)
+                .help("All papers; star one to watch it here")
             }
 
             if let metrics = entry.metrics, metrics.citationCount >= 0 {
@@ -241,6 +246,7 @@ private struct HeroView: View {
                 if settings.showTrendInMenu {
                     InsightRows(metrics: metrics, actions: actions)
                 }
+                WatchingView(papers: metrics.watchedPapers, actions: actions)
             } else {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
@@ -314,7 +320,7 @@ private struct InsightRows: View {
     let actions: PanelActions
 
     var body: some View {
-        if metrics.recentPaperGains.first != nil || nextHIndexIsClose {
+        if metrics.recentPaperGains.first != nil || closeStep != nil {
             VStack(alignment: .leading, spacing: 6) {
                 if let gain = metrics.recentPaperGains.first {
                     HoverRow(action: { actions.openURL(gain.citedByURL ?? "") }) {
@@ -334,26 +340,17 @@ private struct InsightRows: View {
                     .help(gainHelp)
                 }
 
-                if nextHIndexIsClose, let hIndex = metrics.hIndex, let needed = metrics.citationsToNextHIndex {
-                    HStack(spacing: 8) {
-                        Image(systemName: "scope")
-                            .font(.system(size: 10))
-                            .foregroundStyle(Theme.accent)
-                            .frame(width: 5)
-                        Text("h-index \(hIndex + 1) is \(needed) \(needed == 1 ? "citation" : "citations") away")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 6)
+                if let step = closeStep {
+                    NextHIndexView(step: step, actions: actions)
                 }
             }
         }
     }
 
-    private var nextHIndexIsClose: Bool {
-        guard let needed = metrics.citationsToNextHIndex, metrics.hIndex != nil else { return false }
-        return needed <= 5
+    /// The next h-index, shown only when it is a handful of citations away.
+    private var closeStep: HIndexStep? {
+        guard let step = metrics.nextHIndexStep, step.total <= 5 else { return nil }
+        return step
     }
 
     private var gainHelp: String {
@@ -363,7 +360,153 @@ private struct InsightRows: View {
     }
 }
 
+/// Papers the user starred in the Papers window, with their latest gain.
+private struct WatchingView: View {
+    let papers: [WatchedPaper]
+    let actions: PanelActions
+
+    private static let recentWindow: TimeInterval = 30 * 24 * 60 * 60
+
+    var body: some View {
+        if !papers.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(papers.prefix(5), id: \.paper.id) { watched in
+                    HoverRow(action: { actions.openURL(watched.paper.scholarURL) }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 8))
+                                .foregroundStyle(Theme.accent)
+                                .frame(width: 5)
+                            Text("“\(watched.paper.title)”")
+                                .font(.system(size: 12))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            Spacer(minLength: 6)
+                            if let change = recentChange(watched) {
+                                Text("+\(change.delta)")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .monospacedDigit()
+                                    .foregroundStyle(Theme.accent)
+                            }
+                            Text(watched.paper.citations.decimalString)
+                                .font(.system(size: 12, weight: .medium))
+                                .monospacedDigit()
+                        }
+                    }
+                    .help(help(for: watched))
+                }
+                if papers.count > 5 {
+                    Text("and \(papers.count - 5) more watched papers")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .padding(.leading, 19)
+                }
+            }
+        }
+    }
+
+    private func recentChange(_ watched: WatchedPaper) -> PaperChange? {
+        guard let change = watched.lastChange,
+              Date().timeIntervalSince(change.date) < Self.recentWindow else { return nil }
+        return change
+    }
+
+    private func help(for watched: WatchedPaper) -> String {
+        var text = "Watching “\(watched.paper.title)”: \(watched.paper.citations) citations"
+        if let change = watched.lastChange {
+            text += ", +\(change.delta) on \(change.date.formatted(date: .abbreviated, time: .omitted))"
+        }
+        return text + ". Click to open it on Google Scholar."
+    }
+}
+
+/// Next h-index and the specific papers that would get it there, each with its progress.
+private struct NextHIndexView: View {
+    let step: HIndexStep
+    let actions: PanelActions
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 8) {
+                Image(systemName: "scope")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 5)
+                (Text("Next h-index: ") + Text("\(step.target)").foregroundColor(.primary).fontWeight(.medium)
+                    + Text(" · \(step.total) \(step.total == 1 ? "citation" : "citations") to go"))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 6)
+            .help("Your h-index becomes \(step.target) when these papers reach \(step.target) citations each.")
+
+            ForEach(step.needs.prefix(3), id: \.paper.id) { need in
+                HoverRow(action: { actions.openURL(need.paper.scholarURL) }) {
+                    HStack(spacing: 8) {
+                        Text("“\(need.paper.title)”")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Spacer(minLength: 6)
+                        CitationProgress(value: need.paper.citations, target: step.target)
+                        Text("\(need.paper.citations)/\(step.target)")
+                            .font(.system(size: 11))
+                            .monospacedDigit()
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.leading, 13)
+                }
+                .help("“\(need.paper.title)” has \(need.paper.citations) citations and needs \(need.needed) more. Click to open it on Google Scholar.")
+            }
+            if step.needs.count > 3 {
+                Text("and \(step.needs.count - 3) more papers")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .padding(.leading, 19)
+            }
+        }
+    }
+}
+
+private struct CitationProgress: View {
+    let value: Int
+    let target: Int
+
+    var body: some View {
+        let fraction = target > 0 ? min(1, CGFloat(value) / CGFloat(target)) : 0
+        Capsule()
+            .fill(Color.primary.opacity(0.1))
+            .frame(width: 34, height: 4)
+            .overlay(alignment: .leading) {
+                Capsule()
+                    .fill(Theme.accent.opacity(0.85))
+                    .frame(width: 34 * fraction, height: 4)
+            }
+    }
+}
+
 // MARK: - List
+
+/// Labels the number columns, so new users can tell totals from 30-day growth.
+private struct ColumnHeader: View {
+    let metricLabel: String
+    let showsGrowth: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Spacer()
+            Text(metricLabel)
+            Text(showsGrowth ? "30 days" : "")
+                .frame(minWidth: Theme.growthColumnWidth, alignment: .trailing)
+        }
+        .font(.system(size: 10))
+        .foregroundStyle(.tertiary)
+        .padding(.horizontal, 6)
+        .padding(.bottom, -4)
+    }
+}
 
 private struct SectionLabel: View {
     let text: String
@@ -410,15 +553,14 @@ private struct GroupHeader: View {
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
                     .numericTransition(value: total)
-                if let growth, growth != 0 {
-                    Text(growth.signedString)
-                        .font(.system(size: 11))
-                        .monospacedDigit()
-                        .foregroundStyle(.tertiary)
-                        .frame(minWidth: 34, alignment: .trailing)
-                }
+                Text(growth.map { $0 == 0 ? "" : $0.signedString } ?? "")
+                    .font(.system(size: 11))
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+                    .frame(minWidth: Theme.growthColumnWidth, alignment: .trailing)
+                    .help("Combined new citations in the last 30 days")
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 6)
             .padding(.top, 10)
             .padding(.bottom, 4)
             .contentShape(Rectangle())
@@ -467,7 +609,8 @@ private struct ProfileRowView: View {
                             .font(.system(size: 11))
                             .monospacedDigit()
                             .foregroundStyle(.tertiary)
-                            .frame(minWidth: 34, alignment: .trailing)
+                            .frame(minWidth: Theme.growthColumnWidth, alignment: .trailing)
+                            .help(deltaHelp)
                     } else if isLoading {
                         ProgressView().controlSize(.mini)
                     } else {
@@ -497,6 +640,12 @@ private struct ProfileRowView: View {
     private var deltaText: String {
         guard settings.showTrendInMenu, let growth = entry.profile.recentGrowth, growth != 0 else { return "" }
         return growth.signedString
+    }
+
+    private var deltaHelp: String {
+        guard let growth = entry.profile.recentGrowth else { return "" }
+        let days = max(1, entry.profile.recentGrowthDays ?? 30)
+        return "\(growth.signedString) citations in the last \(days) \(days == 1 ? "day" : "days")"
     }
 }
 
@@ -529,9 +678,16 @@ private struct ProfileDetail: View {
 
             InsightRows(metrics: metrics, actions: actions)
                 .padding(.leading, -6)
+            WatchingView(papers: metrics.watchedPapers, actions: actions)
+                .padding(.leading, -6)
 
-            LinkText(text: "Open Scholar profile ↗", font: .system(size: 11.5)) {
-                actions.openURL(entry.profile.url)
+            HStack(spacing: 14) {
+                LinkText(text: "Papers", font: .system(size: 11.5)) {
+                    actions.openPapers(entry.profile.id)
+                }
+                LinkText(text: "Open Scholar profile ↗", font: .system(size: 11.5)) {
+                    actions.openURL(entry.profile.url)
+                }
             }
             .foregroundStyle(.secondary)
         }
@@ -568,8 +724,8 @@ private struct FooterView: View {
             .keyboardShortcut("r", modifiers: .command)
             .disabled(model.isRefreshing)
 
-            IconButton(symbol: "square.and.arrow.up", help: "Save a stats card to share") {
-                actions.saveStatsCard()
+            IconButton(symbol: "square.and.arrow.up", help: "Share a Citation Record card") {
+                actions.openCardStudio()
             }
             .disabled(model.entries.first?.metrics == nil)
 
@@ -602,19 +758,7 @@ private struct FooterView: View {
     private var status: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             Group {
-                if let note = model.footerNote {
-                    Button {
-                        if let fileURL = note.fileURL {
-                            NSWorkspace.shared.activateFileViewerSelecting([fileURL])
-                        }
-                    } label: {
-                        Label(note.text, systemImage: "checkmark")
-                            .labelStyle(.titleAndIcon)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Show in Finder")
-                    .transition(.opacity)
-                } else if model.isRefreshing {
+                if model.isRefreshing {
                     Text("Updating…")
                 } else if let issue = model.issue, issue.retryAt > context.date {
                     HStack(spacing: 5) {

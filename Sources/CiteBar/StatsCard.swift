@@ -217,3 +217,170 @@ struct StatsCard: View {
         return NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:])
     }
 }
+
+/// Preview window for the Citation Record card: pick a profile, then share, copy, or save.
+struct CardStudioView: View {
+    @ObservedObject var model: DashboardModel
+
+    @State private var profileID = ""
+    @State private var preview: NSImage?
+    @State private var png: Data?
+    @State private var shareURL: URL?
+    @State private var status: Status?
+
+    private enum Status: Equatable {
+        case copied
+        case saved(URL)
+    }
+
+    private var entries: [DashboardModel.Entry] {
+        model.entries.filter { $0.metrics != nil }
+    }
+
+    private var selected: DashboardModel.Entry? {
+        entries.first { $0.id == profileID } ?? entries.first
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 28) {
+            ZStack {
+                if let preview {
+                    Image(nsImage: preview)
+                        .resizable()
+                        .interpolation(.high)
+                } else {
+                    Rectangle().fill(Color.secondary.opacity(0.08))
+                    Text(entries.isEmpty ? "Add a profile to make a card." : "")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 330, height: 440)
+            .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous).stroke(Color.primary.opacity(0.08)))
+            .shadow(color: .black.opacity(0.16), radius: 14, y: 6)
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Citation Record")
+                    .font(Theme.serif(26, .medium))
+                Text("A typeset card of a profile's citations, in 3:4 for Xiaohongshu, Instagram, X, and LinkedIn.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 6)
+
+                if entries.count > 1 {
+                    Picker("Profile", selection: $profileID) {
+                        ForEach(entries) { entry in
+                            Text(entry.profile.name).tag(entry.id)
+                        }
+                    }
+                    .padding(.top, 20)
+                }
+
+                Spacer(minLength: 24)
+
+                VStack(spacing: 10) {
+                    if let shareURL, let preview {
+                        ShareLink(
+                            item: shareURL,
+                            preview: SharePreview("Citation Record", image: Image(nsImage: preview))
+                        ) {
+                            Label("Share…", systemImage: "square.and.arrow.up")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    Button(action: copy) {
+                        Label(status == .copied ? "Copied" : "Copy Image",
+                              systemImage: status == .copied ? "checkmark" : "doc.on.doc")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .keyboardShortcut("c")
+                    Button(action: save) {
+                        Label("Save to Downloads", systemImage: "arrow.down.to.line")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .keyboardShortcut("s")
+                }
+                .controlSize(.large)
+                .disabled(png == nil)
+
+                Group {
+                    if case .saved(let url) = status {
+                        Button("Saved to Downloads · Show in Finder") {
+                            NSWorkspace.shared.activateFileViewerSelecting([url])
+                        }
+                        .buttonStyle(.link)
+                    } else {
+                        Text("Copy pastes into WeChat, Slack, or a post; Share offers AirDrop, Messages, and more.")
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .font(.system(size: 11))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 12)
+            }
+            .frame(width: 250, height: 440, alignment: .topLeading)
+        }
+        .padding(28)
+        .onAppear {
+            if profileID.isEmpty {
+                profileID = entries.first?.id ?? ""
+            }
+            render()
+        }
+        .onChange(of: profileID) { _ in render() }
+        .onExitCommand { NSApp.keyWindow?.close() }
+    }
+
+    private var fileName: String {
+        let name = (selected?.profile.name ?? "Profile")
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: "-")
+        let day = ISO8601DateFormatter.string(from: Date(), timeZone: .current, formatOptions: [.withFullDate])
+        return "CiteBar-\(name)-\(day).png"
+    }
+
+    private func render() {
+        status = nil
+        guard let entry = selected, let metrics = entry.metrics,
+              let data = StatsCard(
+                name: entry.profile.name,
+                metrics: metrics,
+                recentGrowth: entry.profile.recentGrowth,
+                recentGrowthDays: entry.profile.recentGrowthDays
+              ).pngData() else {
+            return
+        }
+        png = data
+        preview = NSImage(data: data)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        shareURL = (try? data.write(to: url, options: .atomic)) == nil ? nil : url
+    }
+
+    private func copy() {
+        guard let png else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setData(png, forType: .png)
+        status = .copied
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            if status == .copied { status = nil }
+        }
+    }
+
+    private func save() {
+        guard let png, let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first else {
+            return
+        }
+        let url = downloads.appendingPathComponent(fileName)
+        do {
+            try png.write(to: url, options: .atomic)
+            status = .saved(url)
+        } catch {
+            AppLog.error("Failed to save stats card: \(error)")
+            NSSound.beep()
+        }
+    }
+}

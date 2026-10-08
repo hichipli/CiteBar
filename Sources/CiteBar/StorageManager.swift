@@ -9,9 +9,14 @@ actor StorageManager {
 
     private static let maxRecordsPerProfile = 1000
 
+    /// ~/Library/Application Support/CiteBar, where settings, history, and paper lists live.
+    nonisolated static var appFolderURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("CiteBar")
+    }
+
     init() {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let appFolder = appSupport.appendingPathComponent("CiteBar")
+        let appFolder = Self.appFolderURL
 
         try? FileManager.default.createDirectory(at: appFolder, withIntermediateDirectories: true)
 
@@ -52,6 +57,13 @@ actor StorageManager {
         if !gains.isEmpty {
             entry.lastGains = gains
             entry.lastGainDate = now
+            var changes = entry.lastChanges ?? [:]
+            for gain in gains {
+                if let id = gain.paperID {
+                    changes[id] = PaperChange(delta: gain.delta, date: now)
+                }
+            }
+            entry.lastChanges = changes
         }
         profilePapers[profileId] = entry
         saveProfilePapers()
@@ -62,24 +74,79 @@ actor StorageManager {
         profilePapers[profileId]
     }
 
+    // MARK: - Export and import
+
+    func exportData() async -> (history: [CitationRecord], papers: [String: ProfilePapers]) {
+        await ensureInitialized()
+        return (citationHistory, profilePapers)
+    }
+
+    func historySummary() async -> (count: Int, earliest: Date?) {
+        await ensureInitialized()
+        return (citationHistory.count, citationHistory.map(\.timestamp).min())
+    }
+
+    /// Adds history and paper lists from a backup without removing anything here.
+    /// Returns how many history records were new.
+    @discardableResult
+    func importData(history: [CitationRecord], papers: [String: ProfilePapers]) async -> Int {
+        await ensureInitialized()
+        let merged = Self.mergeHistory(existing: citationHistory, incoming: history, limitPerProfile: Self.maxRecordsPerProfile)
+        let added = merged.count - citationHistory.count
+        citationHistory = merged
+        saveCitationHistory()
+
+        // Paper lists on this Mac are the most recent baseline, so they win.
+        profilePapers.merge(papers) { current, _ in current }
+        saveProfilePapers()
+        return max(0, added)
+    }
+
+    /// Union of both histories, de-duplicated and in time order, keeping the newest
+    /// `limitPerProfile` records of each profile.
+    static func mergeHistory(existing: [CitationRecord], incoming: [CitationRecord], limitPerProfile: Int) -> [CitationRecord] {
+        func key(_ record: CitationRecord) -> String {
+            // Saved timestamps have whole-second precision.
+            "\(record.profileId)|\(Int(record.timestamp.timeIntervalSince1970))|\(record.citationCount)"
+        }
+
+        var seen = Set(existing.map(key))
+        var combined = existing
+        for record in incoming where seen.insert(key(record)).inserted {
+            combined.append(record)
+        }
+
+        let byProfile = Dictionary(grouping: combined, by: \.profileId)
+        return byProfile.values
+            .flatMap { $0.sorted { $0.timestamp < $1.timestamp }.suffix(limitPerProfile) }
+            .sorted { ($0.timestamp, $0.profileId) < ($1.timestamp, $1.profileId) }
+    }
+
     /// Papers missing from `previous` are skipped so a paper entering the fetched list
     /// (new on the profile, or newly inside the first page) is not reported as a gain.
     static func computePaperGains(previous: [ScholarPaper], current: [ScholarPaper]) -> [PaperGain] {
         let previousCitations = Dictionary(previous.map { ($0.id, $0.citations) }, uniquingKeysWith: max)
         return current.compactMap { paper -> PaperGain? in
             guard let old = previousCitations[paper.id], paper.citations > old else { return nil }
-            return PaperGain(title: paper.title, delta: paper.citations - old, citedByURL: paper.citedByURL)
+            return PaperGain(title: paper.title, delta: paper.citations - old, citedByURL: paper.citedByURL, paperID: paper.id)
         }
         .sorted { $0.delta > $1.delta }
     }
 
-    /// Fewest additional citations that would raise the h-index by one: the top h+1 papers
-    /// each need at least h+1 citations.
-    static func computeCitationsToNextHIndex(hIndex: Int, papers: [ScholarPaper]) -> Int? {
+    /// The papers that would raise the h-index by one with the fewest new citations: the top
+    /// h+1 papers each need at least h+1. Ties break by paper ID so the answer is stable.
+    static func computeNextHIndexStep(hIndex: Int, papers: [ScholarPaper]) -> HIndexStep? {
         let target = hIndex + 1
-        let top = papers.map(\.citations).sorted(by: >).prefix(target)
+        let top = papers
+            .sorted { ($0.citations, $1.id) > ($1.citations, $0.id) }
+            .prefix(target)
         guard top.count == target else { return nil }
-        return top.reduce(0) { $0 + max(0, target - $1) }
+        let needs = top
+            .filter { $0.citations < target }
+            .map { HIndexStep.Need(paper: $0, needed: target - $0.citations) }
+            .sorted { $0.needed < $1.needed }
+        // Empty means the papers already qualify and Scholar's h-index hasn't caught up.
+        return needs.isEmpty ? nil : HIndexStep(target: target, needs: needs)
     }
     
     private nonisolated func loadCitationHistory() {
@@ -121,7 +188,6 @@ actor StorageManager {
         do {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
-            encoder.outputFormatting = .prettyPrinted
             let data = try encoder.encode(citationHistory)
             
             // Write to a temporary file first, then move to final location

@@ -70,7 +70,11 @@ The integration is designed around public profile pages:
 
 - The citation count is shown in the menu bar; clicking it opens a SwiftUI popover (`PanelView`) fed by `DashboardModel`, which `MenuBarManager` keeps current. Right-click opens a small classic menu.
 - Profiles can carry an optional `group`; the panel and Settings show groups with combined totals.
-- Per-paper counts from the latest refresh are stored in `papers.json` and compared with the next refresh to find newly cited papers and the citations needed for the next h-index.
+- Per-paper counts from the latest refresh are stored in `papers.json` and compared with the next refresh to find newly cited papers. The next h-index step takes the top h+1 papers by citations and lists those still below h+1, which are the papers that would raise the h-index soonest.
+- Watched papers are stored in settings as Scholar paper IDs (`USER:PAPER`). Each paper list keeps the paper's year and its latest gain (`lastChanges`), which the Papers window and the panel show.
+- Data files live in `~/Library/Application Support/CiteBar/`: `settings.json`, `citation_history.json` (compact JSON, up to 1,000 snapshots per profile), and `papers.json`.
+- Export, import, and automatic backups use one JSON archive (`CiteBarArchive`, format 1) holding settings, history, and paper lists. Importing adds missing profiles, merges history without duplicates, and keeps this Mac's paper lists; nothing is deleted.
+- Automatic backups write `CiteBar Backup – <Mac name>.json` after each successful refresh to `~/Library/Mobile Documents/com~apple~CloudDocs/CiteBar` (iCloud Drive) or to a folder the user picks. It is a plain file in the user's own storage, so it needs no server and no iCloud entitlement.
 - Historical trend tracking supports growth indicators.
 - Refresh intervals are user-configurable: every 12 hours, once daily (default), or every 2 days.
 - Settings use an `NSTabViewController` with toolbar tabs, one SwiftUI pane per tab.

@@ -11,7 +11,7 @@ import UserNotifications
 
     weak var delegate: CitationManagerDelegate?
     private let settingsManager = SettingsManager.shared
-    private let storageManager = StorageManager()
+    let storageManager = StorageManager()
     private var refreshTimer: Timer?
     private let urlSession: URLSession
     private var isChecking = false
@@ -337,6 +337,7 @@ import UserNotifications
             // their last known data.
             updateMenuBarWithCurrentData()
             notifyIfNeeded(changes: changes, milestones: milestones)
+            await DataManager.backUpIfEnabled(storage: storageManager)
         } else {
             // Keep showing historical data when the network fails; only surface an
             // error when there is nothing stored for the active profiles.
@@ -400,12 +401,18 @@ import UserNotifications
         )
         if let profilePapers = await storageManager.getProfilePapers(for: profile.id) {
             if let hIndex = record.hIndex {
-                metrics.citationsToNextHIndex = StorageManager.computeCitationsToNextHIndex(
+                metrics.nextHIndexStep = StorageManager.computeNextHIndexStep(
                     hIndex: hIndex,
                     papers: profilePapers.papers
                 )
             }
             metrics.topPapers = Array(profilePapers.papers.sorted { $0.citations > $1.citations }.prefix(3))
+            let watchedIDs = settingsManager.settings.watchedPaperIDs
+            metrics.watchedPapers = watchedIDs.compactMap { id in
+                profilePapers.papers.first { $0.id == id }.map {
+                    WatchedPaper(paper: $0, lastChange: profilePapers.lastChanges?[id])
+                }
+            }
             if let gainDate = profilePapers.lastGainDate,
                Date().timeIntervalSince(gainDate) < Self.recentPaperGainWindow {
                 metrics.recentPaperGains = profilePapers.lastGains
@@ -430,7 +437,22 @@ import UserNotifications
     }
 
     /// Notification for a refresh that changed something; nil when nothing changed.
-    nonisolated static func changeNotificationText(for changes: [ProfileChange]) -> (title: String, body: String, url: String?)? {
+    /// Gains on watched papers come first and are marked with a star.
+    nonisolated static func changeNotificationText(
+        for changes: [ProfileChange],
+        watchedPaperIDs: Set<String> = []
+    ) -> (title: String, body: String, url: String?)? {
+        func isWatched(_ gain: PaperGain) -> Bool {
+            gain.paperID.map(watchedPaperIDs.contains) ?? false
+        }
+        let changes = changes.map { change in
+            ProfileChange(
+                name: change.name,
+                citationDelta: change.citationDelta,
+                paperGains: change.paperGains.filter(isWatched) + change.paperGains.filter { !isWatched($0) },
+                profileURL: change.profileURL
+            )
+        }
         guard let first = changes.first else { return nil }
 
         let totalDelta = changes.reduce(0) { $0 + $1.citationDelta }
@@ -450,7 +472,8 @@ import UserNotifications
             }
             let others = change.paperGains.count - 1
             let suffix = others > 0 ? " · \(others) more \(others == 1 ? "paper" : "papers")" : ""
-            return "\(prefix)\(topGain.shortTitle) +\(topGain.delta)\(suffix)"
+            let star = isWatched(topGain) ? "★ " : ""
+            return "\(prefix)\(star)\(topGain.shortTitle) +\(topGain.delta)\(suffix)"
         }
         var body = lines.joined(separator: "\n")
         if changes.count > 3 {
@@ -462,7 +485,10 @@ import UserNotifications
 
     private func notifyIfNeeded(changes: [ProfileChange], milestones: [String]) {
         guard settingsManager.settings.showNotifications, Bundle.main.bundleIdentifier != nil else { return }
-        let changeText = Self.changeNotificationText(for: changes)
+        let changeText = Self.changeNotificationText(
+            for: changes,
+            watchedPaperIDs: Set(settingsManager.settings.watchedPaperIDs)
+        )
         guard changeText != nil || !milestones.isEmpty else { return }
 
         Task { @MainActor in
@@ -793,8 +819,9 @@ import UserNotifications
             let countLink = try? row.select("a.gsc_a_ac").first()
             let citations = (try? countLink?.text()).flatMap { extractNumber(from: $0) } ?? 0
             let citedByURL = (try? countLink?.attr("href")).flatMap { $0.isEmpty ? nil : $0 }
+            let year = (try? row.select(".gsc_a_y span").first()?.text()).flatMap { Int($0) }
 
-            return ScholarPaper(id: id, title: title, citations: citations, citedByURL: citedByURL)
+            return ScholarPaper(id: id, title: title, citations: citations, citedByURL: citedByURL, year: year)
         }
     }
 

@@ -2,7 +2,8 @@
 
 # Extract version from AppVersion.swift
 VERSION=$(grep 'static let current' Sources/CiteBar/AppVersion.swift | cut -d'"' -f2)
-BUILD_VERSION=$(grep 'static let build' Sources/CiteBar/AppVersion.swift | cut -d'"' -f2)
+# BUILD_NUMBER overrides the build, e.g. a timestamp for local installs (releases use one too).
+BUILD_VERSION=${BUILD_NUMBER:-$(grep 'static let build' Sources/CiteBar/AppVersion.swift | cut -d'"' -f2)}
 SPARKLE_PUBLIC_ED_KEY_VALUE="${SPARKLE_PUBLIC_ED_KEY:-}"
 
 # Optional fallback file for local release builds
