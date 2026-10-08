@@ -462,68 +462,6 @@ a:hover {
 }
 
 /* Features */
-.feature-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 2rem;
-}
-
-.feature-box {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 2.5rem;
-  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
-}
-
-.feature-box:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-lg);
-  border-color: var(--border-strong);
-}
-
-.feature-box.primary {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: 4rem;
-}
-
-.feature-box.primary .feature-icon {
-  margin-bottom: 0;
-  flex-shrink: 0;
-}
-
-.feature-box.primary h3 {
-  font-size: 2rem;
-  margin-bottom: 1rem;
-}
-
-.feature-box.primary p {
-  font-size: 1.125rem;
-  max-width: 600px;
-}
-
-.feature-icon {
-  width: 48px;
-  height: 48px;
-  background: rgba(0,0,0,0.03);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 1.5rem;
-  color: var(--text-primary);
-}
-
-.feature-icon svg {
-  width: 24px;
-  height: 24px;
-}
-
-.feature-box:not(.primary) h3 {
-  margin-bottom: 0.75rem;
-}
 
 /* Install Steps */
 .install-container {
@@ -896,19 +834,8 @@ code {
     text-align: left;
   }
   
-  .feature-grid {
-    grid-template-columns: 1fr;
-  }
   
-  .feature-box.primary {
-    flex-direction: column;
-    text-align: center;
-    gap: 2rem;
-  }
   
-  .feature-box.primary .feature-icon {
-    margin: 0 auto;
-  }
   
   .install-container {
     grid-template-columns: 1fr;
@@ -976,45 +903,6 @@ code {
   filter: drop-shadow(0 30px 40px rgba(15, 23, 42, 0.14));
 }
 
-/* Citation Record showcase */
-.showcase {
-  display: grid;
-  grid-template-columns: 0.8fr 1fr;
-  gap: 4rem;
-  align-items: center;
-  margin-top: 4rem;
-}
-
-.showcase-card {
-  width: 100%;
-  height: auto;
-  border-radius: 4px;
-  box-shadow: var(--shadow-float);
-  border: 1px solid var(--border);
-}
-
-.showcase-label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #8f2a1f;
-  margin-bottom: 0.75rem;
-}
-
-.showcase-text h3 {
-  font-family: "New York", "Iowan Old Style", Georgia, serif;
-  font-weight: 500;
-  font-size: clamp(1.75rem, 3vw, 2.5rem);
-  margin-bottom: 1rem;
-}
-
-.showcase-text p:not(.showcase-label) {
-  font-size: 1.125rem;
-  line-height: 1.65;
-  max-width: 460px;
-}
-
 .release-section {
   display: flex;
   justify-content: center;
@@ -1024,22 +912,180 @@ code {
   width: min(100%, 520px);
 }
 
+/* Pain points */
+.pain-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.25rem;
+}
+
+.pain {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem 1.5rem;
+}
+
+.pain-quote {
+  font-family: "New York", "Iowan Old Style", Georgia, serif;
+  font-size: 1.2rem;
+  line-height: 1.35;
+  color: var(--text-primary);
+  margin-bottom: 0.9rem;
+}
+
+.pain p:not(.pain-quote) {
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+/* Feature rows with real screenshots */
+.eyebrow {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #8f2a1f;
+  margin-bottom: 0.75rem;
+}
+
+.feature-row {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 4rem;
+  align-items: center;
+  margin-top: 5.5rem;
+}
+
+.feature-row.reverse .feature-text {
+  order: 2;
+}
+
+.feature-text h3 {
+  font-family: "New York", "Iowan Old Style", Georgia, serif;
+  font-weight: 500;
+  font-size: clamp(1.6rem, 2.6vw, 2.2rem);
+  line-height: 1.2;
+  margin-bottom: 1rem;
+}
+
+.feature-text > p:not(.eyebrow) {
+  font-size: 1.075rem;
+  line-height: 1.65;
+}
+
+.feature-points {
+  list-style: none;
+  margin-top: 1.25rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.feature-points li {
+  position: relative;
+  padding-left: 1.25rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.feature-points li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.6em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #8f2a1f;
+}
+
+.feature-shot {
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 24px 36px rgba(15, 23, 42, 0.12));
+}
+
+/* Card gallery */
+.gallery-block {
+  margin-top: 6rem;
+}
+
+.gallery-title {
+  font-family: "New York", "Iowan Old Style", Georgia, serif;
+  font-weight: 500;
+  font-size: clamp(1.75rem, 3vw, 2.5rem);
+  margin-bottom: 1rem;
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+  margin-top: 2.5rem;
+}
+
+.gallery figure {
+  text-align: center;
+}
+
+.gallery img {
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  transition: transform 0.25s ease;
+}
+
+.gallery img:hover {
+  transform: translateY(-6px) rotate(-0.6deg);
+}
+
+.gallery figcaption {
+  margin-top: 0.9rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+/* Trust strip */
+.trust-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem 2rem;
+  margin-top: 5rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border);
+}
+
+.trust-strip span {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
 @media (max-width: 980px) {
-  .showcase {
+  .pain-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .feature-row {
     grid-template-columns: 1fr;
-    gap: 2.5rem;
+    gap: 2rem;
+    margin-top: 4rem;
   }
 
-  .showcase-card {
-    max-width: 420px;
-    margin: 0 auto;
+  .feature-row.reverse .feature-text {
+    order: 0;
   }
 
-  .showcase-text {
-    text-align: center;
+  .gallery {
+    grid-template-columns: repeat(2, 1fr);
   }
+}
 
-  .showcase-text p:not(.showcase-label) {
-    margin: 0 auto;
+@media (max-width: 640px) {
+  .pain-grid {
+    grid-template-columns: 1fr;
   }
 }
