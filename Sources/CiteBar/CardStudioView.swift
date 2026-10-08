@@ -347,17 +347,27 @@ extension CardStudioView {
               let window = NSApp.windows.first(where: { $0.title == "Citation Record" }) else { return }
         var list = ""
         var index = 0
+        var frameSize: CGSize?
         func shot(holding seconds: Double) async {
-            // Key window every time, so each frame has the same shadow and title bar.
-            NSApp.activate(ignoringOtherApps: true)
-            window.makeKeyAndOrderFront(nil)
-            try? await Task.sleep(nanoseconds: 350_000_000)  // let SwiftUI draw
             let name = String(format: "frame-%03d.png", index)
-            let capture = Process()
-            capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-            capture.arguments = ["-x", "-l", String(window.windowNumber), folder.appendingPathComponent(name).path]
-            try? capture.run()
-            capture.waitUntilExit()
+            let url = folder.appendingPathComponent(name)
+            // An inactive window has a smaller shadow and grey controls, which flickers in the
+            // video, so wait for the window to be key and retake any frame that comes out a
+            // different size.
+            for _ in 0..<20 {
+                NSApp.activate(ignoringOtherApps: true)
+                window.makeKeyAndOrderFront(nil)
+                try? await Task.sleep(nanoseconds: 350_000_000)  // let SwiftUI draw
+                guard NSApp.isActive, window.isKeyWindow else { continue }
+                let capture = Process()
+                capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+                capture.arguments = ["-x", "-l", String(window.windowNumber), url.path]
+                try? capture.run()
+                capture.waitUntilExit()
+                guard let size = NSImageRep(contentsOf: url).map({ CGSize(width: $0.pixelsWide, height: $0.pixelsHigh) }) else { continue }
+                if frameSize == nil { frameSize = size }
+                if size == frameSize { break }
+            }
             list += "file '\(name)'\nduration \(seconds)\n"
             index += 1
         }
