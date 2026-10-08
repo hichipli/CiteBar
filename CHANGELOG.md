@@ -5,6 +5,24 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Per-Paper Citation Gains**: Each refresh compares the profile's papers with the previous refresh, so notifications and the menu name the papers that gained citations; clicking opens that paper's "Cited by" page
+- **h-index Progress**: The menu shows when the next h-index is within 5 citations
+- **Milestone Notifications**: Notifications for passing citation milestones (10, 25, 50, 100, 250, 500, 1,000, ...) and for h-index or i10-index increases
+
+### Changed
+- **Change-Only Notifications**: Refresh notifications are posted only when citations changed, including after startup refreshes; "no change" notifications are gone
+
+### Fixed
+- **Google Scholar Rate Limits**: A 429, `/sorry` redirect, or CAPTCHA page now stops the refresh cycle instead of requesting the remaining profiles back to back, pauses scheduled refreshes for 6 hours, and shows the retry time in the menu
+- **Request Spacing**: The 2-second delay between profile requests now also applies after a failed request
+
+### Technical
+- Profile pages are fetched with `pagesize=100` (allowed by Scholar's robots.txt) so per-paper counts come from the same single request
+- Latest paper lists are stored in `~/Library/Application Support/CiteBar/papers.json`
+
 ## [1.5.0] - 2026-04-27
 
 ### Added

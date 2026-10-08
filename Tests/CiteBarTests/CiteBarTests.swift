@@ -209,7 +209,7 @@ final class CiteBarTests: XCTestCase {
     @MainActor
     func testFetchScholarMetrics_Success() async throws {
         let profile = ScholarProfile(id: "_5pgNWgAAAAJ", name: "Test User")
-        guard let url = URL(string: profile.url) else {
+        guard let url = CitationManager.scholarProfileURL(for: profile.id) else {
             XCTFail("Invalid URL")
             return
         }
@@ -230,12 +230,96 @@ final class CiteBarTests: XCTestCase {
         XCTAssertEqual(metrics.citationsByYear?[2023], 10, "2023 yearly citations should be parsed from the citation graph.")
         XCTAssertEqual(metrics.citationsByYear?[2024], 59, "2024 yearly citations should be parsed from the citation graph.")
         XCTAssertEqual(metrics.citationsByYear?[2025], 25, "2025 yearly citations should be parsed from the citation graph.")
+
+        XCTAssertEqual(metrics.papers.count, 15)
+        XCTAssertEqual(metrics.papers.first?.id, "_5pgNWgAAAAJ:IjCSPb-OGe4C")
+        XCTAssertEqual(metrics.papers.first?.citations, 50)
+        XCTAssertEqual(
+            metrics.papers.first?.citedByURL,
+            "https://scholar.google.com/scholar?oi=bibs&hl=en&cites=10836885476083945808"
+        )
+        XCTAssertEqual(metrics.papers.last?.citations, 0, "Uncited papers have an empty count link.")
+        XCTAssertNil(metrics.papers.last?.citedByURL)
+        // Sorted counts 50, 21, 7, 7, 3: h=4, and h=5 needs the fifth paper to gain 2.
+        XCTAssertEqual(StorageManager.computeCitationsToNextHIndex(hIndex: 4, papers: metrics.papers), 2)
+    }
+
+    func testComputePaperGains_ReportsOnlyIncreasesOnKnownPapers() {
+        let previous = [
+            ScholarPaper(id: "a", title: "A", citations: 10, citedByURL: "https://a"),
+            ScholarPaper(id: "b", title: "B", citations: 5, citedByURL: nil),
+            ScholarPaper(id: "c", title: "C", citations: 3, citedByURL: nil)
+        ]
+        let current = [
+            ScholarPaper(id: "a", title: "A", citations: 12, citedByURL: "https://a"),
+            ScholarPaper(id: "b", title: "B", citations: 4, citedByURL: nil), // Scholar recount: ignored
+            ScholarPaper(id: "c", title: "C", citations: 6, citedByURL: nil),
+            ScholarPaper(id: "new", title: "New", citations: 9, citedByURL: nil) // not in baseline: ignored
+        ]
+
+        let gains = StorageManager.computePaperGains(previous: previous, current: current)
+
+        XCTAssertEqual(gains.map(\.title), ["C", "A"], "Largest gain first")
+        XCTAssertEqual(gains.map(\.delta), [3, 2])
+        XCTAssertEqual(StorageManager.computePaperGains(previous: [], current: current), [], "First sight is a baseline")
+    }
+
+    func testComputeCitationsToNextHIndex() {
+        func papers(_ counts: [Int]) -> [ScholarPaper] {
+            counts.enumerated().map { ScholarPaper(id: "\($0.offset)", title: "", citations: $0.element, citedByURL: nil) }
+        }
+        XCTAssertEqual(StorageManager.computeCitationsToNextHIndex(hIndex: 3, papers: papers([9, 4, 3, 3, 1])), 2)
+        XCTAssertEqual(StorageManager.computeCitationsToNextHIndex(hIndex: 0, papers: papers([0])), 1)
+        XCTAssertNil(StorageManager.computeCitationsToNextHIndex(hIndex: 2, papers: papers([5, 5])), "Needs h+1 papers")
+    }
+
+    func testIsRateLimitResponse() {
+        let profilePage = "<table id=\"gsc_rsb_st\"></table>Detecting unusual traffic from your computer network"
+        XCTAssertTrue(CitationManager.isRateLimitResponse(statusCode: 429, url: nil, html: ""))
+        XCTAssertTrue(CitationManager.isRateLimitResponse(
+            statusCode: 200,
+            url: URL(string: "https://www.google.com/sorry/index?continue=x"),
+            html: ""
+        ))
+        XCTAssertTrue(CitationManager.isRateLimitResponse(statusCode: 200, url: nil, html: "<form id=\"gs_captcha_f\">"))
+        XCTAssertFalse(CitationManager.isRateLimitResponse(statusCode: 200, url: nil, html: profilePage))
+        XCTAssertFalse(CitationManager.isRateLimitResponse(statusCode: 500, url: nil, html: ""))
+    }
+
+    func testMilestoneMessages() {
+        let previous = CitationRecord(profileId: "p", citationCount: 95, hIndex: 4, i10Index: 2)
+        let current = CitationRecord(profileId: "p", citationCount: 260, hIndex: 5, i10Index: 2)
+
+        XCTAssertEqual(
+            CitationManager.milestoneMessages(name: "Ada", previous: previous, current: current),
+            ["Ada passed 250 citations", "Ada's h-index rose to 5"]
+        )
+        XCTAssertEqual(CitationManager.milestoneMessages(name: "Ada", previous: current, current: current), [])
+    }
+
+    func testChangeNotificationText() {
+        let gain = PaperGain(title: "Attention Is All You Need", delta: 2, citedByURL: "https://cites")
+        let single = CitationManager.changeNotificationText(for: [
+            .init(name: "Ada", citationDelta: 3, paperGains: [gain, gain], profileURL: "https://profile")
+        ])
+        XCTAssertEqual(single?.title, "+3 new citations")
+        XCTAssertEqual(single?.body, "“Attention Is All You Need” +2 · 1 more paper")
+        XCTAssertEqual(single?.url, "https://cites")
+
+        let multiple = CitationManager.changeNotificationText(for: [
+            .init(name: "Ada", citationDelta: 2, paperGains: [gain], profileURL: "https://ada"),
+            .init(name: "Bob", citationDelta: -1, paperGains: [], profileURL: "https://bob")
+        ])
+        XCTAssertEqual(multiple?.title, "+1 new citation")
+        XCTAssertEqual(multiple?.body, "Ada: “Attention Is All You Need” +2\nBob -1")
+
+        XCTAssertNil(CitationManager.changeNotificationText(for: []))
     }
 
     @MainActor
     func testFetchScholarDisplayName_FromProfilePage() async {
         let profileID = "_5pgNWgAAAAJ"
-        guard let url = URL(string: "https://scholar.google.com/citations?user=\(profileID)&hl=en") else {
+        guard let url = CitationManager.scholarProfileURL(for: profileID) else {
             XCTFail("Invalid URL")
             return
         }
@@ -255,7 +339,7 @@ final class CiteBarTests: XCTestCase {
     @MainActor
     func testFetchScholarProfileSnapshot_ContainsNameAndMetrics() async {
         let profileID = "_5pgNWgAAAAJ"
-        guard let url = URL(string: "https://scholar.google.com/citations?user=\(profileID)&hl=en") else {
+        guard let url = CitationManager.scholarProfileURL(for: profileID) else {
             XCTFail("Invalid URL")
             return
         }
@@ -279,7 +363,7 @@ final class CiteBarTests: XCTestCase {
     @MainActor
     func testFetchScholarDisplayName_FromOgTitleFallback() async {
         let profileID = "fallback123"
-        guard let url = URL(string: "https://scholar.google.com/citations?user=\(profileID)&hl=en") else {
+        guard let url = CitationManager.scholarProfileURL(for: profileID) else {
             XCTFail("Invalid URL")
             return
         }
@@ -309,7 +393,7 @@ final class CiteBarTests: XCTestCase {
     @MainActor
     func testFetchScholarMetrics_NetworkError() async throws {
         let profile = ScholarProfile(id: "error_user", name: "Error User")
-        guard let url = URL(string: profile.url) else {
+        guard let url = CitationManager.scholarProfileURL(for: profile.id) else {
             XCTFail("Invalid URL")
             return
         }

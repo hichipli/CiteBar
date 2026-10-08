@@ -117,6 +117,12 @@ import ServiceManagement
         settings.isRefreshing = refreshing
         save()
     }
+
+    func setScholarPausedUntil(_ date: Date?) {
+        guard settings.scholarPausedUntil != date else { return }
+        settings.scholarPausedUntil = date
+        save()
+    }
     
     func reorderProfiles(_ profiles: [ScholarProfile]) {
         // Update sort order based on new arrangement

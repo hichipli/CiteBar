@@ -612,11 +612,11 @@ struct GeneralTab: View {
 
                 SettingsCard(
                     title: "Notifications",
-                    subtitle: "Get notified when refresh completes with a citation summary."
+                    subtitle: "Get notified when papers gain citations or reach a milestone."
                 ) {
                     SettingsToggleRow(
                         "Show Notifications",
-                        subtitle: "Use macOS notifications for refresh completion.",
+                        subtitle: "Use macOS notifications for new citations and milestones.",
                         isOn: Binding(
                             get: { settingsManager.settings.showNotifications },
                             set: { enabled in
@@ -771,7 +771,7 @@ struct GeneralTab: View {
 
                         SettingsToggleRow(
                             "Show trend (+X in last Y days)",
-                            subtitle: "Display recent growth information when available.",
+                            subtitle: "Display recent growth, newly cited papers, and a nearby next h-index.",
                             isOn: Binding(
                                 get: { settingsManager.settings.showTrendInMenu },
                                 set: { enabled in

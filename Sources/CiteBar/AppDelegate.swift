@@ -42,6 +42,11 @@ import Carbon
     func applicationWillFinishLaunching(_ notification: Notification) {
         installMainMenuIfNeeded()
         registerAppleEventHandlers()
+        // Set before launch finishes so a click that launches the app is still delivered.
+        // UNUserNotificationCenter needs an app bundle; `make run` launches a bare executable.
+        if Bundle.main.bundleIdentifier != nil {
+            UNUserNotificationCenter.current().delegate = self
+        }
     }
 
     private func installMainMenuIfNeeded() {
@@ -186,7 +191,7 @@ import Carbon
 
             // Keep a small delay so historical data can render first.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                citationManager.checkCitations(isStartup: true)
+                citationManager.checkCitations()
             }
         }
     }
@@ -447,8 +452,8 @@ import Carbon
             guard status == .notDetermined else { return }
 
             let alert = NSAlert()
-            alert.messageText = "Enable Refresh Notifications?"
-            alert.informativeText = "CiteBar can notify you when citation refresh cycles complete. You can change this any time in Settings > General."
+            alert.messageText = "Enable Citation Notifications?"
+            alert.informativeText = "CiteBar can notify you when your papers gain citations or reach a milestone. You can change this any time in Settings > General."
             alert.alertStyle = .informational
             alert.addButton(withTitle: "Enable Notifications")
             alert.addButton(withTitle: "Not Now")
@@ -536,7 +541,7 @@ import Carbon
     }
     
     @objc func refreshCitations() {
-        citationManager?.checkCitations()
+        citationManager?.checkCitations(userInitiated: true)
     }
 
     func primeNewProfile(
@@ -583,6 +588,12 @@ import Carbon
             if let url = URL(string: profile.url) {
                 NSWorkspace.shared.open(url)
             }
+        }
+    }
+
+    @objc func openLink(_ sender: NSMenuItem) {
+        if let urlString = sender.representedObject as? String, let url = URL(string: urlString) {
+            NSWorkspace.shared.open(url)
         }
     }
     
@@ -702,6 +713,26 @@ extension AppDelegate: CitationManagerDelegate {
             guard let self = self else { return }
             self.menuBarManager?.updateRefreshingState()
         }
+    }
+}
+
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    // Show banners even while the Settings window keeps the app active.
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .list]
+    }
+
+    // Clicking a citation notification opens the paper's "Cited by" page or the profile.
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        guard let urlString = response.notification.request.content.userInfo["url"] as? String,
+              let url = URL(string: urlString) else { return }
+        await MainActor.run { _ = NSWorkspace.shared.open(url) }
     }
 }
 

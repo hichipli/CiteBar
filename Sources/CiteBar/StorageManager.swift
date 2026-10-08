@@ -4,19 +4,82 @@ actor StorageManager {
     private let citationHistoryURL: URL
     private var citationHistory: [CitationRecord] = []
     private var isInitialized = false
-    
+    private let papersURL: URL
+    private var profilePapers: [String: ProfilePapers]
+
     private static let maxRecordsPerProfile = 1000
-    
+
     init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let appFolder = appSupport.appendingPathComponent("CiteBar")
-        
+
         try? FileManager.default.createDirectory(at: appFolder, withIntermediateDirectories: true)
-        
+
         citationHistoryURL = appFolder.appendingPathComponent("citation_history.json")
-        
+        papersURL = appFolder.appendingPathComponent("papers.json")
+        profilePapers = Self.loadProfilePapers(from: papersURL)
+
         // Load citation history synchronously during initialization
         loadCitationHistory()
+    }
+
+    private static func loadProfilePapers(from url: URL) -> [String: ProfilePapers] {
+        guard let data = try? Data(contentsOf: url) else { return [:] }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return (try? decoder.decode([String: ProfilePapers].self, from: data)) ?? [:]
+    }
+
+    private func saveProfilePapers() {
+        do {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            try encoder.encode(profilePapers).write(to: papersURL, options: .atomic)
+        } catch {
+            AppLog.error("Failed to save paper list: \(error)")
+        }
+    }
+
+    /// Stores the latest paper list for a profile and returns per-paper gains since the
+    /// previous list. Returns no gains the first time a profile's papers are seen.
+    func updatePapers(_ papers: [ScholarPaper], for profileId: String, now: Date = Date()) -> [PaperGain] {
+        // An empty list means parsing failed; keep the previous baseline.
+        guard !papers.isEmpty else { return [] }
+
+        var entry = profilePapers[profileId] ?? ProfilePapers(papers: [])
+        let gains = Self.computePaperGains(previous: entry.papers, current: papers)
+        entry.papers = papers
+        if !gains.isEmpty {
+            entry.lastGains = gains
+            entry.lastGainDate = now
+        }
+        profilePapers[profileId] = entry
+        saveProfilePapers()
+        return gains
+    }
+
+    func getProfilePapers(for profileId: String) -> ProfilePapers? {
+        profilePapers[profileId]
+    }
+
+    /// Papers missing from `previous` are skipped so a paper entering the fetched list
+    /// (new on the profile, or newly inside the first page) is not reported as a gain.
+    static func computePaperGains(previous: [ScholarPaper], current: [ScholarPaper]) -> [PaperGain] {
+        let previousCitations = Dictionary(previous.map { ($0.id, $0.citations) }, uniquingKeysWith: max)
+        return current.compactMap { paper -> PaperGain? in
+            guard let old = previousCitations[paper.id], paper.citations > old else { return nil }
+            return PaperGain(title: paper.title, delta: paper.citations - old, citedByURL: paper.citedByURL)
+        }
+        .sorted { $0.delta > $1.delta }
+    }
+
+    /// Fewest additional citations that would raise the h-index by one: the top h+1 papers
+    /// each need at least h+1 citations.
+    static func computeCitationsToNextHIndex(hIndex: Int, papers: [ScholarPaper]) -> Int? {
+        let target = hIndex + 1
+        let top = papers.map(\.citations).sorted(by: >).prefix(target)
+        guard top.count == target else { return nil }
+        return top.reduce(0) { $0 + max(0, target - $1) }
     }
     
     private nonisolated func loadCitationHistory() {
@@ -183,10 +246,6 @@ actor StorageManager {
     func getLatestRecord(for profileId: String) async -> CitationRecord? {
         await ensureInitialized()
         return latestRecord(for: profileId)
-    }
-    
-    func getLatestCitationCount(for profileId: String) async -> Int? {
-        await getLatestRecord(for: profileId)?.citationCount
     }
     
     func getLatestHIndex(for profileId: String) async -> Int? {

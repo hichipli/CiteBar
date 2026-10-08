@@ -5,7 +5,8 @@ import Cocoa
     private var currentCitations: [ScholarProfile: ProfileMetrics] = [:]
     private var lastError: String?
     private let settingsManager = SettingsManager.shared
-    
+    private static let hIndexProgressThreshold = 5
+
     private static let specificTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
@@ -180,6 +181,20 @@ import Cocoa
             menu.insertItem(relativeTimeItem, at: insertIndex)
             insertIndex += 1
         }
+
+        if let pausedUntil = settingsManager.settings.scholarPausedUntil, pausedUntil > Date() {
+            let retryTime = DateFormatter.localizedString(from: pausedUntil, dateStyle: .none, timeStyle: .short)
+            let pausedItem = NSMenuItem(
+                title: "Scholar is limiting requests; auto-retry after \(retryTime)",
+                action: nil,
+                keyEquivalent: ""
+            )
+            pausedItem.tag = 100
+            pausedItem.isEnabled = false
+            pausedItem.image = NSImage(systemSymbolName: "hourglass", accessibilityDescription: "Paused")
+            menu.insertItem(pausedItem, at: insertIndex)
+            insertIndex += 1
+        }
         
         if !currentCitations.isEmpty || settingsManager.settings.isRefreshing {
             menu.insertItem(NSMenuItem.separator(), at: insertIndex)
@@ -298,6 +313,41 @@ import Cocoa
                 growthItem.isEnabled = false
                 growthItem.image = NSImage(systemSymbolName: growthSymbol, accessibilityDescription: "Growth trend")
                 menu.insertItem(growthItem, at: insertIndex)
+                insertIndex += 1
+            }
+
+            // Paper that gained citations most recently; clicking opens its "Cited by" page.
+            if settingsManager.settings.showTrendInMenu, let gain = metrics.recentPaperGains.first {
+                let others = metrics.recentPaperGains.count - 1
+                let suffix = others > 0 ? " · \(others) more \(others == 1 ? "paper" : "papers")" : ""
+                let gainItem = NSMenuItem(
+                    title: "    \(gain.shortTitle) +\(gain.delta)\(suffix)",
+                    action: #selector(AppDelegate.openLink(_:)),
+                    keyEquivalent: ""
+                )
+                gainItem.tag = 100
+                gainItem.target = NSApplication.shared.delegate
+                gainItem.representedObject = gain.citedByURL ?? profile.url
+                gainItem.image = NSImage(systemSymbolName: "doc.text", accessibilityDescription: "Recently cited paper")
+                menu.insertItem(gainItem, at: insertIndex)
+                insertIndex += 1
+            }
+
+            // Only shown when the next h-index is close, to keep long profile lists short.
+            if settingsManager.settings.showTrendInMenu,
+               let hIndex = metrics.hIndex,
+               let needed = metrics.citationsToNextHIndex,
+               needed <= Self.hIndexProgressThreshold {
+                let citationWord = needed == 1 ? "citation" : "citations"
+                let progressItem = NSMenuItem(
+                    title: "    h-index \(hIndex + 1) is \(needed) \(citationWord) away",
+                    action: nil,
+                    keyEquivalent: ""
+                )
+                progressItem.tag = 100
+                progressItem.isEnabled = false
+                progressItem.image = NSImage(systemSymbolName: "target", accessibilityDescription: "h-index progress")
+                menu.insertItem(progressItem, at: insertIndex)
                 insertIndex += 1
             }
             

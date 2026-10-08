@@ -30,13 +30,43 @@ struct ScholarMetrics {
     let hIndex: Int?
     let i10Index: Int?
     let citationsByYear: [Int: Int]?
+    let papers: [ScholarPaper]
 
-    init(citationCount: Int, hIndex: Int? = nil, i10Index: Int? = nil, citationsByYear: [Int: Int]? = nil) {
+    init(citationCount: Int, hIndex: Int? = nil, i10Index: Int? = nil, citationsByYear: [Int: Int]? = nil, papers: [ScholarPaper] = []) {
         self.citationCount = citationCount
         self.hIndex = hIndex
         self.i10Index = i10Index
         self.citationsByYear = citationsByYear
+        self.papers = papers
     }
+}
+
+/// One row of the publication list on a Scholar profile page.
+struct ScholarPaper: Codable, Equatable {
+    let id: String
+    let title: String
+    let citations: Int
+    let citedByURL: String?
+}
+
+struct PaperGain: Codable, Equatable {
+    let title: String
+    let delta: Int
+    let citedByURL: String?
+
+    /// Quoted title short enough for a menu line or notification.
+    var shortTitle: String {
+        let limit = 48
+        let text = title.count > limit ? title.prefix(limit - 1).trimmingCharacters(in: .whitespaces) + "…" : title
+        return "“\(text)”"
+    }
+}
+
+/// Latest publication list for a profile plus the most recent per-paper gains.
+struct ProfilePapers: Codable {
+    var papers: [ScholarPaper]
+    var lastGains: [PaperGain] = []
+    var lastGainDate: Date?
 }
 
 struct CitationRecord: Codable {
@@ -68,6 +98,8 @@ struct AppSettings: Codable {
     var showI10IndexInMenu: Bool = true
     var showTrendInMenu: Bool = true
     var menuBarPrimaryMetric: MenuBarPrimaryMetric = .totalCitations
+    /// Set when Google Scholar rate-limits us; scheduled refreshes wait until then.
+    var scholarPausedUntil: Date?
 
     enum CodingKeys: String, CodingKey {
         case profiles
@@ -80,6 +112,7 @@ struct AppSettings: Codable {
         case showI10IndexInMenu
         case showTrendInMenu
         case menuBarPrimaryMetric
+        case scholarPausedUntil
     }
 
     enum MenuBarPrimaryMetric: String, CaseIterable, Codable {
@@ -121,6 +154,7 @@ struct AppSettings: Codable {
         showI10IndexInMenu = try container.decodeIfPresent(Bool.self, forKey: .showI10IndexInMenu) ?? true
         showTrendInMenu = try container.decodeIfPresent(Bool.self, forKey: .showTrendInMenu) ?? true
         menuBarPrimaryMetric = try container.decodeIfPresent(MenuBarPrimaryMetric.self, forKey: .menuBarPrimaryMetric) ?? .totalCitations
+        scholarPausedUntil = try container.decodeIfPresent(Date.self, forKey: .scholarPausedUntil)
     }
     
     enum RefreshInterval: String, CaseIterable, Codable {
@@ -177,6 +211,9 @@ struct ProfileMetrics {
     let hIndex: Int?
     let i10Index: Int?
     let citationsByYear: [Int: Int]?
+    /// Citations still needed to reach the next h-index, when the paper list allows computing it.
+    var citationsToNextHIndex: Int?
+    var recentPaperGains: [PaperGain] = []
 
     init(citationCount: Int, hIndex: Int? = nil, i10Index: Int? = nil, citationsByYear: [Int: Int]? = nil) {
         self.citationCount = citationCount
