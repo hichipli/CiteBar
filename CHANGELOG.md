@@ -5,6 +5,18 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.3] - 2026-10-08
+
+### Added
+- **Homebrew**: Install with `brew install --cask hichipli/tap/citebar`, from a new tap that follows each release automatically
+- **Year Snapshots**: On the first refresh of each year, CiteBar saves each paper's citation count, so a year can later be looked back on paper by paper. Backups include the snapshots, and importing keeps the earliest one for each year
+- **Share Images and Demo**: A link preview image for the website, a GitHub social preview, and a short demo video of the time machine on the website and in the README
+
+### Changed
+- **Headline**: The website and README lead with "Stop refreshing Google Scholar." and drop the old "Real Time" tagline
+- **Chinese README**: A complete Simplified Chinese README, linked from the top of the English one
+- **Studio**: Moving through time no longer resizes the window. Past days show "today only" next to Papers instead of a note under the options
+
 ## [1.6.2] - 2026-10-08
 
 ### Added
