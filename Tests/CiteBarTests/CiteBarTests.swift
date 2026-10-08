@@ -567,6 +567,23 @@ final class CiteBarTests: XCTestCase {
         XCTAssertTrue(untracked.moments.isEmpty)
     }
 
+    func testYearStartSnapshots() {
+        let calendar = Calendar.current
+        let paper = { (citations: Int) in
+            ScholarPaper(id: "u:p1", title: "A", citations: citations, citedByURL: nil)
+        }
+        let october = calendar.date(from: DateComponents(year: 2026, month: 10, day: 9))!
+        let november = calendar.date(from: DateComponents(year: 2026, month: 11, day: 2))!
+        let january = calendar.date(from: DateComponents(year: 2027, month: 1, day: 3))!
+
+        var starts = StorageManager.recordingYearStart(nil, papers: [paper(40)], now: october)
+        starts = StorageManager.recordingYearStart(starts, papers: [paper(45)], now: november)
+        starts = StorageManager.recordingYearStart(starts, papers: [paper(52)], now: january)
+
+        XCTAssertEqual(starts[2026], PaperSnapshot(date: october, citations: ["u:p1": 40]), "The first refresh of the year stays")
+        XCTAssertEqual(starts[2027]?.citations["u:p1"], 52)
+    }
+
     func testScholarIDParser() {
         let pasted = """
         Ada: https://scholar.google.com/citations?user=_5pgNWgAAAAJ&hl=en
