@@ -402,6 +402,7 @@ final class CiteBarTests: XCTestCase {
         MockURLProtocol.setMockResponse(for: url, result: .failure(networkError))
         
         let citationManager = CitationManager(urlSession: urlSession)
+        citationManager.requestRetryDelays = [0, 0]
         
         do {
             _ = try await citationManager.fetchScholarMetrics(for: profile)
@@ -415,10 +416,55 @@ final class CiteBarTests: XCTestCase {
 
     @MainActor
     func testStatsCardRendersAtTwiceSocialSize() throws {
-        let metrics = ProfileMetrics(citationCount: 1_284, hIndex: 13, i10Index: 15, citationsByYear: [2025: 347, 2026: 312])
-        let png = try XCTUnwrap(StatsCard(name: "Ada", metrics: metrics, recentGrowth: 27, recentGrowthDays: 30).pngData())
+        var metrics = ProfileMetrics(
+            citationCount: 1_284,
+            hIndex: 13,
+            i10Index: 15,
+            citationsByYear: [2019: 12, 2020: 40, 2021: 88, 2022: 140, 2023: 205, 2024: 301, 2025: 347, 2026: 312]
+        )
+        metrics.topPapers = [
+            ScholarPaper(id: "a", title: "Intelligent Productivity Transformation: Corporate Market Demand Forecasting with the Aid of an AI Virtual Assistant", citations: 412, citedByURL: nil),
+            ScholarPaper(id: "b", title: "A Human-Centered Framework for Transparent, Responsible, and Collaborative AI-Assisted Instructional Design", citations: 208, citedByURL: nil),
+            ScholarPaper(id: "c", title: "Post-pandemic Reflections", citations: 97, citedByURL: nil)
+        ]
+        let png = try XCTUnwrap(StatsCard(name: "Hongming (Chip) Li", metrics: metrics, recentGrowth: 27, recentGrowthDays: 30).pngData())
         let image = try XCTUnwrap(NSBitmapImageRep(data: png))
-        XCTAssertEqual(image.pixelsWide, 2400)
-        XCTAssertEqual(image.pixelsHigh, 1350)
+        XCTAssertEqual(image.pixelsWide, 1800)
+        XCTAssertEqual(image.pixelsHigh, 2400)
+        if let preview = ProcessInfo.processInfo.environment["CITEBAR_CARD_PREVIEW"] {
+            try png.write(to: URL(fileURLWithPath: preview))
+        }
+    }
+
+    func testScholarIDParser() {
+        let pasted = """
+        Ada: https://scholar.google.com/citations?user=_5pgNWgAAAAJ&hl=en
+        https://scholar.google.com/citations?hl=en&user=XoZzqwgAAAAJ and https://scholar.google.com/citations?user=C9Wb_2cAAAAJ
+        oP3xHMMAAAAJ
+        not an id
+        https://scholar.google.com/citations?user=_5pgNWgAAAAJ
+        """
+        XCTAssertEqual(
+            ScholarIDParser.ids(in: pasted),
+            ["_5pgNWgAAAAJ", "XoZzqwgAAAAJ", "C9Wb_2cAAAAJ", "oP3xHMMAAAAJ"]
+        )
+        XCTAssertEqual(ScholarIDParser.ids(in: ""), [])
+    }
+
+    func testRetryDelayEscalatesAndCaps() {
+        XCTAssertEqual(CitationManager.retryDelay(afterFailedCycles: 1, rateLimited: false), 5 * 60)
+        XCTAssertEqual(CitationManager.retryDelay(afterFailedCycles: 3, rateLimited: false), 20 * 60)
+        XCTAssertEqual(CitationManager.retryDelay(afterFailedCycles: 10, rateLimited: false), 60 * 60)
+        XCTAssertEqual(CitationManager.retryDelay(afterFailedCycles: 1, rateLimited: true), 15 * 60)
+        XCTAssertEqual(CitationManager.retryDelay(afterFailedCycles: 10, rateLimited: true), 4 * 60 * 60)
+    }
+
+    func testIsTransient() {
+        XCTAssertTrue(CitationManager.isTransient(URLError(.timedOut)))
+        XCTAssertTrue(CitationManager.isTransient(URLError(.networkConnectionLost)))
+        XCTAssertTrue(CitationManager.isTransient(CitationError.serverError))
+        XCTAssertFalse(CitationManager.isTransient(CitationError.rateLimited))
+        XCTAssertFalse(CitationManager.isTransient(CitationError.profileNotFound))
+        XCTAssertFalse(CitationManager.isTransient(URLError(.badURL)))
     }
 }

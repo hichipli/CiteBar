@@ -8,12 +8,24 @@ struct ScholarProfile: Hashable, Codable {
     var recentGrowth: Int?
     var recentGrowthDays: Int?
     var sortOrder: Int = 0
+    /// Optional group such as a lab or a set of collaborators; nil means ungrouped.
+    var group: String?
     
-    init(id: String, name: String, sortOrder: Int = 0) {
+    init(id: String, name: String, sortOrder: Int = 0, group: String? = nil) {
         self.id = id
         self.name = name
         self.url = "https://scholar.google.com/citations?user=\(id)&hl=en"
         self.sortOrder = sortOrder
+        self.group = group
+    }
+
+    /// Same profile under a new display name, keeping order, group, and state.
+    func renamed(to newName: String) -> ScholarProfile {
+        var copy = ScholarProfile(id: id, name: newName, sortOrder: sortOrder, group: group)
+        copy.isEnabled = isEnabled
+        copy.recentGrowth = recentGrowth
+        copy.recentGrowthDays = recentGrowthDays
+        return copy
     }
     
     static func == (lhs: ScholarProfile, rhs: ScholarProfile) -> Bool {
@@ -214,6 +226,8 @@ struct ProfileMetrics {
     /// Citations still needed to reach the next h-index, when the paper list allows computing it.
     var citationsToNextHIndex: Int?
     var recentPaperGains: [PaperGain] = []
+    /// Most cited papers, for the stats card.
+    var topPapers: [ScholarPaper] = []
 
     init(citationCount: Int, hIndex: Int? = nil, i10Index: Int? = nil, citationsByYear: [Int: Int]? = nil) {
         self.citationCount = citationCount
@@ -229,8 +243,22 @@ struct ProfileMetrics {
     }
 }
 
+/// Why the last refresh left profiles unfetched, and when CiteBar retries on its own.
+enum RefreshIssue: Equatable {
+    case rateLimited(retryAt: Date)
+    case networkUnavailable(retryAt: Date)
+
+    var retryAt: Date {
+        switch self {
+        case .rateLimited(let date), .networkUnavailable(let date):
+            return date
+        }
+    }
+}
+
 @MainActor protocol CitationManagerDelegate: AnyObject {
     func citationsUpdated(_ citations: [ScholarProfile: ProfileMetrics])
     func citationCheckFailed(_ error: Error)
     func refreshingStateChanged(_ isRefreshing: Bool)
+    func refreshIssueChanged(_ issue: RefreshIssue?, failedProfileIDs: Set<String>)
 }

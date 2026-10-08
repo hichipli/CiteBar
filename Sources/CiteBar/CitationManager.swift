@@ -14,6 +14,11 @@ import UserNotifications
     private let storageManager = StorageManager()
     private var refreshTimer: Timer?
     private let urlSession: URLSession
+    private var isChecking = false
+    private var retryTimer: Timer?
+    private var consecutiveFailedCycles = 0
+    /// Waits before the 2nd and 3rd attempt of a request that failed on a network blip.
+    var requestRetryDelays: [TimeInterval] = [2, 5]
     
     private static func makeURLSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
@@ -68,10 +73,17 @@ import UserNotifications
         }
     }
     
-    /// Scheduled and startup refreshes wait out a Scholar rate-limit pause; a refresh the
-    /// user asked for runs anyway.
-    func checkCitations(userInitiated: Bool = false) {
-        let profiles = settingsManager.settings.profiles.filter { $0.isEnabled }
+    /// Scheduled and startup refreshes wait out a Scholar rate-limit pause (and make sure a
+    /// retry is queued for when it ends); a refresh the user asked for runs anyway.
+    /// `onlyProfileIDs` limits an automatic retry to the profiles that failed.
+    func checkCitations(userInitiated: Bool = false, onlyProfileIDs: Set<String>? = nil) {
+        guard !isChecking else { return }
+
+        var profiles = settingsManager.settings.profiles.filter { $0.isEnabled }
+        if let onlyProfileIDs {
+            profiles = profiles.filter { onlyProfileIDs.contains($0.id) }
+            guard !profiles.isEmpty else { return }
+        }
 
         guard !profiles.isEmpty else {
             delegate?.citationsUpdated([:])
@@ -80,9 +92,18 @@ import UserNotifications
 
         if !userInitiated, let pausedUntil = settingsManager.settings.scholarPausedUntil, pausedUntil > Date() {
             AppLog.debug("Skipping refresh; Google Scholar rate-limit pause until \(pausedUntil)")
+            if retryTimer == nil {
+                scheduleRetry(at: pausedUntil, profileIDs: onlyProfileIDs)
+            }
             return
         }
-        
+
+        if userInitiated {
+            retryTimer?.invalidate()
+            retryTimer = nil
+        }
+
+        isChecking = true
         // Set refreshing state
         settingsManager.setRefreshing(true)
         
@@ -221,16 +242,16 @@ import UserNotifications
         let profileURL: String
     }
 
-    // ponytail: fixed pause; switch to exponential backoff if 6 hours proves too short.
-    static let rateLimitPause: TimeInterval = 6 * 60 * 60
     static let recentPaperGainWindow: TimeInterval = 7 * 24 * 60 * 60
     nonisolated static let citationMilestones = [10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 25_000, 50_000, 100_000]
 
     private func performCitationCheck(for profiles: [ScholarProfile]) async {
-        var results: [ScholarProfile: ProfileMetrics] = [:]
         var changes: [ProfileChange] = []
         var milestones: [String] = []
         var rateLimited = false
+        var succeeded = 0
+        // Profiles still worth retrying: not yet fetched, or failed on a network blip.
+        var pending = Set(profiles.map(\.id))
 
         for (index, profile) in profiles.enumerated() {
             // Be respectful to Google's servers, including after a failed request.
@@ -265,8 +286,8 @@ import UserNotifications
                     milestones += Self.milestoneMessages(name: profile.name, previous: previousRecord, current: record)
                 }
 
-                let (updatedProfile, profileMetrics) = await displayData(for: profile, record: record)
-                results[updatedProfile] = profileMetrics
+                succeeded += 1
+                pending.remove(profile.id)
 
                 AppLog.debug(
                     "Fetched \(profile.name): citations=\(metrics.citationCount), h=\(metrics.hIndex ?? -1), i10=\(metrics.i10Index ?? -1), papers=\(metrics.papers.count), paperGains=\(paperGains.count)"
@@ -278,17 +299,43 @@ import UserNotifications
                 break
             } catch {
                 AppLog.error("Failed to fetch citations for \(profile.name): \(error)")
-                // Don't let one profile failure stop the whole process
+                // Don't let one profile failure stop the whole process; only network
+                // failures are worth an automatic retry.
+                if !Self.isTransient(error) {
+                    pending.remove(profile.id)
+                }
             }
         }
 
-        settingsManager.setScholarPausedUntil(rateLimited ? Date().addingTimeInterval(Self.rateLimitPause) : nil)
-        settingsManager.setLastUpdateTime(Date())
-        settingsManager.setRefreshing(false)
-        delegate?.refreshingStateChanged(false)
+        let issue: RefreshIssue?
+        if pending.isEmpty {
+            consecutiveFailedCycles = 0
+            retryTimer?.invalidate()
+            retryTimer = nil
+            settingsManager.setScholarPausedUntil(nil)
+            issue = nil
+        } else {
+            consecutiveFailedCycles += 1
+            let retryAt = Date().addingTimeInterval(
+                Self.retryDelay(afterFailedCycles: consecutiveFailedCycles, rateLimited: rateLimited)
+            )
+            settingsManager.setScholarPausedUntil(rateLimited ? retryAt : nil)
+            scheduleRetry(at: retryAt, profileIDs: pending)
+            issue = rateLimited ? .rateLimited(retryAt: retryAt) : .networkUnavailable(retryAt: retryAt)
+        }
 
-        if !results.isEmpty {
-            delegate?.citationsUpdated(results)
+        if succeeded > 0 {
+            settingsManager.setLastUpdateTime(Date())
+        }
+        settingsManager.setRefreshing(false)
+        isChecking = false
+        delegate?.refreshingStateChanged(false)
+        delegate?.refreshIssueChanged(issue, failedProfileIDs: pending)
+
+        if succeeded > 0 {
+            // Reload every profile from storage so ones that failed this cycle keep showing
+            // their last known data.
+            updateMenuBarWithCurrentData()
             notifyIfNeeded(changes: changes, milestones: milestones)
         } else {
             // Keep showing historical data when the network fails; only surface an
@@ -298,6 +345,43 @@ import UserNotifications
             if !hasHistoricalData {
                 delegate?.citationCheckFailed(rateLimited ? CitationError.rateLimited : CitationError.noDataAvailable)
             }
+        }
+    }
+
+    private func scheduleRetry(at date: Date, profileIDs: Set<String>?) {
+        retryTimer?.invalidate()
+        let timer = Timer(fire: date, interval: 0, repeats: false) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.retryTimer = nil
+                self?.checkCitations(onlyProfileIDs: profileIDs)
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        retryTimer = timer
+        AppLog.debug("Scheduled automatic retry at \(date) for \(profileIDs?.count ?? -1) profiles")
+    }
+
+    /// Wait before automatically retrying a cycle that left profiles unfetched. Network blips
+    /// retry after 5, 10, 20, 40, then 60 minutes; Scholar rate limits after 15, 30, 60, 120,
+    /// then 240 minutes. Refresh Now always works in the meantime.
+    nonisolated static func retryDelay(afterFailedCycles count: Int, rateLimited: Bool) -> TimeInterval {
+        let base: TimeInterval = rateLimited ? 15 * 60 : 5 * 60
+        let cap: TimeInterval = rateLimited ? 4 * 60 * 60 : 60 * 60
+        return min(cap, base * pow(2, Double(max(0, count - 1))))
+    }
+
+    /// Failures worth retrying soon: dropped or missing connections, timeouts, and 5xx.
+    nonisolated static func isTransient(_ error: Error) -> Bool {
+        if (error as? CitationError) == .serverError {
+            return true
+        }
+        guard let urlError = error as? URLError else { return false }
+        switch urlError.code {
+        case .timedOut, .networkConnectionLost, .notConnectedToInternet, .cannotConnectToHost,
+             .cannotFindHost, .dnsLookupFailed, .internationalRoamingOff, .dataNotAllowed:
+            return true
+        default:
+            return false
         }
     }
 
@@ -321,6 +405,7 @@ import UserNotifications
                     papers: profilePapers.papers
                 )
             }
+            metrics.topPapers = Array(profilePapers.papers.sorted { $0.citations > $1.citations }.prefix(3))
             if let gainDate = profilePapers.lastGainDate,
                Date().timeIntervalSince(gainDate) < Self.recentPaperGainWindow {
                 metrics.recentPaperGains = profilePapers.lastGains
@@ -464,6 +549,19 @@ import UserNotifications
     }
 
     private func fetchScholarHTML(from url: URL) async throws -> String {
+        var attempt = 0
+        while true {
+            do {
+                return try await fetchScholarHTMLOnce(from: url)
+            } catch let error where attempt < requestRetryDelays.count && Self.isTransient(error) {
+                AppLog.debug("Request failed (\(error)); retrying in \(requestRetryDelays[attempt])s")
+                try? await Task.sleep(nanoseconds: UInt64(requestRetryDelays[attempt] * 1_000_000_000))
+                attempt += 1
+            }
+        }
+    }
+
+    private func fetchScholarHTMLOnce(from url: URL) async throws -> String {
         let request = makeScholarRequest(for: url)
         let (data, response) = try await urlSession.data(for: request)
 
@@ -478,7 +576,14 @@ import UserNotifications
             throw CitationError.rateLimited
         }
 
-        guard httpResponse.statusCode == 200 else {
+        switch httpResponse.statusCode {
+        case 200:
+            break
+        case 404:
+            throw CitationError.profileNotFound
+        case 500...599:
+            throw CitationError.serverError
+        default:
             throw CitationError.networkError
         }
 
@@ -899,6 +1004,8 @@ enum CitationError: Error, LocalizedError {
     case parsingError
     case noDataAvailable
     case rateLimited
+    case profileNotFound
+    case serverError
     
     var errorDescription: String? {
         switch self {
@@ -918,6 +1025,10 @@ enum CitationError: Error, LocalizedError {
             return "No citation data available"
         case .rateLimited:
             return "Google Scholar is temporarily limiting requests from this network"
+        case .profileNotFound:
+            return "Google Scholar profile not found"
+        case .serverError:
+            return "Google Scholar is temporarily unavailable"
         }
     }
 }

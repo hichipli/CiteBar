@@ -167,11 +167,29 @@ import Carbon
     }
     
     private func finishStartupFlow() {
+#if DEBUG
+        // `-CiteBarDebugOpen panel|profiles|general|about` opens UI at launch for screenshots;
+        // `-CiteBarDebugDark YES` forces dark mode.
+        if UserDefaults.standard.bool(forKey: "CiteBarDebugDark") {
+            NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
+        if let target = UserDefaults.standard.string(forKey: "CiteBarDebugOpen") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                switch target {
+                case "panel": self?.menuBarManager?.togglePanel()
+                case "general": self?.showSettings(pane: .general)
+                case "about": self?.showSettings(pane: .about)
+                default: self?.showSettings(pane: .profiles)
+                }
+            }
+        }
+#endif
+
         // Check if this is first launch (no profiles configured)
         if settingsManager.settings.profiles.isEmpty {
-            // Show settings window for first-time setup
+            // First launch: open straight into adding a profile.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                self.showSettings()
+                self.showSettings(addingProfile: true)
             }
             return
         }
@@ -245,12 +263,10 @@ import Carbon
             statusItem.isVisible = true
 
             // Keep startup state visible immediately, even before first network/storage refresh.
-            if let image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "CiteBar - Launching") {
+            if let image = NSImage(systemSymbolName: "book.circle", accessibilityDescription: "CiteBar - Launching") {
                 button.image = image
             }
-            button.title = " ..."
-            button.action = #selector(menuBarClicked)
-            button.target = self
+            button.title = " …"
         } else {
             markMenuBarDelayObserved(reason: "status-item-button-missing retry=\(retryCount)")
             AppLog.error("Status item button is unavailable during startup")
@@ -261,7 +277,6 @@ import Carbon
         }
         
         menuBarManager = MenuBarManager(statusItem: statusItem)
-        statusItem.menu = menuBarManager?.createMenu()
         statusItem.isVisible = true
         menuBarManager?.showLaunchingState()
         consecutiveStatusItemFailures = 0
@@ -465,50 +480,37 @@ import Carbon
         }
     }
     
-    @objc private func menuBarClicked() {
-        // Handle menu bar click
-    }
-    
     @objc func showSettings() {
+        showSettings(pane: .profiles)
+    }
+
+    func showSettings(pane: SettingsPane = .profiles, addingProfile: Bool = false) {
         hasPresentedLaunchFeedback = true
         launchFeedbackWorkItem?.cancel()
         launchFeedbackWorkItem = nil
         enableDockIconForSettingsWindow()
-        
+
         // Always create a fresh settings window to avoid state issues
         if settingsWindow != nil {
             settingsWindow?.close()
             settingsWindow = nil
         }
-        
-        let settingsView = SettingsView()
-        settingsWindow = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 920, height: 620),
-            styleMask: [.titled, .closable, .resizable],
-            backing: .buffered,
-            defer: false
+
+        let controller = SettingsTabController(
+            model: menuBarManager?.model ?? DashboardModel(),
+            pane: pane,
+            startAddingProfile: addingProfile
         )
-        settingsWindow?.title = "CiteBar Settings"
-        settingsWindow?.titleVisibility = .visible
-        settingsWindow?.titlebarAppearsTransparent = false
-        settingsWindow?.isOpaque = true
-        settingsWindow?.backgroundColor = .windowBackgroundColor
-        settingsWindow?.toolbarStyle = .automatic
-        settingsWindow?.contentViewController = NSHostingController(rootView: settingsView)
-        if let settingsWindow {
-            positionSettingsWindowAtScreenCenter(settingsWindow)
-        }
-        settingsWindow?.delegate = self
-        
-        // Ensure proper window retention
-        settingsWindow?.isReleasedWhenClosed = false
-        settingsWindow?.isRestorable = false
-        
-        settingsWindow?.makeKeyAndOrderFront(nil)
-        DispatchQueue.main.async { [weak self] in
-            guard let self, let settingsWindow = self.settingsWindow else { return }
-            self.positionSettingsWindowAtScreenCenter(settingsWindow)
-        }
+        let window = NSWindow(contentViewController: controller)
+        window.styleMask = [.titled, .closable, .miniaturizable]
+        window.toolbarStyle = .preference
+        window.delegate = self
+        window.isReleasedWhenClosed = false
+        window.isRestorable = false
+        settingsWindow = window
+
+        positionSettingsWindowAtScreenCenter(window)
+        window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -531,13 +533,7 @@ import Carbon
     }
     
     @objc func showSupport() {
-        // Show settings window and navigate to About tab with feedback section
-        showSettings()
-        
-        // Post a notification to switch to About tab and scroll to feedback
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            NotificationCenter.default.post(name: NSNotification.Name("ShowSupportSection"), object: nil)
-        }
+        showSettings(pane: .about)
     }
     
     @objc func refreshCitations() {
@@ -559,29 +555,37 @@ import Carbon
            !displayName.isEmpty,
            let existingProfile = settingsManager.settings.profiles.first(where: { $0.id == profile.id }),
            isPlaceholderProfileName(existingProfile.name, for: existingProfile.id) {
-            var renamedProfile = ScholarProfile(
-                id: existingProfile.id,
-                name: displayName,
-                sortOrder: existingProfile.sortOrder
-            )
-            renamedProfile.isEnabled = existingProfile.isEnabled
-            renamedProfile.recentGrowth = existingProfile.recentGrowth
-            renamedProfile.recentGrowthDays = existingProfile.recentGrowthDays
-            settingsManager.updateProfile(renamedProfile)
+            settingsManager.updateProfile(existingProfile.renamed(to: displayName))
         }
 
         citationManager.updateMenuBarWithCurrentData()
     }
     
+    /// Fetches newly added profiles one at a time, spaced out like a regular refresh.
+    /// Profiles with a snapshot from the add sheet are saved without another request.
+    func primeNewProfiles(
+        _ profiles: [ScholarProfile],
+        snapshots: [String: CitationManager.ScholarProfileSnapshot]
+    ) {
+        profiles.forEach { menuBarManager?.showProfileLoading($0) }
+        Task { @MainActor in
+            var needsDelay = false
+            for profile in profiles {
+                let snapshot = snapshots[profile.id]
+                if needsDelay && snapshot == nil {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                }
+                await primeNewProfile(profile, prefetchedSnapshot: snapshot)
+                needsDelay = snapshot == nil
+            }
+        }
+    }
+
     func updateMenuBarDisplay() {
         // Update menu bar display immediately with existing data
         citationManager?.updateMenuBarWithCurrentData()
     }
     
-    func showNewProfileLoading(_ profile: ScholarProfile) {
-        // Show new profile immediately with loading status
-        menuBarManager?.showProfileLoading(profile)
-    }
     
     @objc func openScholarProfile(_ sender: NSMenuItem) {
         if let profile = sender.representedObject as? ScholarProfile {
@@ -591,12 +595,6 @@ import Carbon
         }
     }
 
-    @objc func openLink(_ sender: NSMenuItem) {
-        if let urlString = sender.representedObject as? String, let url = URL(string: urlString) {
-            NSWorkspace.shared.open(url)
-        }
-    }
-    
     @objc func checkForUpdates() {
         guard let updaterController = updaterController else {
             print("Sparkle updater not available (likely debug mode)")
@@ -713,6 +711,10 @@ extension AppDelegate: CitationManagerDelegate {
             guard let self = self else { return }
             self.menuBarManager?.updateRefreshingState()
         }
+    }
+
+    func refreshIssueChanged(_ issue: RefreshIssue?, failedProfileIDs: Set<String>) {
+        menuBarManager?.updateRefreshIssue(issue, failedProfileIDs: failedProfileIDs)
     }
 }
 
