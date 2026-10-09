@@ -6,8 +6,9 @@ actor StorageManager {
     private var isInitialized = false
     private let papersURL: URL
     private var profilePapers: [String: ProfilePapers]
-
-    private static let maxRecordsPerProfile = 1000
+    private let paperHistoryURL: URL
+    /// Paper history by profile ID; empty unless the user keeps paper history.
+    private var paperHistory: [String: PaperHistory]
 
     /// ~/Library/Application Support/CiteBar, where settings, history, and paper lists live.
     nonisolated static var appFolderURL: URL {
@@ -22,32 +23,43 @@ actor StorageManager {
 
         citationHistoryURL = appFolder.appendingPathComponent("citation_history.json")
         papersURL = appFolder.appendingPathComponent("papers.json")
-        profilePapers = Self.loadProfilePapers(from: papersURL)
+        profilePapers = Self.load(from: papersURL) ?? [:]
+        paperHistoryURL = appFolder.appendingPathComponent("paper_history.json")
+        paperHistory = Self.load(from: paperHistoryURL) ?? [:]
 
         // Load citation history synchronously during initialization
         loadCitationHistory()
     }
 
-    private static func loadProfilePapers(from url: URL) -> [String: ProfilePapers] {
-        guard let data = try? Data(contentsOf: url) else { return [:] }
+    private static func load<T: Decodable>(from url: URL) -> T? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return (try? decoder.decode([String: ProfilePapers].self, from: data)) ?? [:]
+        return try? decoder.decode(T.self, from: data)
     }
 
-    private func saveProfilePapers() {
+    private static func save<T: Encodable>(_ value: T, to url: URL) {
         do {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
-            try encoder.encode(profilePapers).write(to: papersURL, options: .atomic)
+            try encoder.encode(value).write(to: url, options: .atomic)
         } catch {
-            AppLog.error("Failed to save paper list: \(error)")
+            AppLog.error("Failed to save \(url.lastPathComponent): \(error)")
         }
+    }
+
+    private func saveProfilePapers() {
+        Self.save(profilePapers, to: papersURL)
+    }
+
+    private func savePaperHistory() {
+        Self.save(paperHistory, to: paperHistoryURL)
     }
 
     /// Stores the latest paper list for a profile and returns per-paper gains since the
     /// previous list. Returns no gains the first time a profile's papers are seen.
-    func updatePapers(_ papers: [ScholarPaper], for profileId: String, now: Date = Date()) -> [PaperGain] {
+    func updatePapers(_ papers: [ScholarPaper], for profileId: String, keepHistory: Bool = false,
+                      now: Date = Date()) -> [PaperGain] {
         // An empty list means parsing failed; keep the previous baseline.
         guard !papers.isEmpty else { return [] }
 
@@ -68,7 +80,37 @@ actor StorageManager {
         entry.yearStarts = Self.recordingYearStart(entry.yearStarts, papers: papers, now: now)
         profilePapers[profileId] = entry
         saveProfilePapers()
+        if keepHistory {
+            paperHistory[profileId] = Self.recordingPaperPoints(paperHistory[profileId] ?? [:], papers: papers, now: now)
+            savePaperHistory()
+        }
         return gains
+    }
+
+    /// Adds a point for each paper whose citations changed since its last point.
+    static func recordingPaperPoints(_ history: PaperHistory, papers: [ScholarPaper], now: Date) -> PaperHistory {
+        var history = history
+        for paper in papers where history[paper.id]?.last?.citations != paper.citations {
+            history[paper.id, default: []].append(PaperPoint(date: now, citations: paper.citations))
+        }
+        return history
+    }
+
+    /// Starts paper history from the paper lists already saved, dated to the last refresh.
+    func startPaperHistory(at date: Date) {
+        for (profileId, entry) in profilePapers {
+            paperHistory[profileId] = Self.recordingPaperPoints(paperHistory[profileId] ?? [:], papers: entry.papers, now: date)
+        }
+        savePaperHistory()
+    }
+
+    func paperHistory(for profileId: String) -> PaperHistory {
+        paperHistory[profileId] ?? [:]
+    }
+
+    func deletePaperHistory() {
+        paperHistory = [:]
+        try? FileManager.default.removeItem(at: paperHistoryURL)
     }
 
     /// Adds this year's snapshot on the first refresh of the year; later refreshes leave it alone.
@@ -89,9 +131,9 @@ actor StorageManager {
 
     // MARK: - Export and import
 
-    func exportData() async -> (history: [CitationRecord], papers: [String: ProfilePapers]) {
+    func exportData() async -> (history: [CitationRecord], papers: [String: ProfilePapers], paperHistory: [String: PaperHistory]) {
         await ensureInitialized()
-        return (citationHistory, profilePapers)
+        return (citationHistory, profilePapers, paperHistory)
     }
 
     func historySummary() async -> (count: Int, earliest: Date?) {
@@ -99,15 +141,33 @@ actor StorageManager {
         return (citationHistory.count, citationHistory.map(\.timestamp).min())
     }
 
-    /// Adds history and paper lists from a backup without removing anything here.
-    /// Returns how many history records were new.
+    /// When paper history begins, or nil when there is none.
+    func paperHistoryStart() -> Date? {
+        paperHistory.values.flatMap(\.values).compactMap(\.first?.date).min()
+    }
+
+    /// Adds history and paper lists from a backup without removing anything here, except
+    /// history older than `cutoff` (the retention setting). Returns how many history records
+    /// were new.
     @discardableResult
-    func importData(history: [CitationRecord], papers: [String: ProfilePapers]) async -> Int {
+    func importData(history: [CitationRecord], papers: [String: ProfilePapers],
+                    paperHistory incomingPaperHistory: [String: PaperHistory] = [:], since cutoff: Date? = nil) async -> Int {
         await ensureInitialized()
-        let merged = Self.mergeHistory(existing: citationHistory, incoming: history, limitPerProfile: Self.maxRecordsPerProfile)
+        let merged = Self.mergeHistory(existing: citationHistory, incoming: history, since: cutoff)
         let added = merged.count - citationHistory.count
         citationHistory = merged
         saveCitationHistory()
+
+        if !incomingPaperHistory.isEmpty {
+            paperHistory.merge(incomingPaperHistory) { current, incoming in
+                current.merging(incoming) { a, b in
+                    // Union by date, in time order.
+                    var seen = Set<Date>()
+                    return (a + b).sorted { $0.date < $1.date }.filter { seen.insert($0.date).inserted }
+                }
+            }
+            savePaperHistory()
+        }
 
         // Paper lists on this Mac are the most recent baseline, so they win, but each year
         // keeps its earliest snapshot from either Mac.
@@ -122,9 +182,9 @@ actor StorageManager {
         return max(0, added)
     }
 
-    /// Union of both histories, de-duplicated and in time order, keeping the newest
-    /// `limitPerProfile` records of each profile.
-    static func mergeHistory(existing: [CitationRecord], incoming: [CitationRecord], limitPerProfile: Int) -> [CitationRecord] {
+    /// Union of both histories, de-duplicated and in time order, without incoming records
+    /// from before `cutoff`.
+    static func mergeHistory(existing: [CitationRecord], incoming: [CitationRecord], since cutoff: Date? = nil) -> [CitationRecord] {
         func key(_ record: CitationRecord) -> String {
             // Saved timestamps have whole-second precision.
             "\(record.profileId)|\(Int(record.timestamp.timeIntervalSince1970))|\(record.citationCount)"
@@ -132,14 +192,44 @@ actor StorageManager {
 
         var seen = Set(existing.map(key))
         var combined = existing
-        for record in incoming where seen.insert(key(record)).inserted {
+        for record in incoming where record.timestamp >= (cutoff ?? .distantPast) && seen.insert(key(record)).inserted {
             combined.append(record)
         }
+        return combined.sorted { ($0.timestamp, $0.profileId) < ($1.timestamp, $1.profileId) }
+    }
 
-        let byProfile = Dictionary(grouping: combined, by: \.profileId)
-        return byProfile.values
-            .flatMap { $0.sorted { $0.timestamp < $1.timestamp }.suffix(limitPerProfile) }
-            .sorted { ($0.timestamp, $0.profileId) < ($1.timestamp, $1.profileId) }
+    // MARK: - Retention
+
+    /// How many history records are older than `cutoff`.
+    func recordCount(before cutoff: Date) async -> Int {
+        await ensureInitialized()
+        return citationHistory.count { $0.timestamp < cutoff }
+    }
+
+    /// Removes history older than the retention setting. Paper history keeps the last point
+    /// before the cutoff, since that count still holds afterwards. Returns how many history
+    /// records were removed.
+    @discardableResult
+    func applyRetention(_ retention: HistoryRetention, now: Date = Date()) async -> Int {
+        await ensureInitialized()
+        guard let cutoff = retention.cutoff(from: now) else { return 0 }
+        let before = citationHistory.count
+        citationHistory.removeAll { $0.timestamp < cutoff }
+        if citationHistory.count < before {
+            saveCitationHistory()
+        }
+        let trimmed = paperHistory.mapValues { $0.mapValues { Self.trimmed($0, before: cutoff) } }
+        if trimmed != paperHistory {
+            paperHistory = trimmed
+            savePaperHistory()
+        }
+        return before - citationHistory.count
+    }
+
+    /// Drops points older than `cutoff`, keeping the last one before it.
+    static func trimmed(_ points: [PaperPoint], before cutoff: Date) -> [PaperPoint] {
+        let firstKept = points.firstIndex { $0.date >= cutoff } ?? points.count
+        return Array(points[max(0, firstKept - 1)...])
     }
 
     /// Papers missing from `previous` are skipped so a paper entering the fetched list
@@ -222,19 +312,11 @@ actor StorageManager {
         }
     }
     
+    /// Adds a record. How long records are kept is up to the retention setting; see
+    /// `applyRetention`.
     func saveCitationRecord(_ record: CitationRecord) async {
         await ensureInitialized()
         citationHistory.append(record)
-        
-        // Keep only the last 1000 records per profile to manage storage
-        let profileRecords = citationHistory.filter { $0.profileId == record.profileId }
-        
-        if profileRecords.count > Self.maxRecordsPerProfile {
-            citationHistory.removeAll { $0.profileId == record.profileId }
-            let recentRecords = profileRecords.suffix(Self.maxRecordsPerProfile)
-            citationHistory.append(contentsOf: recentRecords)
-        }
-        
         saveCitationHistory()
     }
     
@@ -371,14 +453,6 @@ actor StorageManager {
         }
         
         return false
-    }
-    
-    func cleanupOldRecords(olderThan days: Int = 365) async {
-        await ensureInitialized()
-        let cutoffDate = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
-        
-        citationHistory.removeAll { $0.timestamp < cutoffDate }
-        saveCitationHistory()
     }
     
     func getStorageInfo() async -> (recordCount: Int, filePath: String, fileExists: Bool) {

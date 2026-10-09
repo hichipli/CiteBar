@@ -297,11 +297,40 @@ final class CiteBarTests: XCTestCase {
         let existing = [record("a", 10, 0), record("a", 12, 2)]
         let incoming = [record("a", 10, 0), record("a", 11, 1), record("b", 5, 1)]
 
-        let merged = StorageManager.mergeHistory(existing: existing, incoming: incoming, limitPerProfile: 1000)
+        let merged = StorageManager.mergeHistory(existing: existing, incoming: incoming)
         XCTAssertEqual(merged.map(\.citationCount), [10, 11, 5, 12], "Union in time order, duplicate dropped")
 
-        let trimmed = StorageManager.mergeHistory(existing: existing, incoming: incoming, limitPerProfile: 2)
-        XCTAssertEqual(trimmed.filter { $0.profileId == "a" }.map(\.citationCount), [11, 12])
+        let recent = StorageManager.mergeHistory(existing: existing, incoming: incoming, since: base.addingTimeInterval(86_400))
+        XCTAssertEqual(recent.map(\.citationCount), [10, 11, 5, 12], "Incoming records from the cutoff on are kept")
+        let none = StorageManager.mergeHistory(existing: existing, incoming: incoming, since: base.addingTimeInterval(2 * 86_400))
+        XCTAssertEqual(none.map(\.citationCount), [10, 12], "Older incoming records are left out")
+    }
+
+    func testHistoryRetention() {
+        let now = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 8))!
+        XCTAssertNil(HistoryRetention.forever.cutoff(from: now))
+        XCTAssertEqual(HistoryRetention.twoYears.cutoff(from: now), Calendar.current.date(from: DateComponents(year: 2024, month: 10, day: 8)))
+
+        // Older settings files have no retention or paper history keys.
+        let settings = try? JSONDecoder().decode(AppSettings.self, from: Data(#"{"profiles": [], "historyRetention": "10years"}"#.utf8))
+        XCTAssertEqual(settings?.historyRetention, .forever, "Unknown values fall back to Forever")
+        XCTAssertEqual(settings?.keepsPaperHistory, false)
+    }
+
+    func testPaperHistoryKeepsOnlyChanges() {
+        let day = { (n: Double) in Date(timeIntervalSince1970: 1_790_000_000 + n * 86_400) }
+        let paper = { (id: String, citations: Int) in ScholarPaper(id: id, title: id, citations: citations, citedByURL: nil) }
+
+        var history = StorageManager.recordingPaperPoints([:], papers: [paper("a", 10), paper("b", 3)], now: day(0))
+        history = StorageManager.recordingPaperPoints(history, papers: [paper("a", 10), paper("b", 4)], now: day(1))
+        history = StorageManager.recordingPaperPoints(history, papers: [paper("a", 12), paper("b", 4)], now: day(2))
+        XCTAssertEqual(history["a"], [PaperPoint(date: day(0), citations: 10), PaperPoint(date: day(2), citations: 12)])
+        XCTAssertEqual(history["b"]?.map(\.citations), [3, 4])
+
+        // Trimming keeps the last point before the cutoff, since that count still holds.
+        XCTAssertEqual(StorageManager.trimmed(history["a"]!, before: day(1)).map(\.citations), [10, 12])
+        XCTAssertEqual(StorageManager.trimmed(history["a"]!, before: day(3)).map(\.citations), [12])
+        XCTAssertEqual(StorageManager.trimmed(history["a"]!, before: day(0)).map(\.citations), [10, 12])
     }
 
     @MainActor
@@ -502,6 +531,7 @@ final class CiteBarTests: XCTestCase {
         }
     }
 
+    @MainActor
     func testGazetteHeadlines() {
         var content = CardContent(name: "Hongming (Chip) Li", date: Date(timeIntervalSince1970: 1_791_000_000), citations: 1_284)
         content.milestone = 1_000

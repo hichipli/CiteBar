@@ -12,6 +12,8 @@ struct CiteBarArchive: Codable {
     let settings: AppSettings
     let history: [CitationRecord]
     let papers: [String: ProfilePapers]
+    /// Absent in older backups, and when paper history was never kept.
+    var paperHistory: [String: PaperHistory]?
 }
 
 /// Where data lives, how big it is, and moving it in and out: export, import, and automatic
@@ -72,6 +74,12 @@ struct CiteBarArchive: Codable {
         return total
     }
 
+    /// Size on disk of one file in the CiteBar folder, or nil when it doesn't exist.
+    static func fileSize(_ name: String) -> Int64? {
+        let values = try? folderURL.appendingPathComponent(name).resourceValues(forKeys: [.totalFileAllocatedSizeKey])
+        return values?.totalFileAllocatedSize.map(Int64.init)
+    }
+
     // MARK: - Archive
 
     static func makeArchive(storage: StorageManager) async -> CiteBarArchive {
@@ -82,7 +90,8 @@ struct CiteBarArchive: Codable {
             deviceName: deviceName,
             settings: SettingsManager.shared.settings,
             history: data.history,
-            papers: data.papers
+            papers: data.papers,
+            paperHistory: data.paperHistory.isEmpty ? nil : data.paperHistory
         )
     }
 
@@ -106,7 +115,12 @@ struct CiteBarArchive: Codable {
     /// Adds the archive's profiles, groups, and history to this Mac without deleting anything.
     static func importArchive(_ archive: CiteBarArchive, storage: StorageManager) async -> ImportResult {
         let addedProfiles = SettingsManager.shared.importSettings(archive.settings)
-        let addedRecords = await storage.importData(history: archive.history, papers: archive.papers)
+        let addedRecords = await storage.importData(
+            history: archive.history,
+            papers: archive.papers,
+            paperHistory: archive.paperHistory ?? [:],
+            since: SettingsManager.shared.settings.historyRetention.cutoff()
+        )
         return ImportResult(addedProfiles: addedProfiles, addedRecords: addedRecords)
     }
 

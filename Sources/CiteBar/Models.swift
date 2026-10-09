@@ -113,6 +113,47 @@ struct ProfilePapers: Codable {
     var yearStarts: [Int: PaperSnapshot]?
 }
 
+/// One paper's citation count from the refresh where it last changed. Paper history keeps only
+/// these change points, so a paper that sits still costs nothing.
+struct PaperPoint: Codable, Equatable {
+    let date: Date
+    let citations: Int
+}
+
+/// Points by paper ID, for one profile.
+typealias PaperHistory = [String: [PaperPoint]]
+
+/// How long citation history is kept on this Mac.
+enum HistoryRetention: String, CaseIterable, Codable, Identifiable {
+    case forever
+    case fiveYears = "5years"
+    case twoYears = "2years"
+    case oneYear = "1year"
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .forever: return "Forever"
+        case .fiveYears: return "5 years"
+        case .twoYears: return "2 years"
+        case .oneYear: return "1 year"
+        }
+    }
+
+    /// History from before this date is removed; nil keeps everything.
+    func cutoff(from now: Date = Date()) -> Date? {
+        let years: Int
+        switch self {
+        case .forever: return nil
+        case .fiveYears: years = 5
+        case .twoYears: years = 2
+        case .oneYear: years = 1
+        }
+        return Calendar.current.date(byAdding: .year, value: -years, to: now)
+    }
+}
+
 struct PaperSnapshot: Codable, Equatable {
     let date: Date
     /// Citations by paper ID.
@@ -163,6 +204,9 @@ struct AppSettings: Codable {
     var backupFolderPath: String?
     /// Papers the user starred, by Scholar paper ID ("USER:PAPER").
     var watchedPaperIDs: [String] = []
+    var historyRetention: HistoryRetention = .forever
+    /// Off by default: paper history takes more space than citation history.
+    var keepsPaperHistory = false
 
     enum CodingKeys: String, CodingKey {
         case profiles
@@ -181,6 +225,8 @@ struct AppSettings: Codable {
         case iCloudBackupError
         case backupFolderPath
         case watchedPaperIDs
+        case historyRetention
+        case keepsPaperHistory
     }
 
     enum MenuBarPrimaryMetric: String, CaseIterable, Codable {
@@ -228,6 +274,8 @@ struct AppSettings: Codable {
         iCloudBackupError = try container.decodeIfPresent(String.self, forKey: .iCloudBackupError)
         backupFolderPath = try container.decodeIfPresent(String.self, forKey: .backupFolderPath)
         watchedPaperIDs = try container.decodeIfPresent([String].self, forKey: .watchedPaperIDs) ?? []
+        historyRetention = (try? container.decodeIfPresent(HistoryRetention.self, forKey: .historyRetention)) ?? .forever
+        keepsPaperHistory = try container.decodeIfPresent(Bool.self, forKey: .keepsPaperHistory) ?? false
     }
     
     enum RefreshInterval: String, CaseIterable, Codable {
