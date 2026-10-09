@@ -274,6 +274,8 @@ struct ProfilesPane: View {
         }
         Button("Rename…") { renamingProfile = profile }
         Button("Papers…") { (NSApp.delegate as? AppDelegate)?.showPapers(profileID: profile.id) }
+        Button("Share…") { (NSApp.delegate as? AppDelegate)?.showCardStudio(profileID: profile.id) }
+            .disabled(model.entries.first { $0.id == profile.id }?.metrics == nil)
         Button("Open Scholar Profile") {
             if let url = URL(string: profile.url) {
                 NSWorkspace.shared.open(url)
@@ -796,8 +798,12 @@ struct DataPane: View {
     /// Settings shows up here as soon as the user comes back.
     @State private var iCloudDriveAvailable = DataManager.iCloudDriveURL != nil
     @State private var folderSize: Int64 = 0
+    @State private var fileSizes: [String: Int64] = [:]
     @State private var recordCount = 0
     @State private var earliestRecord: Date?
+    @State private var paperHistoryStart: Date?
+    @State private var pendingRetention: PendingRetention?
+    @State private var confirmingPaperHistoryDelete = false
     @State private var isWorking = false
     @State private var result: String?
     @State private var pendingImport: (url: URL, archive: CiteBarArchive)?
@@ -821,12 +827,53 @@ struct DataPane: View {
                         }
                     }
                 }
-                LabeledContent("Size on disk", value: ByteCountFormatter.string(fromByteCount: folderSize, countStyle: .file))
-                LabeledContent("History", value: historyText)
+                LabeledContent {
+                    Text(sizeText(Self.historyFile))
+                } label: {
+                    Text("Citation history")
+                    Text(historyText)
+                }
+                LabeledContent {
+                    Text(sizeText(Self.papersFile))
+                } label: {
+                    Text("Paper lists")
+                    Text("Each profile's latest papers, plus a snapshot from the start of each year")
+                }
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        Text(sizeText(Self.paperHistoryFile))
+                        if fileSizes[Self.paperHistoryFile] != nil {
+                            Button("Delete…") { confirmingPaperHistoryDelete = true }
+                        }
+                    }
+                } label: {
+                    Text("Paper history")
+                    Text(paperHistoryText)
+                }
+                LabeledContent("Total", value: ByteCountFormatter.string(fromByteCount: folderSize, countStyle: .file))
             } header: {
                 Text("On This Mac")
             } footer: {
-                Text("Profiles, settings, and every snapshot of citation history live in this folder. Nothing is sent to CiteBar.")
+                Text("Profiles, settings, and history live in this folder. Nothing is sent to CiteBar.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Picker(selection: Binding(get: { settingsManager.settings.historyRetention }, set: { chooseRetention($0) })) {
+                    ForEach(HistoryRetention.allCases) { Text($0.title).tag($0) }
+                } label: {
+                    Text("Keep citation history")
+                    Text("The time machine and growth numbers reach back as far as this.")
+                }
+                Toggle(isOn: Binding(get: { settingsManager.settings.keepsPaperHistory }, set: { setKeepsPaperHistory($0) })) {
+                    Text("Keep paper history")
+                    Text("Saves each paper's citations whenever they change, so past days in the time machine can show papers too. Off by default, since it takes more space.")
+                }
+            } header: {
+                Text("What to Keep")
+            } footer: {
+                Text("A shorter period deletes older history once you confirm. Exports and backups you've already made aren't changed.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
@@ -926,7 +973,7 @@ struct DataPane: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 640)
+        .frame(width: 520, height: 700)
         .onAppear(perform: reload)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             reload()
@@ -940,6 +987,24 @@ struct DataPane: View {
             Button("Cancel", role: .cancel) {}
         } message: { pending in
             Text(importSummary(pending.archive))
+        }
+        .alert(
+            pendingRetention.map { "Delete history from before \($0.cutoff.formatted(date: .abbreviated, time: .omitted))?" } ?? "",
+            isPresented: Binding(get: { pendingRetention != nil }, set: { if !$0 { pendingRetention = nil } }),
+            presenting: pendingRetention
+        ) { pending in
+            Button("Delete History", role: .destructive) { applyRetention(pending.retention) }
+            Button("Cancel", role: .cancel) {}
+        } message: { pending in
+            Text("Keeping \(pending.retention.title.lowercased()) of history deletes \(pending.count.decimalString) older \(pending.count == 1 ? "snapshot" : "snapshots"), and any paper history from before then. This can't be undone.")
+        }
+        .alert("Delete paper history?", isPresented: $confirmingPaperHistoryDelete) {
+            Button("Delete", role: .destructive, action: deletePaperHistory)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(settingsManager.settings.keepsPaperHistory
+                 ? "Every saved paper count goes, and paper history starts again from the next refresh. Citation history and the latest paper lists stay."
+                 : "Every saved paper count goes. Citation history and the latest paper lists stay.")
         }
         .alert(
             "Couldn't read that file",
@@ -957,6 +1022,70 @@ struct DataPane: View {
         return DataManager.backupFolderDisplayName
     }
 
+    private struct PendingRetention {
+        let retention: HistoryRetention
+        let cutoff: Date
+        let count: Int
+    }
+
+    private static let historyFile = "citation_history.json"
+    private static let papersFile = "papers.json"
+    private static let paperHistoryFile = "paper_history.json"
+
+    private func sizeText(_ file: String) -> String {
+        fileSizes[file].map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "None"
+    }
+
+    private var paperHistoryText: String {
+        if let start = paperHistoryStart {
+            let since = "Since \(start.formatted(date: .abbreviated, time: .omitted))"
+            return settingsManager.settings.keepsPaperHistory ? since : since + ", no longer recording"
+        }
+        return settingsManager.settings.keepsPaperHistory ? "Starts with the next refresh" : "Off"
+    }
+
+    /// A shorter period asks first when it would delete anything.
+    private func chooseRetention(_ retention: HistoryRetention) {
+        guard let cutoff = retention.cutoff() else {
+            settingsManager.setHistoryRetention(retention)
+            return
+        }
+        Task { @MainActor in
+            let count = await storage?.recordCount(before: cutoff) ?? 0
+            if count > 0 {
+                pendingRetention = PendingRetention(retention: retention, cutoff: cutoff, count: count)
+            } else {
+                applyRetention(retention)
+            }
+        }
+    }
+
+    private func applyRetention(_ retention: HistoryRetention) {
+        settingsManager.setHistoryRetention(retention)
+        Task { @MainActor in
+            await storage?.applyRetention(retention)
+            (NSApp.delegate as? AppDelegate)?.updateMenuBarDisplay()
+            reload()
+        }
+    }
+
+    private func setKeepsPaperHistory(_ keeps: Bool) {
+        settingsManager.setKeepsPaperHistory(keeps)
+        guard keeps else { return }
+        // Start from the paper lists already saved, so there's something right away.
+        Task { @MainActor in
+            await storage?.startPaperHistory(at: settingsManager.settings.lastUpdateTime ?? Date())
+            reload()
+        }
+    }
+
+    private func deletePaperHistory() {
+        Task { @MainActor in
+            await storage?.deletePaperHistory()
+            reload()
+        }
+    }
+
     private var historyText: String {
         guard recordCount > 0 else { return "No snapshots yet" }
         let count = "\(recordCount.decimalString) \(recordCount == 1 ? "snapshot" : "snapshots")"
@@ -972,11 +1101,15 @@ struct DataPane: View {
     private func reload() {
         iCloudDriveAvailable = DataManager.iCloudDriveURL != nil
         folderSize = DataManager.folderSize()
+        fileSizes = Dictionary(uniqueKeysWithValues: [Self.historyFile, Self.papersFile, Self.paperHistoryFile].compactMap { file in
+            DataManager.fileSize(file).map { (file, $0) }
+        })
         Task { @MainActor in
             if let summary = await storage?.historySummary() {
                 recordCount = summary.count
                 earliestRecord = summary.earliest
             }
+            paperHistoryStart = await storage?.paperHistoryStart()
         }
     }
 

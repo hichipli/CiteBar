@@ -104,6 +104,16 @@ import ServiceManagement
         save()
     }
 
+    func setHistoryRetention(_ retention: HistoryRetention) {
+        settings.historyRetention = retention
+        save()
+    }
+
+    func setKeepsPaperHistory(_ keeps: Bool) {
+        settings.keepsPaperHistory = keeps
+        save()
+    }
+
     func setBackupFolder(_ url: URL?) {
         settings.backupFolderPath = url?.path
         settings.iCloudBackupError = nil

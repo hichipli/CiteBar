@@ -86,7 +86,7 @@ Having trouble installing? See the [Install Guide](DISTRIBUTION.md).
 **A citation record worth sharing**
 - Four card styles: Record, Night, Gazette (a front page with a headline written from your numbers), and Certificate
 - Choose what it shows: citations per year, h-index, most cited papers or one paper, growth over 7 to 365 days, and a note
-- Share (AirDrop, Messages, Mail), Copy, or Save in one click
+- Share (AirDrop, Messages, Mail), Copy, or Save in one click, from the panel or from any profile's ⋯ menu in Settings
 
 <img src="website/assets/card-record.png" alt="Record card" width="180"> <img src="website/assets/card-night.png" alt="Night card" width="180"> <img src="website/assets/card-gazette.png" alt="Gazette card" width="180"> <img src="website/assets/card-certificate.png" alt="Certificate card" width="180">
 
@@ -107,7 +107,9 @@ Having trouble installing? See the [Install Guide](DISTRIBUTION.md).
 - No CiteBar servers or accounts
 
 **Your data, portable**
-- Settings › Data shows where data lives (`~/Library/Application Support/CiteBar/`) and how much space it uses
+- Settings › Data shows where data lives (`~/Library/Application Support/CiteBar/`) and how much space each part takes: citation history, paper lists, and paper history
+- Keep citation history forever (the default), or for 5, 2, or 1 year
+- Optional paper history saves each paper's count whenever it changes, so past days in the time machine show papers too
 - Export everything (profiles, groups, settings, full history) to one file and import it on a new Mac; importing only adds, never deletes
 - Optional automatic backup after each refresh to iCloud Drive or any folder you choose, such as Google Drive or Dropbox
 

@@ -181,7 +181,8 @@ import UserNotifications
         )
         await storageManager.saveCitationRecord(record)
         // Baseline for per-paper gains on the next refresh.
-        _ = await storageManager.updatePapers(metrics.papers, for: profile.id)
+        _ = await storageManager.updatePapers(metrics.papers, for: profile.id,
+                                              keepHistory: settingsManager.settings.keepsPaperHistory)
         settingsManager.setLastUpdateTime(Date())
 
         return snapshot
@@ -263,7 +264,8 @@ import UserNotifications
             do {
                 let metrics = try await fetchScholarMetrics(for: profile)
                 let previousRecord = await storageManager.getLatestRecord(for: profile.id)
-                let paperGains = await storageManager.updatePapers(metrics.papers, for: profile.id)
+                let paperGains = await storageManager.updatePapers(metrics.papers, for: profile.id,
+                                                                   keepHistory: settingsManager.settings.keepsPaperHistory)
 
                 let record = CitationRecord(
                     profileId: profile.id,
@@ -342,6 +344,7 @@ import UserNotifications
             // their last known data.
             updateMenuBarWithCurrentData()
             notifyIfNeeded(changes: changes, milestones: milestones, milestoneProfileID: milestoneProfileID)
+            await storageManager.applyRetention(settingsManager.settings.historyRetention)
             await DataManager.backUpIfEnabled(storage: storageManager)
         } else {
             // Keep showing historical data when the network fails; only surface an

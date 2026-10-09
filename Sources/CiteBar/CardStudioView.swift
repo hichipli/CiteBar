@@ -19,6 +19,7 @@ struct CardStudioView: View {
     @State private var note = ""
     @State private var timeline: CitationTimeline?
     @State private var profilePapers: ProfilePapers?
+    @State private var paperHistory: PaperHistory = [:]
     @State private var shareURL: URL?
     @State private var status: Status?
 
@@ -42,8 +43,26 @@ struct CardStudioView: View {
         entries.first { $0.id == profileID } ?? entries.first
     }
 
-    /// Papers are only known for today, so past days leave them off.
     private var isToday: Bool { selectedDate == nil }
+
+    /// The papers as they stood at the end of `date`'s day, from paper history; nil when paper
+    /// history doesn't reach back that far.
+    private func papers(asOf date: Date) -> [ScholarPaper]? {
+        let calendar = Calendar.current
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: date)) ?? date
+        let papers = (profilePapers?.papers ?? []).compactMap { paper -> ScholarPaper? in
+            guard let point = paperHistory[paper.id]?.last(where: { $0.date < endOfDay }) else { return nil }
+            return ScholarPaper(id: paper.id, title: paper.title, citations: point.citations,
+                                citedByURL: paper.citedByURL, year: paper.year)
+        }
+        return papers.isEmpty ? nil : papers
+    }
+
+    /// Past days can show papers only when paper history covers them.
+    private var pastPapers: [ScholarPaper]? {
+        guard let selectedDate, let date = timeline?.point(at: selectedDate)?.date else { return nil }
+        return papers(asOf: date)
+    }
 
     private var paperChoices: [ScholarPaper] {
         let papers = (profilePapers?.papers ?? []).sorted { $0.citations > $1.citations }
@@ -76,16 +95,19 @@ struct CardStudioView: View {
                 startDate: Calendar.current.date(byAdding: .day, value: -growth.coveredDays, to: date) ?? date
             )
         }
-        if isToday {
+        if let papers = isToday ? paperChoices : pastPapers {
             switch papersMode {
             case .none:
                 break
             case .mostCited:
                 if theme.showsPaperList {
-                    content.papers = Array(metrics.topPapers.prefix(3))
+                    content.papers = isToday
+                        ? Array(metrics.topPapers.prefix(3))
+                        : Array(papers.sorted { $0.citations > $1.citations }.prefix(3))
                 }
             case .featured:
-                content.featured = paperChoices.first { $0.id == featuredPaperID } ?? paperChoices.first
+                let featured = paperChoices.first { $0.id == featuredPaperID } ?? paperChoices.first
+                content.featured = papers.first { $0.id == featured?.id }
             }
         }
         content.milestone = timeline?.milestone(on: date)
@@ -199,12 +221,13 @@ struct CardStudioView: View {
                 Toggle("Citations per year", isOn: $showChart)
                     .disabled(!theme.showsChart)
                 Toggle("h-index and i10-index", isOn: $showIndices)
-                // Only the latest paper list is kept, so past days leave papers off.
-                LabeledPicker(title: "Papers", detail: isToday || papersMode == .none ? nil : "today only") {
+                // Without paper history, past days leave papers off.
+                LabeledPicker(title: "Papers", detail: isToday || papersMode == .none || pastPapers != nil ? nil : "today only") {
                     Picker("Papers", selection: $papersRaw) {
                         ForEach(CardPapers.allCases) { Text($0.title).tag($0.rawValue) }
                     }
                 }
+                .help(isToday || pastPapers != nil ? "" : "To show papers on past days, turn on Keep paper history in Settings › Data.")
                 if papersMode == .featured && !paperChoices.isEmpty {
                     Picker("Paper", selection: $featuredPaperID) {
                         ForEach(paperChoices.prefix(40), id: \.id) { paper in
@@ -283,6 +306,7 @@ struct CardStudioView: View {
               let storage = (NSApp.delegate as? AppDelegate)?.citationManager?.storageManager else { return }
         let records = await storage.records(for: id)
         profilePapers = await storage.getProfilePapers(for: id)
+        paperHistory = await storage.paperHistory(for: id)
         timeline = CitationTimeline(records: records)
         if featuredPaperID.isEmpty || !paperChoices.contains(where: { $0.id == featuredPaperID }) {
             featuredPaperID = paperChoices.first?.id ?? ""
@@ -623,10 +647,10 @@ private struct TimeMachineView: View {
         }
     }
 
-    /// The chip to keep visible: the selected day's moment, or the newest one for today.
+    /// The chip to keep visible: the latest moment up to the selected day (or today).
     private var momentInView: CitationTimeline.Moment? {
-        guard let selectedDate else { return timeline.moments.last }
-        return timeline.moments.last { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
+        guard let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: currentDay) else { return nil }
+        return timeline.moments.last { $0.date < endOfDay }
     }
 
     /// The day the card currently shows; today when nothing is selected.
