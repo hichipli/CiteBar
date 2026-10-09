@@ -86,7 +86,7 @@ https://scholar.google.com/citations?user=YOUR_ID_HERE
 **值得分享的引用记录**
 - 四种卡片风格：Record、Night、Gazette（报纸头版风格，标题根据你的数据自动生成）和 Certificate（证书）
 - 自由选择显示内容：每年引用数、h-index、引用最多的论文或某一篇论文、7 到 365 天的增长，以及一句附言
-- 一键分享（隔空投送、信息、邮件）、复制或保存
+- 一键分享（隔空投送、信息、邮件）、复制或保存；可以从面板打开，也可以从设置里任意一个人的 ⋯ 菜单打开
 
 <img src="website/assets/card-record.png" alt="Record 卡片" width="180"> <img src="website/assets/card-night.png" alt="Night 卡片" width="180"> <img src="website/assets/card-gazette.png" alt="Gazette 卡片" width="180"> <img src="website/assets/card-certificate.png" alt="Certificate 卡片" width="180">
 
@@ -107,7 +107,9 @@ https://scholar.google.com/citations?user=YOUR_ID_HERE
 - 没有 CiteBar 服务器，也不需要注册账号
 
 **数据随身带走**
-- Settings › Data 里能看到数据存放位置（`~/Library/Application Support/CiteBar/`）和占用空间
+- Settings › Data 里能看到数据存放位置（`~/Library/Application Support/CiteBar/`），以及每一部分各占多少空间：引用历史、论文列表和论文历史
+- 引用历史默认永久保留，也可以只保留 5 年、2 年或 1 年
+- 可选开启论文历史：每篇论文的引用数一有变化就记下来，时间机器里过去的日子也能显示当时的论文
 - 把所有内容（主页、分组、设置和完整历史）导出成一个文件，到新 Mac 上再导入；导入只会添加，不会删除任何数据
 - 可选在每次刷新后自动备份到 iCloud 云盘，或你选择的任意文件夹，比如 Google Drive 或 Dropbox
 
