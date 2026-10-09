@@ -5,6 +5,20 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.4] - 2026-10-08
+
+### Added
+- **History Retention**: Choose how long to keep citation history in Settings › Data: Forever (the default), 5 years, 2 years, or 1 year. Choosing a shorter period shows how many snapshots would go and asks first
+- **Paper History**: An optional setting, off by default, that saves each paper's citation count whenever it changes. Past days in the time machine then show papers as they stood that day. Backups include it, and it can be deleted on its own
+- **Storage Breakdown**: Settings › Data lists the space taken by citation history, paper lists, and paper history, plus the total
+- **Share from Settings**: Each profile's ⋯ menu in Settings › Profiles has Share…, which opens that person's Citation Record
+
+### Changed
+- **Time Machine**: On a day without a milestone, the moments row scrolls to the latest milestone before it
+
+### Fixed
+- **History Limit**: Citation history was capped at 1,000 snapshots per profile, which with hourly refreshes in older versions kept only about six weeks. History is now kept by date, as long as the setting allows
+
 ## [1.6.3] - 2026-10-08
 
 ### Added

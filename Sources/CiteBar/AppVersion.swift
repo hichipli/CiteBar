@@ -3,10 +3,10 @@ import Foundation
 /// Centralized version management for CiteBar
 struct AppVersion {
     /// Current application version
-    static let current: String = "1.6.3"
+    static let current: String = "1.6.4"
     
     /// Current build number
-    static let build: String = "22"
+    static let build: String = "23"
     
     /// Version display string for UI
     static let displayString: String = "Version \(current)"
@@ -38,14 +38,15 @@ extension AppVersion {
     static let releaseNotes = ReleaseNotes(
         version: current,
         highlights: [
-            "Install with Homebrew: brew install --cask hichipli/tap/citebar",
-            "The Citation Record studio keeps its size as you move through time",
-            "CiteBar now saves each paper's citations at the start of every year, ready for looking back on a year"
+            "Keep citation history as long as you like: forever by default, or 5, 2, or 1 year. The old limit of 1,000 snapshots per profile is gone",
+            "Optional paper history, so past days in the time machine show papers too",
+            "Settings › Data shows how much space each kind of data takes",
+            "Share any profile's citation record from its ⋯ menu in Settings"
         ],
-        description: "CiteBar 1.6.3 is a small update: Homebrew install, a steadier share studio, and a yearly paper snapshot for looking back on your year.",
+        description: "CiteBar 1.6.4 puts you in charge of your history: keep it as long as you like, choose whether to keep paper history, and see what takes up space.",
         technicalNotes: [
-            "papers.json gains yearStarts: each paper's citations on the first refresh of each year; importing a backup keeps the earliest snapshot for each year",
-            "Past days show \"today only\" next to Papers instead of a note that changed the window's height"
+            "History is trimmed by date after each refresh instead of by count; choosing a shorter period asks first",
+            "paper_history.json stores each paper's count only when it changes; backups include it and imports merge it"
         ]
     )
     
