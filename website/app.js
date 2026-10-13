@@ -408,6 +408,27 @@
     copyButtonEl.addEventListener("click", copyCommand);
   }
 
+  // GA4 enhanced measurement doesn't count .dmg as a file download (and GitHub is
+  // off-site, so it only logs a generic outbound click). Send an explicit event.
+  [primaryDownloadEl, secondaryDownloadEl].forEach(function (link) {
+    if (!link) {
+      return;
+    }
+    link.addEventListener("click", function () {
+      if (typeof window.gtag !== "function") {
+        return;
+      }
+      const fileName = link.pathname.split("/").pop();
+      window.gtag("event", "file_download", {
+        file_name: fileName,
+        file_extension: fileName.includes(".") ? fileName.split(".").pop() : "",
+        link_id: link.id,
+        link_text: link.textContent.trim(),
+        link_url: link.href
+      });
+    });
+  });
+
   loadLatestRelease();
   loadRepoStats();
 })();
