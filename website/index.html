@@ -166,17 +166,23 @@
       </a>
       <nav class="site-nav" aria-label="Primary">
         <a class="nav-link" href="#features">Features</a>
+        <a class="nav-link" href="#pricing">Pricing</a>
         <a class="nav-link" href="#install">Install</a>
         <a class="nav-link" href="#faq">FAQ</a>
-        <a id="github-stars" class="github-stars" href="https://github.com/hichipli/CiteBar" target="_blank" rel="noreferrer" aria-label="GitHub stars">
+        <a id="github-stars" class="github-stars" href="https://github.com/hichipli/CiteBar" target="_blank" rel="noreferrer" aria-label="Star CiteBar on GitHub" aria-describedby="github-stars-tip">
           <svg class="github-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <path d="M12 .3C5.5.3.3 5.6.3 12.1c0 5.2 3.4 9.6 8.1 11.2.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.6-4-1.6-.5-1.4-1.3-1.7-1.3-1.7-1.1-.8.1-.8.1-.8 1.2.1 1.9 1.3 1.9 1.3 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.6-1.4-5.6-6.2 0-1.4.5-2.5 1.3-3.4-.1-.3-.6-1.6.1-3.3 0 0 1.1-.4 3.5 1.3 1-.3 2.1-.4 3.2-.4s2.1.1 3.2.4c2.4-1.7 3.5-1.3 3.5-1.3.7 1.7.2 3 .1 3.3.8.9 1.3 2 1.3 3.4 0 4.8-2.9 5.9-5.6 6.2.4.4.8 1.1.8 2.2v3.2c0 .3.2.7.8.6 4.7-1.6 8.1-6 8.1-11.2C23.7 5.6 18.4.3 12 .3z"></path>
           </svg>
+          <span class="stars-label" aria-hidden="true">Star</span>
           <span class="stars-pill" aria-hidden="true">
             <svg class="star-icon" viewBox="0 0 24 24" focusable="false">
               <path d="M12 2.25l2.92 5.92 6.54.95-4.73 4.61 1.12 6.52L12 17.17l-5.85 3.08 1.12-6.52L2.54 9.12l6.54-.95L12 2.25z"></path>
             </svg>
             <strong id="github-stars-count">...</strong>
+          </span>
+          <span id="github-stars-tip" class="stars-tip" role="tooltip">
+            <strong>Stars are citations for software.</strong>
+            Yes, we check ours a little too often too.
           </span>
         </a>
       </nav>
@@ -352,31 +358,38 @@
       </div>
     </section>
 
-    <!-- release -->
-    <section id="release" class="section">
-      <div class="section-inner release-section">
-        <aside class="release-card reveal" aria-live="polite">
-          <div class="card-header">
-            <div class="status-dot"></div>
-            <p class="card-label">Latest Release</p>
-          </div>
-          <div class="card-body">
-            <h2 id="release-version" class="release-version">Loading...</h2>
-            <p id="release-title" class="release-title">Fetching latest release notes...</p>
-            <p class="release-date">Published <time id="release-date">Checking...</time></p>
-            
-            <div class="divider"></div>
-            
-            <p class="card-subtitle">What's New</p>
-            <ul id="release-highlights" class="release-highlights">
-              <li>Loading release highlights...</li>
+    <!-- pricing -->
+    <section id="pricing" class="section">
+      <div class="section-inner">
+        <div class="section-header reveal">
+          <h2 class="section-title">Free. All of it.</h2>
+          <p class="section-desc">No trial, no Pro tier, no credit card. The only thing CiteBar costs you is the habit of refreshing Google Scholar.</p>
+        </div>
+
+        <div class="pricing reveal">
+          <div class="price-card">
+            <p class="eyebrow">Everything</p>
+            <p class="price"><span class="price-currency">$</span>0<span class="price-period">/ forever</span></p>
+            <ul class="feature-points">
+              <li>Every feature, nothing locked</li>
+              <li>Unlimited profiles and groups</li>
+              <li>All four Citation Record styles</li>
+              <li>Every future update</li>
+              <li>No account, no email, no card</li>
             </ul>
+            <a id="download-button-pricing" class="btn btn-primary" href="https://github.com/hichipli/CiteBar/releases/latest">Download Free</a>
+            <p class="price-fineprint">The fine print: there isn't any.</p>
           </div>
-          <div class="card-footer">
-            <a id="release-notes-link" class="link-muted" href="https://github.com/hichipli/CiteBar/releases/latest" target="_blank" rel="noreferrer">Release Notes</a>
-            <a id="release-history-link" class="link-muted" href="https://github.com/hichipli/CiteBar/releases" target="_blank" rel="noreferrer">All Releases</a>
+
+          <div class="feature-text pricing-letter">
+            <p class="eyebrow">Why free?</p>
+            <h3>Honestly, there's nothing to charge for.</h3>
+            <p>CiteBar started with a habit you might know: checking Google Scholar far too often. It runs on your Mac and reads Scholar directly, so there are no CiteBar servers to run and no bills to pass on to you.</p>
+            <p>So there's no catch tucked away somewhere: no ads, no selling your data, no upgrade prompt waiting at your tenth profile. The code is open under the MIT License, so even if work on it ever stops, CiteBar stays yours.</p>
+            <p>Nothing is expected in return. If you'd like to give something back anyway, a <a href="https://github.com/hichipli/CiteBar" target="_blank" rel="noreferrer">star on GitHub</a>, a <a href="https://github.com/hichipli/CiteBar/issues/new/choose" target="_blank" rel="noreferrer">bug report</a>, or a mention to a labmate is more than enough.</p>
+            <p class="signature">Chip, and everyone who has sent in an idea or a bug report</p>
           </div>
-        </aside>
+        </div>
       </div>
     </section>
 
@@ -418,13 +431,35 @@
                 <p>Paste your Google Scholar profile link, or a whole list for your lab. CiteBar takes it from there.</p>
               </div>
             </div>
+            <div class="install-help">
+              <h4>Need Help?</h4>
+              <p>Version <code>1.5.0+</code> is signed and notarized. If macOS still blocks launch, delete the download and install the latest DMG again from the official release page.</p>
+              <a href="https://github.com/hichipli/CiteBar/blob/main/DISTRIBUTION.md" target="_blank" rel="noreferrer" class="link-arrow">Read full distribution guide <span>→</span></a>
+            </div>
           </div>
-          
-          <div class="install-help">
-            <h4>Need Help?</h4>
-            <p>Version <code>1.5.0+</code> is signed and notarized. If macOS still blocks launch, delete the download and install the latest DMG again from the official release page.</p>
-            <a href="https://github.com/hichipli/CiteBar/blob/main/DISTRIBUTION.md" target="_blank" rel="noreferrer" class="link-arrow">Read full distribution guide <span>→</span></a>
-          </div>
+
+          <aside class="release-card" aria-live="polite">
+            <div class="card-header">
+              <div class="status-dot"></div>
+              <p class="card-label">Latest Release</p>
+            </div>
+            <div class="card-body">
+              <h3 id="release-version" class="release-version">Loading...</h3>
+              <p class="release-date">Published <time id="release-date">Checking...</time></p>
+
+              <div class="divider"></div>
+
+              <p class="card-subtitle">What's New</p>
+              <ul id="release-highlights" class="release-highlights">
+                <li>Loading release highlights...</li>
+              </ul>
+              <a id="download-button-release" class="btn btn-primary release-download" href="https://github.com/hichipli/CiteBar/releases/latest">Download DMG</a>
+            </div>
+            <div class="card-footer">
+              <a id="release-notes-link" class="link-muted" href="https://github.com/hichipli/CiteBar/releases/latest" target="_blank" rel="noreferrer">Release Notes</a>
+              <a id="release-history-link" class="link-muted" href="https://github.com/hichipli/CiteBar/releases" target="_blank" rel="noreferrer">All Releases</a>
+            </div>
+          </aside>
         </div>
       </div>
     </section>

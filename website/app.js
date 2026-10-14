@@ -3,14 +3,14 @@
   const repo = document.body.dataset.repo || "CiteBar";
 
   const releaseVersionEl = document.getElementById("release-version");
-  const releaseTitleEl = document.getElementById("release-title");
   const releaseDateEl = document.getElementById("release-date");
   const releaseHighlightsEl = document.getElementById("release-highlights");
   const releaseNotesLinkEl = document.getElementById("release-notes-link");
   const releaseHistoryLinkEl = document.getElementById("release-history-link");
 
-  const primaryDownloadEl = document.getElementById("download-button");
-  const secondaryDownloadEl = document.getElementById("download-button-secondary");
+  const downloadEls = ["download-button", "download-button-pricing", "download-button-release", "download-button-secondary"]
+    .map(function (id) { return document.getElementById(id); })
+    .filter(Boolean);
 
   const githubStarsLinkEl = document.getElementById("github-stars");
   const githubStarsCountEl = document.getElementById("github-stars-count");
@@ -198,22 +198,19 @@
 
   function applyDownloadUrl(url) {
     const safeUrl = url || fallbackReleaseUrl;
-    setHref(primaryDownloadEl, safeUrl);
-    setHref(secondaryDownloadEl, safeUrl);
+    downloadEls.forEach(function (link) {
+      setHref(link, safeUrl);
+    });
   }
 
   function applyReleaseData(releaseData, sourceLabel) {
     const version = releaseData && typeof releaseData.tag_name === "string"
       ? releaseData.tag_name
       : "latest";
-    const releaseName = releaseData && typeof releaseData.name === "string"
-      ? releaseData.name
-      : "Latest stable build";
     const publishedAt = releaseData ? releaseData.published_at : null;
     const asset = pickPreferredAsset(releaseData ? releaseData.assets : null);
 
     setText(releaseVersionEl, version);
-    setText(releaseTitleEl, releaseName);
     setText(releaseDateEl, formatDate(publishedAt));
     if (releaseDateEl && publishedAt) {
       releaseDateEl.setAttribute("datetime", publishedAt);
@@ -247,7 +244,7 @@
       const starsText = formatNumber(stars);
       setText(githubStarsCountEl, starsText);
       if (githubStarsLinkEl) {
-        githubStarsLinkEl.setAttribute("aria-label", "GitHub stars: " + starsText);
+        githubStarsLinkEl.setAttribute("aria-label", "Star CiteBar on GitHub (" + starsText + " stars)");
       }
     }
 
@@ -317,7 +314,6 @@
     } catch (error) {
       if (!cached) {
         setText(releaseVersionEl, "latest");
-        setText(releaseTitleEl, "Could not load release data");
         setText(releaseDateEl, "Unavailable");
         renderHighlights([]);
       }
@@ -410,10 +406,7 @@
 
   // GA4 enhanced measurement doesn't count .dmg as a file download (and GitHub is
   // off-site, so it only logs a generic outbound click). Send an explicit event.
-  [primaryDownloadEl, secondaryDownloadEl].forEach(function (link) {
-    if (!link) {
-      return;
-    }
+  downloadEls.forEach(function (link) {
     link.addEventListener("click", function () {
       if (typeof window.gtag !== "function") {
         return;
