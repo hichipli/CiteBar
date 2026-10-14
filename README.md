@@ -1,6 +1,6 @@
 <div align="center">
 
-**English** · [简体中文](README.zh-CN.md)
+**English** · [简体中文](readme/README.zh-CN.md) · [繁體中文](readme/README.zh-TW.md) · [日本語](readme/README.ja.md) · [한국어](readme/README.ko.md) · [Español](readme/README.es.md) · [Português](readme/README.pt-BR.md) · [Deutsch](readme/README.de.md) · [Français](readme/README.fr.md) · [Русский](readme/README.ru.md)
 
 <img src="Assets.xcassets/AppIcon.appiconset/256.png" alt="CiteBar Logo" width="112" height="112">
 

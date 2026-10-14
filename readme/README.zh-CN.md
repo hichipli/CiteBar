@@ -1,8 +1,8 @@
 <div align="center">
 
-[English](README.md) · **简体中文**
+[English](../README.md) · **简体中文** · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Português](README.pt-BR.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Русский](README.ru.md)
 
-<img src="Assets.xcassets/AppIcon.appiconset/256.png" alt="CiteBar Logo" width="112" height="112">
+<img src="../Assets.xcassets/AppIcon.appiconset/256.png" alt="CiteBar Logo" width="112" height="112">
 
 # CiteBar
 
@@ -14,10 +14,10 @@
   [![Latest Release](https://img.shields.io/github/v/release/hichipli/CiteBar?style=flat-square)](https://github.com/hichipli/CiteBar/releases)
   [![macOS](https://img.shields.io/badge/macOS-13.0+-blue?style=flat-square)](https://www.apple.com/macos/)
   [![Swift](https://img.shields.io/badge/Swift-6.0-orange?style=flat-square)](https://swift.org)
-  [![License](https://img.shields.io/github/license/hichipli/CiteBar?style=flat-square)](LICENSE)
+  [![License](https://img.shields.io/github/license/hichipli/CiteBar?style=flat-square)](../LICENSE)
   [![Downloads](https://img.shields.io/github/downloads/hichipli/CiteBar/total?style=flat-square)](https://github.com/hichipli/CiteBar/releases)
 
-<img src="website/assets/demo.gif" alt="从菜单栏面板到 Citation Record 分享页：把时间机器拖回引用破 1,000 的那一天，再依次切换 Gazette、Certificate 和 Night 主题" width="420">
+<img src="../website/assets/demo.gif" alt="从菜单栏面板到 Citation Record 分享页：把时间机器拖回引用破 1,000 的那一天，再依次切换 Gazette、Certificate 和 Night 主题" width="420">
 
 </div>
 
@@ -59,11 +59,11 @@ https://scholar.google.com/citations?user=YOUR_ID_HERE
 
 如果你正在从 `1.3.x` 或 `1.4.1` 升级，请手动安装一次最新的 DMG。之后 App 内的自动更新就会正常工作。
 
-安装遇到问题？请看[安装指南](DISTRIBUTION.md)（英文）。
+安装遇到问题？请看[安装指南](../DISTRIBUTION.md)（英文）。
 
 ## 主要功能
 
-<img src="website/assets/panel.png" alt="CiteBar 面板：一位 1,284 次引用的学者、每年引用数、一篇刚被引用的论文、能把 h-index 推到 14 的两篇论文、两篇关注的论文，以及一个显示合计引用的课题组" width="360">
+<img src="../website/assets/panel.png" alt="CiteBar 面板：一位 1,284 次引用的学者、每年引用数、一篇刚被引用的论文、能把 h-index 推到 14 的两篇论文、两篇关注的论文，以及一个显示合计引用的课题组" width="360">
 
 **不只是一个数字**
 - 引用数常驻菜单栏，点一下展开面板
@@ -88,7 +88,7 @@ https://scholar.google.com/citations?user=YOUR_ID_HERE
 - 自由选择显示内容：每年引用数、h-index、引用最多的论文或某一篇论文、7 到 365 天的增长，以及一句附言
 - 一键分享（隔空投送、信息、邮件）、复制或保存；可以从面板打开，也可以从设置里任意一个人的 ⋯ 菜单打开
 
-<img src="website/assets/card-record.png" alt="Record 卡片" width="180"> <img src="website/assets/card-night.png" alt="Night 卡片" width="180"> <img src="website/assets/card-gazette.png" alt="Gazette 卡片" width="180"> <img src="website/assets/card-certificate.png" alt="Certificate 卡片" width="180">
+<img src="../website/assets/card-record.png" alt="Record 卡片" width="180"> <img src="../website/assets/card-night.png" alt="Night 卡片" width="180"> <img src="../website/assets/card-gazette.png" alt="Gazette 卡片" width="180"> <img src="../website/assets/card-certificate.png" alt="Certificate 卡片" width="180">
 
 **属于你的引用时间机器**
 - 沿着时间轴拖到任意一天，生成那一天的卡片
@@ -122,7 +122,7 @@ https://scholar.google.com/citations?user=YOUR_ID_HERE
 **轻到可以一直开着**
 - 空闲时 CPU 占用几乎为零
 - 只在你设定的时间间隔进行少量网络请求
-- 更多实现细节见[技术说明](TECHNICAL.md)（英文）
+- 更多实现细节见[技术说明](../TECHNICAL.md)（英文）
 
 ## 隐私
 
@@ -132,10 +132,10 @@ App 使用保守的刷新间隔，请求之间留有间隔，出错后会主动�
 
 ## 帮助与项目文档
 
-- 安装问题或 macOS 安全提示：[安装指南](DISTRIBUTION.md)
-- 从源码构建：[构建指南](SETUP.md)
+- 安装问题或 macOS 安全提示：[安装指南](../DISTRIBUTION.md)
+- 从源码构建：[构建指南](../SETUP.md)
 - Bug 反馈和功能建议：[GitHub Issues](https://github.com/hichipli/CiteBar/issues)
-- 版本变化：[更新日志](CHANGELOG.md)
+- 版本变化：[更新日志](../CHANGELOG.md)
 
 以上文档均为英文。
 
@@ -154,14 +154,14 @@ make run
 
 相关项目文档（英文）：
 
-- [贡献指南](CONTRIBUTING.md)
-- [技术说明](TECHNICAL.md)
-- [发布指南](RELEASING.md)
-- [版本管理](VERSION_MANAGEMENT.md)
+- [贡献指南](../CONTRIBUTING.md)
+- [技术说明](../TECHNICAL.md)
+- [发布指南](../RELEASING.md)
+- [版本管理](../VERSION_MANAGEMENT.md)
 
 ## 许可证
 
-CiteBar 以 [MIT License](LICENSE) 开源。
+CiteBar 以 [MIT License](../LICENSE) 开源。
 
 ## 社区
 
@@ -180,6 +180,6 @@ CiteBar 以 [MIT License](LICENSE) 开源。
 
 **用心为学术圈打造**
 
-[下载最新版本](https://github.com/hichipli/CiteBar/releases/latest) | [反馈问题](https://github.com/hichipli/CiteBar/issues) | [参与贡献](CONTRIBUTING.md)
+[下载最新版本](https://github.com/hichipli/CiteBar/releases/latest) | [反馈问题](https://github.com/hichipli/CiteBar/issues) | [参与贡献](../CONTRIBUTING.md)
 
 </div>
