@@ -1,0 +1,22 @@
+name: Report a bug
+description: Something in CiteBar isn't working as it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: And what did you expect instead? A screenshot helps a lot; paste it right here.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: CiteBar version
+      description: Filled in when you report from CiteBar. Otherwise see Settings › About.
+      placeholder: "1.6.4 (23)"
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "15.5"
