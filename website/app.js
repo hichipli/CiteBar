@@ -422,6 +422,42 @@
     });
   });
 
+  // "Make it yours": each swatch shows the panel in that look, as the app's own swatches do.
+  const lookShotEl = document.getElementById("look-shot");
+  const lookCaptionEl = document.getElementById("look-caption");
+  const lookButtons = Array.prototype.slice.call(document.querySelectorAll(".look-swatches button"));
+
+  function lookSrc(button) {
+    return "assets/look-" + button.dataset.look + ".png";
+  }
+
+  function preloadLooks() {
+    lookButtons.forEach(function (button) {
+      new Image().src = lookSrc(button);
+    });
+  }
+
+  if (lookShotEl && lookButtons.length) {
+    const swatchRow = lookButtons[0].parentElement;
+    swatchRow.addEventListener("pointerenter", preloadLooks, { once: true });
+    swatchRow.addEventListener("focusin", preloadLooks, { once: true });
+
+    lookButtons.forEach(function (button) {
+      button.addEventListener("click", function () {
+        lookButtons.forEach(function (other) {
+          other.setAttribute("aria-pressed", String(other === button));
+        });
+        lookShotEl.classList.add("is-switching");
+        lookShotEl.onload = function () {
+          lookShotEl.classList.remove("is-switching");
+        };
+        lookShotEl.alt = button.dataset.alt;
+        lookShotEl.src = lookSrc(button);
+        setText(lookCaptionEl, button.dataset.caption);
+      });
+    });
+  }
+
   loadLatestRelease();
   loadRepoStats();
 })();

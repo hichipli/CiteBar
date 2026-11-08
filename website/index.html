@@ -101,7 +101,15 @@
         "name": "How does CiteBar read Google Scholar?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Google Scholar has no public API, so CiteBar reads public profile pages, the same page you see in a browser. It makes one request per profile, once a day by default, spaced a few seconds apart, as Scholar's robots.txt allows. If Scholar asks it to slow down, CiteBar backs off and retries later on its own."
+          "text": "Google Scholar has no public API, so CiteBar reads public profile pages, the same page you see in a browser. It makes one request per profile, once a day by default, spaced a few seconds apart, as Scholar's robots.txt allows. If Scholar asks it to slow down or blocks a network for a while, CiteBar backs off, says so in the menu, and tries again on its own, right away if you switch networks."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does CiteBar have to stay open?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. Turn on Keep updating after quitting in Settings › General, and CiteBar keeps checking on its usual schedule after you quit, with the same notifications. It offers this the first time you quit, and you can turn it off there or in System Settings › General › Login Items."
         }
       },
       {
@@ -149,7 +157,7 @@
         "name": "Where should I report bugs or request features?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Use GitHub Issues at https://github.com/hichipli/CiteBar/issues/new/choose and include macOS version, CiteBar version, and screenshots when possible."
+          "text": "In CiteBar, Settings › About › Report an Issue opens a short form with your CiteBar and macOS versions already filled in. You can also use GitHub Issues at https://github.com/hichipli/CiteBar/issues/new/choose."
         }
       }
     ]
@@ -349,6 +357,30 @@
           <img class="feature-shot" src="assets/data.png" width="489" height="650" loading="lazy" alt="The Data tab: storage location and size, automatic backup to iCloud Drive, and export and import.">
         </div>
 
+        <div class="feature-row reveal">
+          <div class="feature-text">
+            <p class="eyebrow">Your look</p>
+            <h3>Make it yours, quietly.</h3>
+            <p>CiteBar follows your Mac's accent color out of the box. Prefer another? Choose a color, the style of the big number, and what sits beside it in the menu bar, even a picture of your own.</p>
+            <ul class="feature-points">
+              <li>Match macOS, or pick Graphite, Ink, Forest, or the original Oxblood, each tuned for light and dark mode</li>
+              <li>A serif, sans serif, or rounded big number</li>
+              <li>Seven menu bar icons, the number alone, or your own image</li>
+            </ul>
+          </div>
+          <figure class="look-demo">
+            <img id="look-shot" class="feature-shot" src="assets/look-system.png" width="412" height="458" loading="lazy" alt="The CiteBar panel opened from a quotation mark and 1,284 in the menu bar, in the Mac's blue accent with a serif number.">
+            <div class="look-swatches" role="group" aria-label="Try a look">
+              <button type="button" aria-pressed="true" aria-label="Match macOS" title="Match macOS" data-look="system" data-caption="Match macOS · Serif · Quotation mark" data-alt="The CiteBar panel opened from a quotation mark and 1,284 in the menu bar, in the Mac's blue accent with a serif number." style="--swatch: conic-gradient(#ff3b30, #ff9500, #ffcc00, #34c759, #0a84ff, #af52de, #ff2d55, #ff3b30)"></button>
+              <button type="button" aria-pressed="false" aria-label="Graphite" title="Graphite" data-look="graphite" data-caption="Graphite in dark mode · Sans serif · Number only" data-alt="The CiteBar panel in dark mode with graphite accents and a sans serif number, opened from 1,284 alone in the menu bar." style="--swatch: #1d1d1f"></button>
+              <button type="button" aria-pressed="false" aria-label="Ink" title="Ink" data-look="ink" data-caption="Ink · Sans serif · Graduation cap" data-alt="The CiteBar panel in deep ink blue with a sans serif number, opened from a graduation cap and 1,284 in the menu bar." style="--swatch: #29458c"></button>
+              <button type="button" aria-pressed="false" aria-label="Forest" title="Forest" data-look="forest" data-caption="Forest · Rounded · Sparkles" data-alt="The CiteBar panel in forest green with a rounded number, opened from sparkles and 1,284 in the menu bar." style="--swatch: #1f6b4a"></button>
+              <button type="button" aria-pressed="false" aria-label="Oxblood" title="Oxblood" data-look="oxblood" data-caption="Oxblood, the original · Serif · Classic" data-alt="The CiteBar panel in the original oxblood with a serif number, opened from the classic book icon in the menu bar." style="--swatch: #9c2b21"></button>
+            </div>
+            <figcaption id="look-caption" aria-live="polite">Match macOS · Serif · Quotation mark</figcaption>
+          </figure>
+        </div>
+
         <div class="trust-strip reveal">
           <span>Open source under MIT</span>
           <span>Signed and notarized by Apple</span>
@@ -495,7 +527,13 @@
           <details class="faq-item" name="faq">
             <summary>How does CiteBar read Google Scholar?</summary>
             <div class="faq-content">
-              <p>Google Scholar has no public API, so CiteBar reads public profile pages, the same page you see in a browser. It makes one request per profile, once a day by default, spaced a few seconds apart, as Scholar's robots.txt allows. If Scholar asks it to slow down, CiteBar backs off and retries later on its own.</p>
+              <p>Google Scholar has no public API, so CiteBar reads public profile pages, the same page you see in a browser. It makes one request per profile, once a day by default, spaced a few seconds apart, as Scholar's robots.txt allows. If Scholar asks it to slow down or blocks a network for a while, CiteBar backs off, says so in the menu, and tries again on its own, right away if you switch networks.</p>
+            </div>
+          </details>
+          <details class="faq-item" name="faq">
+            <summary>Does CiteBar have to stay open?</summary>
+            <div class="faq-content">
+              <p>No. Turn on Keep updating after quitting in Settings › General, and CiteBar keeps checking on its usual schedule after you quit, with the same notifications. It offers this the first time you quit, and you can turn it off there or in System Settings › General › Login Items.</p>
             </div>
           </details>
           <details class="faq-item" name="faq">
@@ -535,7 +573,7 @@
           <details class="faq-item" name="faq">
             <summary>Where should I report bugs or request features?</summary>
             <div class="faq-content">
-              <p>Please use <a href="https://github.com/hichipli/CiteBar/issues/new/choose" target="_blank" rel="noreferrer">GitHub Issues</a> to report any problems or suggest new ideas. Be sure to include your macOS version and CiteBar version when reporting bugs.</p>
+              <p>In CiteBar, Settings › About › Report an Issue opens a short form with your CiteBar and macOS versions already filled in. You can also go straight to <a href="https://github.com/hichipli/CiteBar/issues/new/choose" target="_blank" rel="noreferrer">GitHub Issues</a> to report a problem or suggest an idea.</p>
             </div>
           </details>
         </div>

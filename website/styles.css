@@ -13,6 +13,8 @@
   --accent: #0f172a;
   --accent-hover: #334155;
   --accent-blue: #2563eb;
+  /* Ink, one of the app's accents: eyebrows, list marks, and card rules. */
+  --brand: #29458c;
   
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
@@ -438,7 +440,7 @@ a:hover {
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 4px;
-  background: #8f2a1f;
+  background: var(--brand);
 }
 
 .card-header {
@@ -1017,7 +1019,7 @@ code {
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #8f2a1f;
+  color: var(--brand);
   margin-bottom: 0.75rem;
 }
 
@@ -1069,13 +1071,64 @@ code {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #8f2a1f;
+  background: var(--brand);
 }
 
 .feature-shot {
   width: 100%;
   height: auto;
   filter: drop-shadow(0 24px 36px rgba(15, 23, 42, 0.12));
+}
+
+/* "Make it yours": the panel in each look, picked with swatches like the app's own */
+.look-demo {
+  display: grid;
+  justify-items: center;
+  gap: 1.1rem;
+}
+
+.look-demo .feature-shot {
+  max-width: 412px;
+  transition: opacity 0.2s ease;
+}
+
+.look-demo .feature-shot.is-switching {
+  opacity: 0.55;
+}
+
+.look-swatches {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.look-swatches button {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.14), 0 0 0 3px var(--bg-base), 0 0 0 4.5px transparent;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.look-swatches button:hover {
+  transform: scale(1.08);
+}
+
+.look-swatches button[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.14), 0 0 0 3px var(--bg-base), 0 0 0 4.5px var(--text-secondary);
+}
+
+.look-swatches button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 5px;
+}
+
+.look-demo figcaption {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+  min-height: 1.3em;
 }
 
 /* Card gallery */
@@ -1193,7 +1246,7 @@ code {
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 4px;
-  background: #8f2a1f;
+  background: var(--brand);
 }
 
 .price {
