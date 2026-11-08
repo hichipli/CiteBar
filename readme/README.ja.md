@@ -96,8 +96,8 @@ https://scholar.google.com/citations?user=YOUR_ID_HERE
 - 初日から使えます：CiteBar をインストールする前の節目は Google Scholar の年ごとの被引用数から日付を推定して ~ を付け、インストール以降は毎日の数字を正確に記録します
 
 **控えめで、確実に**
-- リクエストはプロフィールごとに 1 回、2 秒の間隔を空けて送信
-- ネットワークの一時的な不調は自動で再試行。Google Scholar のレート制限にかかった場合は間隔を段階的に延ばし（15 分から最大 4 時間）、自動で再開します
+- リクエストはプロフィールごとに 1 回、数秒の間隔を空けて送信。自動チェックは 1 回につき最大 10 件
+- ネットワークの一時的な不調は自動で再試行。Google Scholar のレート制限にかかった場合は間隔を段階的に延ばし（15 分から最大 4 時間）、自動で再開します。ネットワークが切り替わったときはすぐに再試行します
 - Refresh Now でいつでも手動更新が可能
 - Sparkle による自動アップデート
 
@@ -115,6 +115,7 @@ https://scholar.google.com/citations?user=YOUR_ID_HERE
 
 **macOS ネイティブの使い心地**
 - メニューバーに軽やかに常駐し、ライトモードとダークモードに対応
+- 好みに合わせて：Mac のアクセントカラーかほか 4 色、大きな数字はセリフ・サンセリフ・丸ゴシック、メニューバーのアイコンは 7 種類か自分の画像
 - Profiles、General、Data、About の各タブを備えたネイティブの設定画面
 - ログイン時の自動起動に対応
 - Apple シリコンと Intel の両方に対応
@@ -122,6 +123,7 @@ https://scholar.google.com/citations?user=YOUR_ID_HERE
 **起動しっぱなしでも気にならない軽さ**
 - アイドル時の CPU 使用率はほぼゼロ
 - ネットワーク通信は、設定した間隔での最小限のみ
+- 常駐させたくない場合は Settings › General の「Keep updating after quitting」をオンに。終了後もいつもの間隔でチェックし、通知も届きます（[仕組み](../TECHNICAL.md#updating-without-the-menu-bar-app)、英語）
 - 実装の詳細は [技術ノート](../TECHNICAL.md)（英語）をご覧ください
 
 ## プライバシー

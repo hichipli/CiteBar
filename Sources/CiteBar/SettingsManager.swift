@@ -15,16 +15,68 @@ import ServiceManagement
         try? FileManager.default.createDirectory(at: appFolder, withIntermediateDirectories: true)
         
         settingsURL = appFolder.appendingPathComponent("settings.json")
-        
-        if let data = try? Data(contentsOf: settingsURL),
-           let loadedSettings = try? JSONDecoder().decode(AppSettings.self, from: data) {
+
+        if let loadedSettings = Self.load(from: settingsURL) {
             settings = loadedSettings
         } else {
             settings = AppSettings()
             save()
         }
     }
-    
+
+    private static func load(from url: URL) -> AppSettings? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(AppSettings.self, from: data)
+    }
+
+    /// Reads settings.json again, after a background refresh changed it.
+    func reload() {
+        if let loadedSettings = Self.load(from: settingsURL) {
+            settings = loadedSettings
+        }
+    }
+
+    /// Runs `CiteBar --refresh` while the app is quit (#44). The job is bundled in
+    /// Contents/Library/LaunchAgents; macOS lists it under Login Items › Allow in the Background.
+    private static let backgroundRefreshPlist = "com.hichipli.citebar.refresh.plist"
+    static let backgroundRefresh = SMAppService.agent(plistName: backgroundRefreshPlist)
+
+    /// False for builds without the bundled job, such as `swift run`. Checked on disk rather than
+    /// through `status`, which can say `.notFound` for a job that was simply never registered.
+    static var hasBackgroundRefresh: Bool {
+        FileManager.default.fileExists(atPath: Bundle.main.bundleURL
+            .appendingPathComponent("Contents/Library/LaunchAgents/\(backgroundRefreshPlist)").path)
+    }
+
+    static var backgroundRefreshStatus: SMAppService.Status {
+        hasBackgroundRefresh ? backgroundRefresh.status : .notFound
+    }
+
+    static var isBackgroundRefreshOn: Bool {
+        [.enabled, .requiresApproval].contains(backgroundRefreshStatus)
+    }
+
+    /// `SMAppService` raises an exception outside an app bundle, as in tests or `swift run`.
+    static var loginItemStatus: SMAppService.Status {
+        Bundle.main.bundleURL.pathExtension == "app" ? SMAppService.mainApp.status : .notFound
+    }
+
+    /// Returns the error to show when macOS refuses.
+    @discardableResult
+    func setBackgroundRefresh(_ enabled: Bool) -> Error? {
+        do {
+            if enabled {
+                try Self.backgroundRefresh.register()
+            } else {
+                try Self.backgroundRefresh.unregister()
+            }
+            return nil
+        } catch {
+            AppLog.error("Couldn't \(enabled ? "register" : "unregister") background refresh: \(error)")
+            return error
+        }
+    }
+
     func save() {
         do {
             let data = try JSONEncoder().encode(settings)
@@ -191,6 +243,21 @@ import ServiceManagement
         settings.menuBarPrimaryMetric = metric
         save()
     }
+
+    func setPanelAccent(_ accent: AppSettings.PanelAccent) {
+        settings.panelAccent = accent
+        save()
+    }
+
+    func setNumberStyle(_ style: AppSettings.PanelNumberStyle) {
+        settings.numberStyle = style
+        save()
+    }
+
+    func setMenuBarIcon(_ icon: MenuBarIcon) {
+        settings.menuBarIcon = icon
+        save()
+    }
     
     func setAutoLaunch(_ enabled: Bool) {
         settings.autoLaunch = enabled
@@ -205,7 +272,7 @@ import ServiceManagement
     
     func isAutoLaunchEnabled() -> Bool {
         // Check SMAppService status first
-        switch SMAppService.mainApp.status {
+        switch Self.loginItemStatus {
         case .enabled:
             return true
         case .notRegistered, .notFound, .requiresApproval:

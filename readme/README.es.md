@@ -96,8 +96,8 @@ Si actualizas desde `1.3.x` o `1.4.1`, instala manualmente el DMG más reciente 
 - Funciona desde el primer día: los hitos anteriores a la instalación de CiteBar se fechan a partir de los recuentos anuales de Google Scholar y se marcan con ~, y cada día desde entonces queda registrado con exactitud
 
 **Respetuoso y fiable**
-- Una sola solicitud por perfil, con dos segundos de separación entre una y otra
-- Los fallos de red se reintentan automáticamente; ante los límites de frecuencia de Google Scholar, la app espera de forma progresiva (de 15 minutos hasta 4 horas) y se reanuda sola
+- Una sola solicitud por perfil, con unos segundos de separación y como máximo diez perfiles por comprobación automática
+- Los fallos de red se reintentan automáticamente; ante los límites de frecuencia de Google Scholar, la app espera de forma progresiva (de 15 minutos hasta 4 horas) y se reanuda sola, o enseguida si cambias de red
 - Refresh Now funciona en cualquier momento
 - Actualizaciones automáticas mediante Sparkle
 
@@ -115,6 +115,7 @@ Si actualizas desde `1.3.x` o `1.4.1`, instala manualmente el DMG más reciente 
 
 **Experiencia nativa de macOS**
 - Presencia ligera en la barra de menús, con modo claro y oscuro
+- A tu gusto: el color de acento del Mac u otro de cuatro, la cifra grande en serif, sans o redondeada, y siete iconos para la barra de menús o una imagen tuya
 - Settings nativos con las pestañas Profiles, General, Data y About
 - Opción de abrirse al iniciar sesión
 - Compatible con Apple Silicon e Intel
@@ -122,6 +123,7 @@ Si actualizas desde `1.3.x` o `1.4.1`, instala manualmente el DMG más reciente 
 **Tan ligero que puedes dejarlo siempre abierto**
 - Uso de CPU prácticamente nulo en reposo
 - Actividad de red mínima, con intervalos que tú controlas
+- ¿Prefieres no tenerla abierta? Activa «Keep updating after quitting» en Settings › General y CiteBar seguirá comprobando a su hora y avisándote ([cómo funciona](../TECHNICAL.md#updating-without-the-menu-bar-app), en inglés)
 - Más detalles de implementación en las [notas técnicas](../TECHNICAL.md) (en inglés)
 
 ## Privacidad

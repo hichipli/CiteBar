@@ -96,8 +96,8 @@ Having trouble installing? See the [Install Guide](DISTRIBUTION.md).
 - Works from day one: milestones from before you installed CiteBar are dated from Google Scholar's yearly counts and marked with ~, and every day since is recorded exactly
 
 **Respectful and reliable**
-- One request per profile, spaced two seconds apart
-- Network hiccups retry automatically; Google Scholar rate limits back off gradually (15 minutes up to 4 hours) and resume on their own
+- One request per profile, a few seconds apart, at most ten profiles per automatic check
+- Network hiccups retry automatically; Google Scholar rate limits back off gradually (15 minutes up to 4 hours) and resume on their own, or right away when the network changes
 - Refresh Now works any time
 - Automatic updates via Sparkle
 
@@ -115,6 +115,7 @@ Having trouble installing? See the [Install Guide](DISTRIBUTION.md).
 
 **Native macOS experience**
 - Lightweight menu bar presence, light and dark mode
+- Make it yours: your Mac's accent color or one of four others, a serif, sans, or rounded big number, and seven menu bar icons or your own image
 - Native Settings with Profiles, General, Data, and About tabs
 - Launch-at-login support
 - Apple Silicon and Intel support
@@ -122,6 +123,7 @@ Having trouble installing? See the [Install Guide](DISTRIBUTION.md).
 **Light enough to leave running**
 - Near-zero CPU usage when idle
 - Minimal network activity at user-controlled intervals
+- Rather not keep it open? Turn on Keep updating after quitting in Settings › General, and CiteBar still checks on schedule and notifies you ([how it works](TECHNICAL.md#updating-without-the-menu-bar-app))
 - More implementation details in [Technical Notes](TECHNICAL.md)
 
 ## Privacy

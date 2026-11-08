@@ -96,8 +96,8 @@ https://scholar.google.com/citations?user=YOUR_ID_HERE
 - 第一天就能用：安装 CiteBar 之前的里程碑，会根据 Google Scholar 的每年引用数估算日期并标上 ~；从安装那天起，每一天都精确记录
 
 **克制又可靠**
-- 每个主页只发一次请求，请求之间间隔两秒
-- 网络抖动会自动重试；遇到 Google Scholar 限流时逐步放慢（15 分钟到 4 小时），之后自动恢复
+- 每个主页只发一次请求，请求之间间隔几秒，每次自动检查最多十个主页
+- 网络抖动会自动重试；遇到 Google Scholar 限流时逐步放慢（15 分钟到 4 小时），之后自动恢复，换了网络会立即重试
 - 随时可以点 Refresh Now 手动刷新
 - 通过 Sparkle 自动更新
 
@@ -115,6 +115,7 @@ https://scholar.google.com/citations?user=YOUR_ID_HERE
 
 **原生的 macOS 体验**
 - 轻巧地待在菜单栏，支持浅色和深色模式
+- 随你喜欢：跟随 Mac 的强调色或另选四种颜色，大数字可选衬线、无衬线或圆体，菜单栏图标有七种，也可以用自己的图片
 - 原生设置窗口，包含 Profiles、General、Data 和 About 四个标签页
 - 支持登录时自动启动
 - 支持 Apple 芯片和 Intel 芯片
@@ -122,6 +123,7 @@ https://scholar.google.com/citations?user=YOUR_ID_HERE
 **轻到可以一直开着**
 - 空闲时 CPU 占用几乎为零
 - 只在你设定的时间间隔进行少量网络请求
+- 不想一直开着？在 Settings › General 打开“Keep updating after quitting”，退出后仍会按时检查并发通知（[原理](../TECHNICAL.md#updating-without-the-menu-bar-app)，英文）
 - 更多实现细节见[技术说明](../TECHNICAL.md)（英文）
 
 ## 隐私

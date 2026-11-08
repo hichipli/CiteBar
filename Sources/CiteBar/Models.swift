@@ -207,6 +207,37 @@ struct AppSettings: Codable {
     var historyRetention: HistoryRetention = .forever
     /// Off by default: paper history takes more space than citation history.
     var keepsPaperHistory = false
+    var panelAccent: PanelAccent = .system
+    var numberStyle: PanelNumberStyle = .serif
+    var menuBarIcon: MenuBarIcon = .quote
+
+    /// The panel's highlight color. `system` follows the Mac's own accent color.
+    enum PanelAccent: String, CaseIterable, Codable {
+        case system, graphite, ink, forest, oxblood
+
+        var displayName: String {
+            switch self {
+            case .system: return "Match macOS"
+            case .graphite: return "Graphite"
+            case .ink: return "Ink"
+            case .forest: return "Forest"
+            case .oxblood: return "Oxblood"
+            }
+        }
+    }
+
+    /// Typeface for the panel's big number.
+    enum PanelNumberStyle: String, CaseIterable, Codable {
+        case serif, sans, rounded
+
+        var displayName: String {
+            switch self {
+            case .serif: return "Serif"
+            case .sans: return "Sans serif"
+            case .rounded: return "Rounded"
+            }
+        }
+    }
 
     enum CodingKeys: String, CodingKey {
         case profiles
@@ -227,6 +258,9 @@ struct AppSettings: Codable {
         case watchedPaperIDs
         case historyRetention
         case keepsPaperHistory
+        case panelAccent
+        case numberStyle
+        case menuBarIcon
     }
 
     enum MenuBarPrimaryMetric: String, CaseIterable, Codable {
@@ -276,6 +310,9 @@ struct AppSettings: Codable {
         watchedPaperIDs = try container.decodeIfPresent([String].self, forKey: .watchedPaperIDs) ?? []
         historyRetention = (try? container.decodeIfPresent(HistoryRetention.self, forKey: .historyRetention)) ?? .forever
         keepsPaperHistory = try container.decodeIfPresent(Bool.self, forKey: .keepsPaperHistory) ?? false
+        panelAccent = (try? container.decodeIfPresent(PanelAccent.self, forKey: .panelAccent)) ?? .system
+        numberStyle = (try? container.decodeIfPresent(PanelNumberStyle.self, forKey: .numberStyle)) ?? .serif
+        menuBarIcon = (try? container.decodeIfPresent(MenuBarIcon.self, forKey: .menuBarIcon)) ?? .quote
     }
     
     enum RefreshInterval: String, CaseIterable, Codable {
@@ -349,12 +386,13 @@ struct ProfileMetrics {
 
 /// Why the last refresh left profiles unfetched, and when CiteBar retries on its own.
 enum RefreshIssue: Equatable {
-    case rateLimited(retryAt: Date)
+    /// `checkedAt` is nil when a saved pause was restored at launch, with no new check behind it.
+    case rateLimited(retryAt: Date, checkedAt: Date?)
     case networkUnavailable(retryAt: Date)
 
     var retryAt: Date {
         switch self {
-        case .rateLimited(let date), .networkUnavailable(let date):
+        case .rateLimited(let date, _), .networkUnavailable(let date):
             return date
         }
     }
@@ -364,5 +402,6 @@ enum RefreshIssue: Equatable {
     func citationsUpdated(_ citations: [ScholarProfile: ProfileMetrics])
     func citationCheckFailed(_ error: Error)
     func refreshingStateChanged(_ isRefreshing: Bool)
+    func refreshProgressChanged(done: Int, total: Int)
     func refreshIssueChanged(_ issue: RefreshIssue?, failedProfileIDs: Set<String>)
 }

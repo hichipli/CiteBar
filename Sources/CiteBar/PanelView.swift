@@ -3,16 +3,21 @@ import SwiftUI
 // MARK: - Design tokens
 
 enum Theme {
-    /// Oxblood ink in light mode, a soft coral in dark mode. Used sparingly: the current
-    /// year, newly cited papers, h-index progress.
-    static let accent = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor(srgbRed: 0.93, green: 0.52, blue: 0.44, alpha: 1)
-            : NSColor(srgbRed: 0.61, green: 0.17, blue: 0.13, alpha: 1)
-    })
+    /// The accent picked in Settings › General. Used sparingly: the current year, newly cited
+    /// papers, h-index progress, watched stars.
+    @MainActor static var accent: Color { SettingsManager.shared.settings.panelAccent.color }
 
     static func serif(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         .system(size: size, weight: weight, design: .serif)
+    }
+
+    /// The panel's big number, in the typeface picked in Settings › General.
+    @MainActor static func number(_ size: CGFloat) -> Font {
+        switch SettingsManager.shared.settings.numberStyle {
+        case .serif: return .system(size: size, weight: .medium, design: .serif)
+        case .sans: return .system(size: size, weight: .semibold)
+        case .rounded: return .system(size: size, weight: .semibold, design: .rounded)
+        }
     }
 
     static let sectionLabel = Font.system(size: 10.5, weight: .semibold)
@@ -21,6 +26,27 @@ enum Theme {
     static let growthMarkerWidth: CGFloat = 11
     /// The growth window in days; profiles tracked for less show their own day count.
     static let growthWindowDays = 30
+}
+
+extension AppSettings.PanelAccent {
+    /// Each color is tuned twice, deeper on light backgrounds and lighter on dark ones, so
+    /// small text and 5 pt dots stay legible in both.
+    var color: Color {
+        switch self {
+        case .system: return Color(nsColor: .controlAccentColor)
+        case .graphite: return Color(nsColor: .labelColor)
+        case .ink: return Self.dynamic(light: (0.16, 0.27, 0.55), dark: (0.56, 0.68, 0.98))
+        case .forest: return Self.dynamic(light: (0.12, 0.42, 0.29), dark: (0.42, 0.78, 0.57))
+        case .oxblood: return Self.dynamic(light: (0.61, 0.17, 0.13), dark: (0.93, 0.52, 0.44))
+        }
+    }
+
+    private static func dynamic(light: (CGFloat, CGFloat, CGFloat), dark: (CGFloat, CGFloat, CGFloat)) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let rgb = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+            return NSColor(srgbRed: rgb.0, green: rgb.1, blue: rgb.2, alpha: 1)
+        })
+    }
 }
 
 extension ScholarProfile {
@@ -61,6 +87,9 @@ extension Int {
 
     @Published var entries: [Entry] = []
     @Published var isRefreshing = false
+    /// Profiles finished and in total for the refresh under way.
+    @Published var refreshDone = 0
+    @Published var refreshTotal = 0
     @Published var issue: RefreshIssue?
     @Published var failedProfileIDs: Set<String> = []
     @Published var errorMessage: String?
@@ -76,6 +105,8 @@ struct PanelActions {
     let openCardStudio: @MainActor () -> Void
     let checkForUpdates: @MainActor () -> Void
     let showSupport: @MainActor () -> Void
+    /// Settings › General, where a refresh problem is explained next to Refresh Now.
+    let showRefreshStatus: @MainActor () -> Void
     let quit: @MainActor () -> Void
 }
 
@@ -126,8 +157,16 @@ struct PanelView: View {
             }
 
             Divider()
+            if let issue = model.issue {
+                IssueBanner(issue: issue, action: actions.showRefreshStatus)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                Divider()
+            }
             FooterView(model: model, actions: actions)
         }
+        // Rebuilds every row when the look changes, since rows read the accent directly.
+        .id("\(settings.settings.panelAccent)-\(settings.settings.numberStyle)")
         .frame(width: Self.width)
         // Opaque so text stays legible over whatever sits behind the translucent popover.
         .background(Color(nsColor: .textBackgroundColor))
@@ -248,7 +287,7 @@ private struct HeroView: View {
                 HStack(alignment: .bottom, spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(headline(metrics).decimalString)
-                            .font(Theme.serif(42, .medium))
+                            .font(Theme.number(42))
                             .monospacedDigit()
                             .numericTransition(value: headline(metrics))
                             .lineLimit(1)
@@ -663,18 +702,15 @@ private struct ProfileRowView: View {
                     Text(entry.profile.name)
                         .font(.system(size: 13))
                         .lineLimit(1)
-                    if failed {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
-                            .help("Couldn't update this profile. CiteBar will retry automatically.")
-                    }
                     Spacer(minLength: 8)
                     if let metrics = entry.metrics, metrics.citationCount >= 0 {
+                        // A dimmed number is one the last refresh couldn't update.
                         Text(value(metrics).decimalString)
                             .font(.system(size: 13, weight: .medium))
                             .monospacedDigit()
+                            .foregroundStyle(failed ? .secondary : .primary)
                             .numericTransition(value: value(metrics))
+                            .help(failed ? "Not updated in the last refresh. CiteBar tries again on its own." : "")
                         GrowthCell(
                             text: deltaText,
                             marker: deltaText.isEmpty || !entry.profile.hasPartialGrowthWindow
@@ -781,6 +817,41 @@ private struct ProfileDetail: View {
 
 // MARK: - Footer
 
+/// One line when the last refresh fell short. Settings › General has the why and the fix,
+/// so the panel stays about the numbers.
+private struct IssueBanner: View {
+    let issue: RefreshIssue
+    let action: @MainActor () -> Void
+
+    var body: some View {
+        HoverRow(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.orange)
+                Text(title)
+                    .font(.system(size: 12))
+                    .lineLimit(1)
+                Spacer(minLength: 6)
+                Text("Details")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .help("Why, and what helps")
+    }
+
+    private var title: String {
+        switch issue {
+        case .rateLimited: return "Google Scholar is blocking updates"
+        case .networkUnavailable: return "Can't reach Google Scholar"
+        }
+    }
+}
+
 private struct FooterView: View {
     @ObservedObject var model: DashboardModel
     @ObservedObject var settings = SettingsManager.shared
@@ -833,13 +904,10 @@ private struct FooterView: View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             Group {
                 if model.isRefreshing {
-                    Text("Updating…")
-                } else if let issue = model.issue, issue.retryAt > context.date {
-                    HStack(spacing: 5) {
-                        Circle().fill(Color.orange).frame(width: 5, height: 5)
-                        Text(issueText(issue))
-                    }
-                    .help(issueHelp(issue))
+                    Text(model.refreshTotal > 1
+                         ? "Updating \(min(model.refreshDone + 1, model.refreshTotal)) of \(model.refreshTotal)…"
+                         : "Updating…")
+                        .monospacedDigit()
                 } else if let lastUpdate = settings.settings.lastUpdateTime {
                     Text("Updated \(Self.relative(lastUpdate, now: context.date))")
                         .help("Last updated \(lastUpdate.formatted(date: .abbreviated, time: .shortened))")
@@ -850,25 +918,6 @@ private struct FooterView: View {
             .font(.system(size: 11))
             .foregroundStyle(.secondary)
             .lineLimit(1)
-        }
-    }
-
-    private func issueText(_ issue: RefreshIssue) -> String {
-        let time = issue.retryAt.formatted(date: .omitted, time: .shortened)
-        switch issue {
-        case .rateLimited:
-            return "Scholar paused · retry \(time)"
-        case .networkUnavailable:
-            return "Offline · retry \(time)"
-        }
-    }
-
-    private func issueHelp(_ issue: RefreshIssue) -> String {
-        switch issue {
-        case .rateLimited:
-            return "Google Scholar is limiting requests from this network. CiteBar retries automatically; Refresh works any time."
-        case .networkUnavailable:
-            return "Some profiles couldn't be reached. CiteBar retries automatically; Refresh works any time."
         }
     }
 

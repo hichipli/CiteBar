@@ -160,11 +160,18 @@ import Carbon
             _ = NSApp.setActivationPolicy(.accessory)
             self.setupMenuBar()
             self.startStatusItemHealthMonitoring()
-            self.setupManagers()
-            self.setupUpdater()
-            self.finishStartupFlow()
-            self.scheduleLaunchFeedbackIfNeeded()
-            self.maybePromptForNotificationPermission()
+            // A background refresh may be writing the data files; load them once it's done.
+            InstanceLock.whenAvailable { [weak self] waited in
+                guard let self else { return }
+                if waited {
+                    self.settingsManager.reload()
+                }
+                self.setupManagers()
+                self.setupUpdater()
+                self.finishStartupFlow()
+                self.scheduleLaunchFeedbackIfNeeded()
+                self.maybePromptForNotificationPermission()
+            }
         }
     }
     
@@ -222,19 +229,11 @@ import Carbon
         // This ensures users see data even if network is unavailable
         citationManager?.updateMenuBarWithCurrentData()
         
-        // Refresh on launch only when local data is older than the configured interval.
+        // Refresh on launch only what's older than the configured interval, after a small delay
+        // so historical data can render first.
         Task { @MainActor [weak self] in
-            guard let self, let citationManager = self.citationManager else { return }
-            let shouldRefresh = await citationManager.shouldRefreshAtStartup()
-            guard shouldRefresh else {
-                AppLog.debug("Skipping startup refresh because local profile data is within refresh interval")
-                return
-            }
-
-            // Keep a small delay so historical data can render first.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                citationManager.checkCitations()
-            }
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            await self?.citationManager?.refreshIfDue()
         }
     }
     
@@ -704,9 +703,31 @@ import Carbon
     }
     
     @objc func quitApp() {
+        offerBackgroundRefreshOnce()
         // Clean up resources before quitting
         cleanup()
         NSApplication.shared.terminate(nil)
+    }
+
+    /// The first time someone quits, offer to keep checking without the menu bar (#44). Quitting
+    /// is when that choice matters; afterwards it lives in Settings › General.
+    private func offerBackgroundRefreshOnce() {
+        let key = "offeredBackgroundRefresh"
+        guard !UserDefaults.standard.bool(forKey: key),
+              !settingsManager.settings.profiles.isEmpty,
+              SettingsManager.hasBackgroundRefresh,
+              !SettingsManager.isBackgroundRefreshOn else { return }
+        UserDefaults.standard.set(true, forKey: key)
+
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Keep checking for new citations after you quit?"
+        alert.informativeText = "CiteBar can check in the background on its usual schedule and still let you know when you're cited. You can change this in Settings › General."
+        alert.addButton(withTitle: "Keep Checking")
+        alert.addButton(withTitle: "Just Quit").keyEquivalent = "\u{1b}"
+        if alert.runModal() == .alertFirstButtonReturn {
+            settingsManager.setBackgroundRefresh(true)
+        }
     }
     
     func applicationWillTerminate(_ aNotification: Notification) {
@@ -775,6 +796,10 @@ extension AppDelegate: CitationManagerDelegate {
             guard let self = self else { return }
             self.menuBarManager?.updateRefreshingState()
         }
+    }
+
+    func refreshProgressChanged(done: Int, total: Int) {
+        menuBarManager?.updateRefreshProgress(done: done, total: total)
     }
 
     func refreshIssueChanged(_ issue: RefreshIssue?, failedProfileIDs: Set<String>) {

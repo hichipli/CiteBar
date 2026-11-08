@@ -30,6 +30,19 @@ struct AppVersion {
     static var bundleBuild: String {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? build
     }
+
+    /// The bug form on GitHub with this version and macOS already filled in, so a report
+    /// takes one text box. Field ids match .github/ISSUE_TEMPLATE/bug_report.yml.
+    static func bugReportURL(title: String? = nil) -> URL? {
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        var components = URLComponents(string: "https://github.com/hichipli/CiteBar/issues/new")
+        components?.queryItems = [
+            URLQueryItem(name: "template", value: "bug_report.yml"),
+            URLQueryItem(name: "version", value: "\(bundleVersion) (\(bundleBuild))"),
+            URLQueryItem(name: "macos", value: "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)")
+        ] + (title.map { [URLQueryItem(name: "title", value: $0)] } ?? [])
+        return components?.url
+    }
 }
 
 // MARK: - Release Notes Management

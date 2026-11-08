@@ -96,8 +96,8 @@ Probleme bei der Installation? Schau in die [Installationsanleitung](../DISTRIBU
 - Funktioniert ab dem ersten Tag: Meilensteine aus der Zeit vor der Installation von CiteBar werden anhand der Jahreszahlen von Google Scholar datiert und mit ~ gekennzeichnet, und jeder Tag danach wird exakt aufgezeichnet
 
 **Rücksichtsvoll und zuverlässig**
-- Eine Anfrage pro Profil, jeweils zwei Sekunden Abstand
-- Bei Netzwerkaussetzern wird automatisch neu versucht; bei Rate Limits von Google Scholar wird schrittweise gebremst (von 15 Minuten bis zu 4 Stunden) und danach von selbst weitergemacht
+- Eine Anfrage pro Profil, jeweils einige Sekunden Abstand, höchstens zehn Profile pro automatischer Prüfung
+- Bei Netzwerkaussetzern wird automatisch neu versucht; bei Rate Limits von Google Scholar wird schrittweise gebremst (von 15 Minuten bis zu 4 Stunden) und danach von selbst weitergemacht, nach einem Netzwerkwechsel sofort
 - Refresh Now funktioniert jederzeit
 - Automatische Updates über Sparkle
 
@@ -115,6 +115,7 @@ Probleme bei der Installation? Schau in die [Installationsanleitung](../DISTRIBU
 
 **Echtes macOS-Gefühl**
 - Schlank in der Menüleiste, mit hellem und dunklem Erscheinungsbild
+- Nach deinem Geschmack: die Akzentfarbe des Macs oder eine von vier weiteren, eine große Zahl in Serif, Sans oder Rounded und sieben Menüleisten-Symbole oder ein eigenes Bild
 - Native Einstellungen mit den Tabs Profiles, General, Data und About
 - Start bei der Anmeldung
 - Unterstützt Apple Silicon und Intel
@@ -122,6 +123,7 @@ Probleme bei der Installation? Schau in die [Installationsanleitung](../DISTRIBU
 **Leicht genug, um einfach weiterzulaufen**
 - Im Leerlauf praktisch keine CPU-Last
 - Minimaler Netzwerkverkehr in Intervallen, die du selbst festlegst
+- Lieber nicht dauerhaft geöffnet? Mit „Keep updating after quitting“ in Settings › General prüft CiteBar weiter nach Plan und benachrichtigt dich ([so funktioniert es](../TECHNICAL.md#updating-without-the-menu-bar-app), auf Englisch)
 - Mehr Details zur Umsetzung in den [technischen Hinweisen](../TECHNICAL.md) (auf Englisch)
 
 ## Datenschutz
