@@ -3,10 +3,10 @@ import Foundation
 /// Centralized version management for CiteBar
 struct AppVersion {
     /// Current application version
-    static let current: String = "1.6.4"
+    static let current: String = "1.6.5"
     
     /// Current build number
-    static let build: String = "23"
+    static let build: String = "24"
     
     /// Version display string for UI
     static let displayString: String = "Version \(current)"
@@ -30,6 +30,19 @@ struct AppVersion {
     static var bundleBuild: String {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? build
     }
+
+    /// The bug form on GitHub with this version and macOS already filled in, so a report
+    /// takes one text box. Field ids match .github/ISSUE_TEMPLATE/bug_report.yml.
+    static func bugReportURL(title: String? = nil) -> URL? {
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        var components = URLComponents(string: "https://github.com/hichipli/CiteBar/issues/new")
+        components?.queryItems = [
+            URLQueryItem(name: "template", value: "bug_report.yml"),
+            URLQueryItem(name: "version", value: "\(bundleVersion) (\(bundleBuild))"),
+            URLQueryItem(name: "macos", value: "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)")
+        ] + (title.map { [URLQueryItem(name: "title", value: $0)] } ?? [])
+        return components?.url
+    }
 }
 
 // MARK: - Release Notes Management
@@ -38,15 +51,17 @@ extension AppVersion {
     static let releaseNotes = ReleaseNotes(
         version: current,
         highlights: [
-            "Keep citation history as long as you like: forever by default, or 5, 2, or 1 year. The old limit of 1,000 snapshots per profile is gone",
-            "Optional paper history, so past days in the time machine show papers too",
-            "Settings › Data shows how much space each kind of data takes",
-            "Share any profile's citation record from its ⋯ menu in Settings"
+            "Keep updating after quitting: CiteBar can keep checking on its usual schedule, with notifications, while it's closed",
+            "Make it yours: an accent color that follows your Mac or one of four others, a serif, sans, or rounded big number, and the menu bar icon you like, even your own image",
+            "When Google Scholar blocks updates, the menu says so in one line, and Settings explains why and what helps",
+            "Refreshes are gentler on Google Scholar and show their progress, profile by profile"
         ],
-        description: "CiteBar 1.6.4 puts you in charge of your history: keep it as long as you like, choose whether to keep paper history, and see what takes up space.",
+        description: "CiteBar 1.6.5 keeps your numbers current even when it's closed, lets you choose how it looks, and is clearer and calmer when Google Scholar pushes back.",
         technicalNotes: [
-            "History is trimmed by date after each refresh instead of by count; choosing a shorter period asks first",
-            "paper_history.json stores each paper's count only when it changes; backups include it and imports merge it"
+            "A 15-minute check fetches only profiles older than the refresh interval, stalest first and at most ten at a time, so sleep or a relaunch no longer skips or doubles a refresh",
+            "Refresh Now during a Google Scholar block no longer lengthens the pause, and a network change retries right away",
+            "The background job is a launchd agent registered with SMAppService; it runs `CiteBar --refresh`, which also works from cron",
+            "Report an Issue opens a GitHub form with the CiteBar and macOS versions filled in"
         ]
     )
     

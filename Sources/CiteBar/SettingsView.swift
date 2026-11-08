@@ -1,5 +1,6 @@
 import SwiftUI
 import ServiceManagement
+import UniformTypeIdentifiers
 import UserNotifications
 
 enum SettingsPane: Int {
@@ -594,12 +595,178 @@ private struct TextPromptSheet: View {
 
 // MARK: - General
 
+/// What a failed refresh means and what helps, shown under Refresh Now: the cause, the fix,
+/// then the facts.
+private struct RefreshIssueDetails: View {
+    let issue: RefreshIssue
+    let lastUpdate: Date?
+    let waitingCount: Int
+
+    private var paragraphs: [String] {
+        let nextTry = issue.retryAt.formatted(date: .omitted, time: .shortened)
+        switch issue {
+        case .rateLimited:
+            return [
+                "Google wants a CAPTCHA from automated requests on this network, and CiteBar can't solve one. Your browser may still open Scholar normally.",
+                "Switching networks, such as to a phone hotspot, can clear it. CiteBar retries as soon as the network changes, or else at \(nextTry)."
+            ]
+        case .networkUnavailable:
+            return ["CiteBar retries as soon as your connection is back, or else at \(nextTry)."]
+        }
+    }
+
+    private var facts: String {
+        var parts: [String] = []
+        if let lastUpdate {
+            parts.append("Last updated \(lastUpdate.formatted(.dateTime.month(.abbreviated).day().hour().minute()))")
+        }
+        if case .rateLimited(_, let checkedAt?) = issue {
+            parts.append("checked \(checkedAt.formatted(date: .omitted, time: .shortened))")
+        }
+        if waitingCount > 0 {
+            parts.append("\(waitingCount) \(waitingCount == 1 ? "profile" : "profiles") waiting")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(paragraphs, id: \.self) { Text($0) }
+            if !facts.isEmpty {
+                Text(facts)
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .font(.system(size: 11.5))
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.vertical, 2)
+    }
+}
+
+/// The menu bar icon choices in a row, ending with the user's own picture. Clicking that one
+/// picks a file; clicking it again while it's in use picks a different file.
+private struct MenuBarIconPicker: View {
+    @Binding var selection: MenuBarIcon
+    @State private var customImage = CustomMenuBarIcon.image()
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(MenuBarIcon.allCases, id: \.self) { icon in
+                Button {
+                    choose(icon)
+                } label: {
+                    glyph(icon)
+                        .frame(width: 24, height: 22)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(Color.primary.opacity(selection == icon ? 0.12 : 0))
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(icon == .custom && customImage != nil ? "Your own image (click again to change it)" : icon.title)
+                .accessibilityLabel(icon.title)
+                .accessibilityAddTraits(selection == icon ? .isSelected : [])
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: selection)
+    }
+
+    @ViewBuilder
+    private func glyph(_ icon: MenuBarIcon) -> some View {
+        switch icon {
+        case .none:
+            Text("123")
+                .font(.system(size: 9.5, weight: .semibold))
+        case .custom:
+            if let customImage {
+                Image(nsImage: customImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: 20, maxHeight: 14)
+            } else {
+                Image(systemName: "plus")
+                    .font(.system(size: 11, weight: .medium))
+            }
+        default:
+            Image(systemName: icon.symbolName() ?? "questionmark")
+                .font(.system(size: 12))
+        }
+    }
+
+    private func choose(_ icon: MenuBarIcon) {
+        guard icon == .custom, customImage == nil || selection == .custom else {
+            selection = icon
+            return
+        }
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.message = "Choose a small picture for the menu bar. Simple shapes look best."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try CustomMenuBarIcon.save(from: url)
+            customImage = CustomMenuBarIcon.image()
+            selection = .custom
+        } catch {
+            AppLog.error("Couldn't use \(url.lastPathComponent) as the menu bar icon: \(error)")
+            NSSound.beep()
+        }
+    }
+}
+
+/// Accent swatches, as in System Settings › Appearance. The first follows the Mac's own color.
+private struct AccentPicker: View {
+    @Binding var selection: AppSettings.PanelAccent
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(AppSettings.PanelAccent.allCases, id: \.self) { accent in
+                Button {
+                    selection = accent
+                } label: {
+                    swatch(accent)
+                        .frame(width: 16, height: 16)
+                        .overlay(Circle().strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
+                        .padding(3)
+                        .overlay(
+                            Circle().strokeBorder(Color.primary.opacity(selection == accent ? 0.5 : 0), lineWidth: 1.5)
+                        )
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help(accent.displayName)
+                .accessibilityLabel(accent.displayName)
+                .accessibilityAddTraits(selection == accent ? .isSelected : [])
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: selection)
+    }
+
+    @ViewBuilder
+    private func swatch(_ accent: AppSettings.PanelAccent) -> some View {
+        if accent == .system {
+            Circle().fill(AngularGradient(
+                colors: [.red, .orange, .yellow, .green, .blue, .purple, .pink, .red],
+                center: .center
+            ))
+        } else {
+            Circle().fill(accent.color)
+        }
+    }
+}
+
 struct GeneralPane: View {
     @ObservedObject var model: DashboardModel
     @ObservedObject private var settingsManager = SettingsManager.shared
     @State private var notificationStatus: UNAuthorizationStatus = .notDetermined
     @State private var menuBarManagerName: String?
     @State private var hasRecentDelay = false
+    @State private var backgroundRefreshOn = SettingsManager.isBackgroundRefreshOn
+    @State private var backgroundRefreshStatus = SettingsManager.backgroundRefreshStatus
+    @State private var backgroundRefreshError: String?
+    @State private var loginItemStatus = SettingsManager.loginItemStatus
 
     var body: some View {
         Form {
@@ -612,24 +779,70 @@ struct GeneralPane: View {
                         Text(interval.displayName).tag(interval)
                     }
                 }
+                if SettingsManager.hasBackgroundRefresh {
+                    Toggle(isOn: Binding(
+                        get: { backgroundRefreshOn },
+                        set: { enabled in
+                            backgroundRefreshError = settingsManager.setBackgroundRefresh(enabled)?.localizedDescription
+                            refreshStatuses()
+                        }
+                    )) {
+                        Text("Keep updating after quitting")
+                        Text("Same schedule and notifications, without the menu bar icon")
+                    }
+                    if let backgroundRefreshError {
+                        Text("macOS didn't allow this: \(backgroundRefreshError)")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    if backgroundRefreshStatus == .requiresApproval {
+                        LabeledContent("Turned off for CiteBar in Login Items") {
+                            Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
+                        }
+                    }
+                }
                 LabeledContent {
                     Button("Refresh Now") {
                         (NSApp.delegate as? AppDelegate)?.refreshCitations()
                     }
                     .disabled(model.isRefreshing)
                 } label: {
-                    Text(statusText)
-                        .foregroundStyle(.secondary)
+                    if model.issue != nil, !model.isRefreshing {
+                        Label(statusText, systemImage: "exclamationmark.triangle.fill")
+                            .symbolRenderingMode(.multicolor)
+                    } else {
+                        Text(statusText)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if let issue = model.issue {
+                    RefreshIssueDetails(
+                        issue: issue,
+                        lastUpdate: settingsManager.settings.lastUpdateTime,
+                        waitingCount: model.failedProfileIDs.count
+                    )
                 }
             } header: {
                 Text("Updates")
             } footer: {
-                Text("Google Scholar updates its counts every day or two, so a daily check keeps CiteBar current. Network hiccups retry automatically.")
+                Text("Google Scholar updates its counts every day or two, so once a day is plenty. CiteBar spaces out its requests to stay gentle on Google.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
 
             Section("Menu Bar") {
+                LabeledContent {
+                    MenuBarIconPicker(selection: Binding(
+                        get: { settingsManager.settings.menuBarIcon },
+                        set: { icon in
+                            settingsManager.setMenuBarIcon(icon)
+                            refreshMenuBar()
+                        }
+                    ))
+                } label: {
+                    Text("Icon")
+                    Text(settingsManager.settings.menuBarIcon.title)
+                }
                 Picker("Number in menu bar", selection: Binding(
                     get: { settingsManager.settings.menuBarPrimaryMetric },
                     set: { metric in
@@ -659,7 +872,7 @@ struct GeneralPane: View {
                 if menuBarManagerName != nil || hasRecentDelay {
                     LabeledContent {
                         Button("Report Issue") {
-                            if let url = URL(string: "https://github.com/hichipli/CiteBar/issues/new") {
+                            if let url = AppVersion.bugReportURL(title: "Menu bar icon is delayed") {
                                 NSWorkspace.shared.open(url)
                             }
                         }
@@ -668,6 +881,29 @@ struct GeneralPane: View {
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
+                }
+            }
+
+            Section("Appearance") {
+                LabeledContent {
+                    AccentPicker(selection: Binding(
+                        get: { settingsManager.settings.panelAccent },
+                        set: { settingsManager.setPanelAccent($0) }
+                    ))
+                } label: {
+                    Text("Accent color")
+                    Text(settingsManager.settings.panelAccent.displayName)
+                }
+                Picker(selection: Binding(
+                    get: { settingsManager.settings.numberStyle },
+                    set: { settingsManager.setNumberStyle($0) }
+                )) {
+                    ForEach(AppSettings.PanelNumberStyle.allCases, id: \.self) { style in
+                        Text(style.displayName).tag(style)
+                    }
+                } label: {
+                    Text("Number style")
+                    Text("The large count at the top of the menu")
                 }
             }
 
@@ -703,9 +939,12 @@ struct GeneralPane: View {
             Section("Startup") {
                 Toggle("Launch at login", isOn: Binding(
                     get: { settingsManager.settings.autoLaunch },
-                    set: { settingsManager.setAutoLaunch($0) }
+                    set: { enabled in
+                        settingsManager.setAutoLaunch(enabled)
+                        loginItemStatus = SettingsManager.loginItemStatus
+                    }
                 ))
-                switch SMAppService.mainApp.status {
+                switch loginItemStatus {
                 case .requiresApproval:
                     LabeledContent("Waiting for approval in Login Items") {
                         Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
@@ -729,16 +968,17 @@ struct GeneralPane: View {
 
     private var statusText: String {
         if model.isRefreshing {
-            return "Updating…"
+            return model.refreshTotal > 1
+                ? "Updating \(min(model.refreshDone + 1, model.refreshTotal)) of \(model.refreshTotal)…"
+                : "Updating…"
         }
-        if let issue = model.issue, issue.retryAt > Date() {
-            let time = issue.retryAt.formatted(date: .omitted, time: .shortened)
-            switch issue {
-            case .rateLimited:
-                return "Google Scholar paused requests; retrying at \(time)"
-            case .networkUnavailable:
-                return "Couldn't reach Google Scholar; retrying at \(time)"
-            }
+        switch model.issue {
+        case .rateLimited:
+            return "Google Scholar is blocking updates"
+        case .networkUnavailable:
+            return "Can't reach Google Scholar"
+        case nil:
+            break
         }
         guard let lastUpdate = settingsManager.settings.lastUpdateTime else {
             return "Not updated yet"
@@ -756,6 +996,10 @@ struct GeneralPane: View {
     private func refreshStatuses() {
         menuBarManagerName = MenuBarCompatibility.activeManagerDisplayName()
         hasRecentDelay = MenuBarCompatibility.hasRecentDelayObservation()
+        backgroundRefreshStatus = SettingsManager.backgroundRefreshStatus
+        backgroundRefreshOn = SettingsManager.isBackgroundRefreshOn
+        // Kept in state, so returning from System Settings › Login Items redraws the Startup rows.
+        loginItemStatus = SettingsManager.loginItemStatus
         guard Bundle.main.bundleIdentifier != nil else { return }
         Task { @MainActor in
             notificationStatus = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
@@ -1223,7 +1467,7 @@ struct AboutPane: View {
             HStack(spacing: 20) {
                 aboutLink("Website", "https://www.citebar.org")
                 aboutLink("Source Code", "https://github.com/hichipli/CiteBar")
-                aboutLink("Report an Issue", "https://github.com/hichipli/CiteBar/issues/new/choose")
+                aboutLink("Report an Issue", AppVersion.bugReportURL()?.absoluteString ?? "https://github.com/hichipli/CiteBar/issues/new/choose")
                 aboutLink("Email", "mailto:info@hichipli.com")
             }
 

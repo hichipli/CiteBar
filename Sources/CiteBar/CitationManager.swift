@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import SwiftSoup
 import UserNotifications
 
@@ -16,10 +17,23 @@ import UserNotifications
     private let urlSession: URLSession
     private var isChecking = false
     private var retryTimer: Timer?
+    private var retryProfileIDs: Set<String>?
     private var consecutiveFailedCycles = 0
+    /// When each profile was last tried this session, so one that keeps failing for good
+    /// (a removed profile, say) waits a full interval instead of being retried every tick.
+    private var lastAttempted: [String: Date] = [:]
+    private let pathMonitor = NWPathMonitor()
+    private var networkRetryTask: Task<Void, Never>?
     /// Waits before the 2nd and 3rd attempt of a request that failed on a network blip.
     var requestRetryDelays: [TimeInterval] = [2, 5]
-    
+
+    /// How often CiteBar asks what's due. Short, because timers stall while the Mac sleeps.
+    static let dueCheckInterval: TimeInterval = 15 * 60
+    /// Automatic refreshes fetch at most this many profiles; the rest go a tick later.
+    nonisolated static let batchSize = 10
+    /// Random wait between profiles, so a long list doesn't arrive as an evenly timed burst.
+    static let profileGap: ClosedRange<TimeInterval> = 3...8
+
     private static func makeURLSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
@@ -32,7 +46,14 @@ import UserNotifications
     init(urlSession: URLSession = CitationManager.makeURLSession()) {
         self.urlSession = urlSession
         setupTimer()
-        
+
+        // The current path is reported once on start; that's harmless, as only a waiting retry reacts.
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            guard path.status == .satisfied else { return }
+            MainActor.assumeIsolated { self?.networkBecameAvailable() }
+        }
+        pathMonitor.start(queue: .main)
+
         // Debug storage status at startup
 #if DEBUG
         Task {
@@ -52,30 +73,122 @@ import UserNotifications
     deinit {
         // Timer cleanup will happen automatically when the object is deallocated
         // We can't call MainActor methods from deinit
+        pathMonitor.cancel()
     }
-    
+
     private func setupTimer() {
         // Invalidate existing timer first
         refreshTimer?.invalidate()
         refreshTimer = nil
-        
-        let interval = settingsManager.settings.refreshInterval.seconds
-        
+
         // Ensure timer is created on main queue
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.refreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            let timer = Timer.scheduledTimer(withTimeInterval: Self.dueCheckInterval, repeats: true) { [weak self] _ in
                 guard let self = self else { return }
                 Task { @MainActor in
-                    self.checkCitations()
+                    await self.refreshIfDue()
                 }
             }
+            timer.tolerance = 60
+            self.refreshTimer = timer
         }
     }
-    
+
+    /// Fetches whatever is due by the clock: the tick, launch, and network changes all land here,
+    /// so sleep or a relaunch can't skip a refresh or run one twice.
+    func refreshIfDue() async {
+        guard !isChecking else { return }
+        if let retryTimer {
+            // A retry owns the next attempt. Timers stall while the Mac sleeps, so run it if overdue.
+            if retryTimer.fireDate <= Date() {
+                retryTimer.fire()
+            }
+            return
+        }
+
+        let lastFetched = await lastFetchedDates()
+        let due = Self.dueProfileIDs(lastFetched: lastFetched, interval: settingsManager.settings.refreshInterval.seconds)
+        AppLog.debug("Due check: \(due.count) of \(lastFetched.count) profiles due")
+        if !due.isEmpty {
+            checkCitations(onlyProfileIDs: Set(due))
+        }
+    }
+
+    /// Enabled profiles with when each was last fetched or tried this session.
+    private func lastFetchedDates() async -> [(id: String, date: Date?)] {
+        var lastFetched: [(id: String, date: Date?)] = []
+        for profile in settingsManager.settings.profiles where profile.isEnabled {
+            let recorded = await storageManager.getLatestRecord(for: profile.id)?.timestamp
+            lastFetched.append((profile.id, [recorded, lastAttempted[profile.id]].compactMap { $0 }.max()))
+        }
+        return lastFetched
+    }
+
+    /// `CiteBar --refresh`, for cron or launchd when the menu bar app isn't kept open (#44).
+    /// Fetches every due profile once, with the same pacing, pause and interval as the app,
+    /// and returns a line to print plus whether everything due was updated.
+    func refreshFromCommandLine() async -> (message: String, succeeded: Bool) {
+        let enabled = settingsManager.settings.profiles.filter(\.isEnabled)
+        guard !enabled.isEmpty else {
+            return ("No profiles to update. Add one in CiteBar first.", true)
+        }
+        if let pausedUntil = settingsManager.settings.scholarPausedUntil, pausedUntil > Date() {
+            let time = pausedUntil.formatted(date: .omitted, time: .shortened)
+            return ("Google Scholar asked CiteBar to wait until \(time); skipped.", true)
+        }
+
+        let interval = settingsManager.settings.refreshInterval
+        let due = Set(Self.dueProfileIDs(lastFetched: await lastFetchedDates(), interval: interval.seconds, limit: .max))
+        guard !due.isEmpty else {
+            return ("Up to date. Each profile is checked \(interval.displayName.lowercased()).", true)
+        }
+
+        isChecking = true
+        let result = await performCitationCheck(for: enabled.filter { due.contains($0.id) }, userInitiated: false)
+        let summary = "Updated \(result.succeeded) of \(due.count) \(due.count == 1 ? "profile" : "profiles")"
+        switch result.issue {
+        case .rateLimited(let retryAt, _):
+            let time = retryAt.formatted(date: .omitted, time: .shortened)
+            return ("\(summary). Google Scholar is blocking requests from this network; try again after \(time).", false)
+        case .networkUnavailable:
+            return ("\(summary). Couldn't reach Google Scholar.", false)
+        case nil:
+            return ("\(summary).", result.succeeded == due.count)
+        }
+    }
+
+    /// Profiles an automatic refresh fetches, stalest first: never fetched, or last fetched or
+    /// tried at least `interval` ago. At most `limit`, so a long list goes out in batches.
+    nonisolated static func dueProfileIDs(
+        lastFetched: [(id: String, date: Date?)],
+        now: Date = Date(),
+        interval: TimeInterval,
+        limit: Int = batchSize
+    ) -> [String] {
+        lastFetched
+            .filter { $0.date.map { now.timeIntervalSince($0) >= interval } ?? true }
+            .sorted { ($0.date ?? .distantPast) < ($1.date ?? .distantPast) }
+            .prefix(limit)
+            .map(\.id)
+    }
+
+    /// A new or restored network may not be blocked, so a waiting retry runs now instead of
+    /// sitting out its backoff. Paths change in bursts, hence the short settle delay.
+    private func networkBecameAvailable() {
+        networkRetryTask?.cancel()
+        networkRetryTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled, let self, self.retryTimer != nil else { return }
+            AppLog.debug("Network changed; retrying waiting profiles now")
+            self.checkCitations(userInitiated: true, onlyProfileIDs: self.retryProfileIDs)
+        }
+    }
+
     /// Scheduled and startup refreshes wait out a Scholar rate-limit pause (and make sure a
-    /// retry is queued for when it ends); a refresh the user asked for runs anyway.
-    /// `onlyProfileIDs` limits an automatic retry to the profiles that failed.
+    /// retry is queued for when it ends); a refresh the user asked for, or a network change,
+    /// runs anyway and leaves the pause as it was if still blocked.
+    /// `onlyProfileIDs` limits a refresh to due profiles or to the ones that failed.
     func checkCitations(userInitiated: Bool = false, onlyProfileIDs: Set<String>? = nil) {
         guard !isChecking else { return }
 
@@ -94,6 +207,11 @@ import UserNotifications
             AppLog.debug("Skipping refresh; Google Scholar rate-limit pause until \(pausedUntil)")
             if retryTimer == nil {
                 scheduleRetry(at: pausedUntil, profileIDs: onlyProfileIDs)
+                // The pause survives a relaunch but the panel's explanation doesn't, so restore it.
+                delegate?.refreshIssueChanged(
+                    .rateLimited(retryAt: pausedUntil, checkedAt: nil),
+                    failedProfileIDs: Set(profiles.map(\.id))
+                )
             }
             return
         }
@@ -111,7 +229,7 @@ import UserNotifications
         delegate?.refreshingStateChanged(true)
         
         Task {
-            await performCitationCheck(for: profiles)
+            await performCitationCheck(for: profiles, userInitiated: userInitiated)
         }
     }
 
@@ -188,54 +306,6 @@ import UserNotifications
         return snapshot
     }
 
-    nonisolated static func shouldRefreshOnStartup(
-        latestRecordDates: [Date?],
-        now: Date = Date(),
-        refreshInterval: TimeInterval
-    ) -> Bool {
-        guard !latestRecordDates.isEmpty else {
-            return false
-        }
-
-        // If any enabled profile has no local history yet, refresh immediately.
-        if latestRecordDates.contains(where: { $0 == nil }) {
-            return true
-        }
-
-        guard let oldestLatestRecord = latestRecordDates.compactMap({ $0 }).min() else {
-            return true
-        }
-
-        let age = max(0, now.timeIntervalSince(oldestLatestRecord))
-        return age >= refreshInterval
-    }
-
-    func shouldRefreshAtStartup() async -> Bool {
-        let enabledProfiles = settingsManager.settings.profiles.filter { $0.isEnabled }
-        guard !enabledProfiles.isEmpty else {
-            return false
-        }
-
-        var latestRecordDates: [Date?] = []
-        latestRecordDates.reserveCapacity(enabledProfiles.count)
-
-        for profile in enabledProfiles {
-            let latestRecord = await storageManager.getLatestRecord(for: profile.id)
-            latestRecordDates.append(latestRecord?.timestamp)
-        }
-
-        let interval = settingsManager.settings.refreshInterval.seconds
-        let shouldRefresh = Self.shouldRefreshOnStartup(
-            latestRecordDates: latestRecordDates,
-            refreshInterval: interval
-        )
-
-        AppLog.debug(
-            "Startup refresh decision: enabledProfiles=\(enabledProfiles.count), intervalSeconds=\(Int(interval)), shouldRefresh=\(shouldRefresh)"
-        )
-        return shouldRefresh
-    }
-    
     struct ProfileChange {
         let name: String
         let citationDelta: Int
@@ -246,7 +316,11 @@ import UserNotifications
     static let recentPaperGainWindow: TimeInterval = 7 * 24 * 60 * 60
     nonisolated static let citationMilestones = [10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 25_000, 50_000, 100_000]
 
-    private func performCitationCheck(for profiles: [ScholarProfile]) async {
+    @discardableResult
+    private func performCitationCheck(
+        for profiles: [ScholarProfile],
+        userInitiated: Bool
+    ) async -> (succeeded: Int, issue: RefreshIssue?) {
         var changes: [ProfileChange] = []
         var milestones: [String] = []
         var milestoneProfileID: String?
@@ -254,12 +328,22 @@ import UserNotifications
         var succeeded = 0
         // Profiles still worth retrying: not yet fetched, or failed on a network blip.
         var pending = Set(profiles.map(\.id))
+        delegate?.refreshProgressChanged(done: 0, total: profiles.count)
+
+        // Stalest first, so a cycle cut short by a block picks up where it stopped next time.
+        var fetchedAt: [String: Date] = [:]
+        for profile in profiles {
+            fetchedAt[profile.id] = await storageManager.getLatestRecord(for: profile.id)?.timestamp
+        }
+        let profiles = profiles.sorted { (fetchedAt[$0.id] ?? .distantPast) < (fetchedAt[$1.id] ?? .distantPast) }
 
         for (index, profile) in profiles.enumerated() {
             // Be respectful to Google's servers, including after a failed request.
             if index > 0 {
-                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+                try? await Task.sleep(nanoseconds: UInt64(Double.random(in: Self.profileGap) * 1_000_000_000))
             }
+            lastAttempted[profile.id] = Date()
+            defer { delegate?.refreshProgressChanged(done: index + 1, total: profiles.count) }
 
             do {
                 let metrics = try await fetchScholarMetrics(for: profile)
@@ -295,6 +379,8 @@ import UserNotifications
 
                 succeeded += 1
                 pending.remove(profile.id)
+                // Show each number as it arrives, so a long list visibly makes progress.
+                updateMenuBarWithCurrentData()
 
                 AppLog.debug(
                     "Fetched \(profile.name): citations=\(metrics.citationCount), h=\(metrics.hIndex ?? -1), i10=\(metrics.i10Index ?? -1), papers=\(metrics.papers.count), paperGains=\(paperGains.count)"
@@ -322,13 +408,24 @@ import UserNotifications
             settingsManager.setScholarPausedUntil(nil)
             issue = nil
         } else {
-            consecutiveFailedCycles += 1
-            let retryAt = Date().addingTimeInterval(
-                Self.retryDelay(afterFailedCycles: consecutiveFailedCycles, rateLimited: rateLimited)
-            )
+            let retryAt: Date
+            if let kept = Self.pauseToKeep(
+                pausedUntil: settingsManager.settings.scholarPausedUntil,
+                userInitiated: userInitiated,
+                rateLimited: rateLimited
+            ) {
+                retryAt = kept
+            } else {
+                consecutiveFailedCycles += 1
+                retryAt = Date().addingTimeInterval(
+                    Self.retryDelay(afterFailedCycles: consecutiveFailedCycles, rateLimited: rateLimited)
+                )
+            }
             settingsManager.setScholarPausedUntil(rateLimited ? retryAt : nil)
             scheduleRetry(at: retryAt, profileIDs: pending)
-            issue = rateLimited ? .rateLimited(retryAt: retryAt) : .networkUnavailable(retryAt: retryAt)
+            issue = rateLimited
+                ? .rateLimited(retryAt: retryAt, checkedAt: Date())
+                : .networkUnavailable(retryAt: retryAt)
         }
 
         if succeeded > 0 {
@@ -343,7 +440,8 @@ import UserNotifications
             // Reload every profile from storage so ones that failed this cycle keep showing
             // their last known data.
             updateMenuBarWithCurrentData()
-            notifyIfNeeded(changes: changes, milestones: milestones, milestoneProfileID: milestoneProfileID)
+            // Awaited so `--refresh` posts it before the process exits.
+            await notifyIfNeeded(changes: changes, milestones: milestones, milestoneProfileID: milestoneProfileID)
             await storageManager.applyRetention(settingsManager.settings.historyRetention)
             await DataManager.backUpIfEnabled(storage: storageManager)
         } else {
@@ -355,10 +453,12 @@ import UserNotifications
                 delegate?.citationCheckFailed(rateLimited ? CitationError.rateLimited : CitationError.noDataAvailable)
             }
         }
+        return (succeeded, issue)
     }
 
     private func scheduleRetry(at date: Date, profileIDs: Set<String>?) {
         retryTimer?.invalidate()
+        retryProfileIDs = profileIDs
         let timer = Timer(fire: date, interval: 0, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.retryTimer = nil
@@ -372,11 +472,23 @@ import UserNotifications
 
     /// Wait before automatically retrying a cycle that left profiles unfetched. Network blips
     /// retry after 5, 10, 20, 40, then 60 minutes; Scholar rate limits after 15, 30, 60, 120,
-    /// then 240 minutes. Refresh Now always works in the meantime.
+    /// then 240 minutes. Refresh Now always works in the meantime, see `pauseToKeep`.
     nonisolated static func retryDelay(afterFailedCycles count: Int, rateLimited: Bool) -> TimeInterval {
         let base: TimeInterval = rateLimited ? 15 * 60 : 5 * 60
         let cap: TimeInterval = rateLimited ? 4 * 60 * 60 : 60 * 60
         return min(cap, base * pow(2, Double(max(0, count - 1))))
+    }
+
+    /// The running pause when a Refresh the user asked for is still rate-limited: clicking must
+    /// not lengthen the wait. Nil means the failed cycle backs off as usual.
+    nonisolated static func pauseToKeep(
+        pausedUntil: Date?,
+        userInitiated: Bool,
+        rateLimited: Bool,
+        now: Date = Date()
+    ) -> Date? {
+        guard userInitiated, rateLimited, let pausedUntil, pausedUntil > now else { return nil }
+        return pausedUntil
     }
 
     /// Failures worth retrying soon: dropped or missing connections, timeouts, and 5xx.
@@ -491,7 +603,7 @@ import UserNotifications
         return (title, body, first.paperGains.first?.citedByURL ?? first.profileURL)
     }
 
-    private func notifyIfNeeded(changes: [ProfileChange], milestones: [String], milestoneProfileID: String?) {
+    private func notifyIfNeeded(changes: [ProfileChange], milestones: [String], milestoneProfileID: String?) async {
         guard settingsManager.settings.showNotifications, Bundle.main.bundleIdentifier != nil else { return }
         let changeText = Self.changeNotificationText(
             for: changes,
@@ -499,29 +611,27 @@ import UserNotifications
         )
         guard changeText != nil || !milestones.isEmpty else { return }
 
-        Task { @MainActor in
-            let center = UNUserNotificationCenter.current()
-            let status = await center.notificationSettings().authorizationStatus
-            // Permission is requested from a user-facing flow (Settings / onboarding prompt),
-            // not during background refresh completion.
-            guard status == .authorized || status == .provisional else { return }
+        let center = UNUserNotificationCenter.current()
+        let status = await center.notificationSettings().authorizationStatus
+        // Permission is requested from a user-facing flow (Settings / onboarding prompt),
+        // not during background refresh completion.
+        guard status == .authorized || status == .provisional else { return }
 
-            if !milestones.isEmpty {
-                var userInfo: [String: String] = ["action": "card"]
-                userInfo["profileID"] = milestoneProfileID
-                await Self.postNotification(
-                    title: "🎉 Milestone reached",
-                    body: milestones.joined(separator: "\n") + "\nClick to make a card of the moment.",
-                    userInfo: userInfo
-                )
-            }
-            if let changeText {
-                await Self.postNotification(
-                    title: changeText.title,
-                    body: changeText.body,
-                    userInfo: changeText.url.map { ["url": $0] } ?? [:]
-                )
-            }
+        if !milestones.isEmpty {
+            var userInfo: [String: String] = ["action": "card"]
+            userInfo["profileID"] = milestoneProfileID
+            await Self.postNotification(
+                title: "🎉 Milestone reached",
+                body: milestones.joined(separator: "\n") + "\nClick to make a card of the moment.",
+                userInfo: userInfo
+            )
+        }
+        if let changeText {
+            await Self.postNotification(
+                title: changeText.title,
+                body: changeText.body,
+                userInfo: changeText.url.map { ["url": $0] } ?? [:]
+            )
         }
     }
 

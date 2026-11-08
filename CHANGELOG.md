@@ -5,6 +5,26 @@ All notable changes to CiteBar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.5] - 2026-11-08
+
+### Added
+- **Keep Updating After Quitting**: Settings › General can keep checking on the usual schedule after you quit CiteBar, with the same notifications ([#44](https://github.com/hichipli/CiteBar/issues/44)). CiteBar offers it the first time you quit, and macOS lists it under Login Items. `CiteBar --refresh` runs one update from the command line too
+- **Your Look**: Choose the panel's accent color (it follows your Mac's by default, or pick Graphite, Ink, Forest, or the original Oxblood), a serif, sans, or rounded big number, and the menu bar icon: seven symbols, the number alone, or your own image
+- **Refresh Progress**: The panel shows "Updating 3 of 21…", and each number appears as soon as it arrives
+- **Issue Forms**: Report an Issue opens a short GitHub form with your CiteBar and macOS versions filled in
+
+### Changed
+- **Gentler Checks**: Profiles are checked stalest first, a few seconds apart at random, and at most ten per automatic check; a long list finishes over the next few checks. A check every 15 minutes decides what's due, so sleep or a relaunch no longer skips or doubles a refresh
+- **Clearer Blocks**: When Google Scholar blocks updates, the panel says so in one line, and Settings › General explains why and what helps. Profiles that weren't updated are dimmed instead of showing a sync icon
+- **Menu Bar Icon**: The default is now a quotation mark; the old book is still there as Classic
+
+### Fixed
+- **Refresh While Blocked**: Clicking Refresh during a Google Scholar block no longer pushes the next automatic try further out
+- **Network Changes**: A waiting retry runs as soon as the network changes instead of sitting out its backoff
+- **Relaunch During a Block**: The explanation comes back with the pause after a relaunch
+- **Launch at Login Status**: Settings › General updates as soon as you return from System Settings
+- **Packaging**: `make package` finds the release build with newer Xcode versions
+
 ## [1.6.4] - 2026-10-08
 
 ### Added

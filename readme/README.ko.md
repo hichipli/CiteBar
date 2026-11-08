@@ -96,8 +96,8 @@ https://scholar.google.com/citations?user=YOUR_ID_HERE
 - 설치 첫날부터 바로 쓸 수 있습니다: CiteBar를 설치하기 전의 이정표는 Google Scholar의 연도별 인용 수로 날짜를 추정해 ~로 표시하고, 설치한 날부터는 하루하루 정확하게 기록합니다
 
 **예의 바르고 믿음직하게**
-- 프로필당 요청은 한 번, 요청 간격은 2초
-- 네트워크 오류는 자동으로 재시도하고, Google Scholar의 요청 제한에 걸리면 간격을 점차 늘렸다가(15분에서 최대 4시간) 알아서 재개합니다
+- 프로필당 요청은 한 번, 요청 간격은 몇 초이며 자동 확인은 한 번에 최대 10개
+- 네트워크 오류는 자동으로 재시도하고, Google Scholar의 요청 제한에 걸리면 간격을 점차 늘렸다가(15분에서 최대 4시간) 알아서 재개하며, 네트워크가 바뀌면 바로 다시 시도합니다
 - Refresh Now로 언제든 바로 새로고침할 수 있습니다
 - Sparkle을 통한 자동 업데이트
 
@@ -115,6 +115,7 @@ https://scholar.google.com/citations?user=YOUR_ID_HERE
 
 **macOS다운 사용감**
 - 메뉴 막대에 가볍게 자리 잡고, 라이트 모드와 다크 모드를 지원합니다
+- 취향대로: Mac의 강조 색상이나 다른 네 가지 색, 큰 숫자는 세리프·산세리프·라운드, 메뉴 막대 아이콘은 일곱 가지 중에서 고르거나 내 이미지로 바꿀 수 있습니다
 - Profiles, General, Data, About 탭으로 구성된 네이티브 Settings
 - 로그인 시 자동 실행 지원
 - Apple Silicon과 Intel 모두 지원
@@ -122,6 +123,7 @@ https://scholar.google.com/citations?user=YOUR_ID_HERE
 **켜 두어도 부담 없는 가벼움**
 - 대기 중 CPU 사용량은 거의 0
 - 사용자가 정한 간격에 맞춘 최소한의 네트워크 사용
+- 계속 켜 두고 싶지 않다면 Settings › General에서 'Keep updating after quitting'을 켜세요. 종료한 뒤에도 같은 주기로 확인하고 알림을 보냅니다([작동 방식](../TECHNICAL.md#updating-without-the-menu-bar-app), 영어)
 - 자세한 구현 내용은 [기술 노트](../TECHNICAL.md)(영어)를 참고하세요
 
 ## 개인정보 보호

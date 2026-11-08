@@ -25,7 +25,7 @@ import SwiftUI
 
     /// Show an immediate, visible startup state so users know the app launched.
     func showLaunchingState() {
-        applyStatusIcon(symbolName: "book.circle", accessibilityDescription: "CiteBar - Launching", title: " …")
+        applyStatusIcon(accessibilityDescription: "CiteBar - Launching", title: " …", currentYear: false)
     }
 
     // MARK: - Data
@@ -40,7 +40,8 @@ import SwiftUI
     func updateError(_ error: String) {
         model.errorMessage = error
         if model.entries.allSatisfy({ $0.metrics == nil }) {
-            applyStatusIcon(symbolName: "exclamationmark.triangle", accessibilityDescription: "CiteBar - Error", title: "")
+            applyStatusIcon(accessibilityDescription: "CiteBar - Error", title: "", currentYear: false,
+                            symbol: "exclamationmark.triangle")
         }
     }
 
@@ -50,6 +51,11 @@ import SwiftUI
 
     func updateRefreshingState() {
         model.isRefreshing = settingsManager.settings.isRefreshing
+    }
+
+    func updateRefreshProgress(done: Int, total: Int) {
+        model.refreshDone = done
+        model.refreshTotal = total
     }
 
     func updateRefreshIssue(_ issue: RefreshIssue?, failedProfileIDs: Set<String>) {
@@ -87,9 +93,9 @@ import SwiftUI
     private func updateStatusItemTitle() {
         guard let metrics = model.entries.first?.metrics else {
             applyStatusIcon(
-                symbolName: "book.circle",
                 accessibilityDescription: "CiteBar - No data",
-                title: model.entries.isEmpty ? "" : " --"
+                title: model.entries.isEmpty ? "" : " --",
+                currentYear: false
             )
             return
         }
@@ -98,21 +104,43 @@ import SwiftUI
             && metrics.currentYearCitations != nil
         let value = showCurrentYear ? (metrics.currentYearCitations ?? 0) : metrics.citationCount
         applyStatusIcon(
-            symbolName: showCurrentYear ? "calendar.circle.fill" : "book.circle.fill",
             accessibilityDescription: showCurrentYear ? "CiteBar - Current year citations" : "CiteBar",
-            title: " \(value.decimalString)"
+            title: " \(value.decimalString)",
+            currentYear: showCurrentYear
         )
     }
 
-    private func applyStatusIcon(symbolName: String, accessibilityDescription: String, title: String) {
+    /// `symbol` overrides the chosen icon, for the error state.
+    private func applyStatusIcon(accessibilityDescription: String, title: String, currentYear: Bool, symbol: String? = nil) {
         guard let button = statusItem.button else {
             AppLog.error("Status item button unavailable; cannot update menu bar display")
             return
         }
-        // If the SF Symbol fails to render, keep the title visible so users still see the count.
-        button.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: accessibilityDescription)
-        button.title = title
-        button.imagePosition = title.isEmpty ? .imageOnly : .imageLeading
+        let choice = settingsManager.settings.menuBarIcon
+        var image: NSImage?
+        switch choice {
+        case _ where symbol != nil:
+            image = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: accessibilityDescription) }
+        case .custom:
+            image = CustomMenuBarIcon.image()
+        case .none:
+            image = nil
+        default:
+            image = choice.symbolName(currentYear: currentYear).flatMap {
+                NSImage(systemSymbolName: $0, accessibilityDescription: accessibilityDescription)
+            }
+        }
+        // Something has to stay clickable before there's a number, and a custom picture that has
+        // gone missing falls back to the default symbol.
+        if image == nil, choice != .none || title.isEmpty {
+            image = MenuBarIcon.quote.symbolName().flatMap {
+                NSImage(systemSymbolName: $0, accessibilityDescription: accessibilityDescription)
+            }
+        }
+        image?.accessibilityDescription = accessibilityDescription
+        button.image = image
+        button.title = image == nil ? title.trimmingCharacters(in: .whitespaces) : title
+        button.imagePosition = image == nil ? .noImage : (title.isEmpty ? .imageOnly : .imageLeading)
     }
 
     // MARK: - Panel
@@ -221,6 +249,10 @@ import SwiftUI
             showSupport: { [weak self] in
                 self?.closePanel(restoringFocus: false)
                 self?.appDelegate?.showSupport()
+            },
+            showRefreshStatus: { [weak self] in
+                self?.closePanel(restoringFocus: false)
+                self?.appDelegate?.showSettings(pane: .general)
             },
             quit: { [weak self] in
                 self?.appDelegate?.quitApp()

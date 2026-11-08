@@ -42,11 +42,12 @@ actor StorageManager {
 ### Rate Limiting Strategy
 
 - One request per profile: the first profile page with `pagesize=100` carries totals, the yearly histogram, and per-paper counts (robots.txt allows `/citations?user=`; it disallows `cstart=` pagination)
-- 2-second delays between individual requests, including after failures
+- A random 3 to 8 second wait between individual requests, including after failures
 - User-controlled refresh intervals, daily by default
+- Every 15 minutes CiteBar fetches only profiles older than the refresh interval, stalest first and at most ten at a time, so a long list finishes over the next few checks. Checking by the clock rather than a 24-hour timer keeps sleep and relaunches from skipping or doubling a refresh
 - A request that times out, loses its connection, or gets a 5xx is retried after 2 and then 5 seconds
-- Profiles left unfetched are retried on their own: after 5, 10, 20, 40, then 60 minutes for network problems
-- A 429, a redirect to Google's `/sorry` page, or a CAPTCHA page stops the cycle and pauses automatic refreshes for 15, 30, 60, 120, then 240 minutes; Refresh Now always works
+- Profiles left unfetched are retried on their own: after 5, 10, 20, 40, then 60 minutes for network problems, and right away when the network changes
+- A 429, a redirect to Google's `/sorry` page, or a CAPTCHA page stops the cycle and pauses automatic refreshes for 15, 30, 60, 120, then 240 minutes. Refresh Now always works and never lengthens the pause, and a network change tries again right away
 - Respectful User-Agent headers
 
 ## Google Scholar Integration
@@ -89,6 +90,22 @@ The integration is designed around public profile pages:
 - Settings are built with SwiftUI.
 - Launch-at-login support uses Apple's modern `SMAppService` API.
 - Automatic updates are handled through Sparkle.
+- The panel's accent follows the Mac's own accent color by default. Graphite, Ink, Forest, and Oxblood are each tuned twice, deeper for light mode and lighter for dark, so small text and dots stay legible. The big number can be serif, sans, or rounded.
+- The menu bar icon (`MenuBarIcon`) is one of seven SF Symbols, the number alone, or the user's own picture, saved as `menu-bar-icon.png` (18 pt tall, at 2x) in the data folder. A gray shape on a transparent background is drawn as a template, so it follows a light or dark menu bar; colorful or opaque pictures keep their colors.
+- A refresh reports its progress profile by profile, and each number appears as soon as it arrives.
+
+### Updating Without the Menu Bar App
+
+For people who'd rather not keep CiteBar open ([#44](https://github.com/hichipli/CiteBar/issues/44)), **Keep updating after quitting** in Settings › General registers a launchd job with `SMAppService.agent`. The first time someone quits from the menu, CiteBar offers to turn it on; after that the choice lives only in Settings.
+
+- The job, `LaunchAgents/com.hichipli.citebar.refresh.plist`, is copied to `Contents/Library/LaunchAgents` by `make package` and runs `CiteBar --refresh` every hour. macOS lists it under System Settings › General › Login Items › Allow in the Background.
+- `--refresh` fetches only profiles not fetched within the refresh interval, with the app's pacing, and respects a Google Scholar pause, so most hourly runs exit at once. New citations are notified as usual.
+- The menu bar app and a refresh run share `~/Library/Application Support/CiteBar/.lock` (`InstanceLock`), since they write the same files. A run steps aside while the app is open; an app launched during a run shows its menu bar icon right away and loads the data once the run is done.
+- `--refresh` also works by hand or from cron. It prints one line and exits with 0 when everything due was updated or nothing was due, and 1 when Google Scholar blocked it or couldn't be reached:
+
+```bash
+/Applications/CiteBar.app/Contents/MacOS/CiteBar --refresh
+```
 
 ## Data Flow and Persistence
 

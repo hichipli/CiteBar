@@ -6,6 +6,8 @@ SCHEME = CiteBar
 BUILD_DIR = .build
 SIGN_IDENTITY ?= -
 ENTITLEMENTS_FILE ?= CiteBar.entitlements
+# Runs `CiteBar --refresh` while the app is quit, once turned on in Settings (#44).
+LAUNCH_AGENT = LaunchAgents/com.hichipli.citebar.refresh.plist
 NOTARY_PROFILE ?=
 APPLE_ID ?=
 APPLE_TEAM_ID ?=
@@ -18,7 +20,8 @@ BUILD_VERSION = $(shell grep 'static let build' Sources/CiteBar/AppVersion.swift
 # Build architecture configuration (release artifacts are universal binaries)
 ARCH_NAME = universal
 RELEASE_ARCH_FLAGS = --arch arm64 --arch x86_64
-RELEASE_PRODUCTS_DIR = $(BUILD_DIR)/apple/Products/Release
+# Asked from SwiftPM, since the folder moved (.build/apple → .build/out) in newer toolchains.
+RELEASE_PRODUCTS_DIR = $(shell swift build -c release $(RELEASE_ARCH_FLAGS) --show-bin-path 2>/dev/null)
 RELEASE_BINARY = $(RELEASE_PRODUCTS_DIR)/$(PRODUCT_NAME)
 RELEASE_SPARKLE_FRAMEWORK = $(RELEASE_PRODUCTS_DIR)/Sparkle.framework
 
@@ -80,6 +83,8 @@ install: build
 	# Copy app icon
 	cp Assets.xcassets/AppIcon.appiconset/1024.png "$(PRODUCT_NAME).app/Contents/Resources/AppIcon.png" 2>/dev/null || true
 	cp Assets.xcassets/AppIcon.appiconset/512.png "$(PRODUCT_NAME).app/Contents/Resources/AppIcon@2x.png" 2>/dev/null || true
+	mkdir -p "$(PRODUCT_NAME).app/Contents/Library/LaunchAgents"
+	cp "$(LAUNCH_AGENT)" "$(PRODUCT_NAME).app/Contents/Library/LaunchAgents/"
 	# Fix rpath and signing for Sparkle framework
 	@if [ -d "$(PRODUCT_NAME).app/Contents/Frameworks/Sparkle.framework" ]; then \
 		echo "🔧 Fixing rpath for Sparkle framework..."; \
@@ -110,6 +115,8 @@ install-sudo: build
 	# Copy app icon
 	cp Assets.xcassets/AppIcon.appiconset/1024.png "$(PRODUCT_NAME).app/Contents/Resources/AppIcon.png" 2>/dev/null || true
 	cp Assets.xcassets/AppIcon.appiconset/512.png "$(PRODUCT_NAME).app/Contents/Resources/AppIcon@2x.png" 2>/dev/null || true
+	mkdir -p "$(PRODUCT_NAME).app/Contents/Library/LaunchAgents"
+	cp "$(LAUNCH_AGENT)" "$(PRODUCT_NAME).app/Contents/Library/LaunchAgents/"
 	# Fix rpath and signing for Sparkle framework
 	@if [ -d "$(PRODUCT_NAME).app/Contents/Frameworks/Sparkle.framework" ]; then \
 		echo "🔧 Fixing rpath for Sparkle framework..."; \
@@ -150,6 +157,8 @@ package: build
 	else \
 		echo "⚠️  Warning: 512px icon not found"; \
 	fi
+	@mkdir -p "$(APP_BUNDLE)/Contents/Library/LaunchAgents"
+	@cp "$(LAUNCH_AGENT)" "$(APP_BUNDLE)/Contents/Library/LaunchAgents/" || { echo "❌ Failed to copy launch agent"; exit 1; }
 	@# Fix rpath and signing for Sparkle framework
 	@if [ -d "$(APP_BUNDLE)/Contents/Frameworks/Sparkle.framework" ]; then \
 		echo "🔧 Fixing rpath for Sparkle framework..."; \

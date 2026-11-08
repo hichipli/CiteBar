@@ -96,8 +96,8 @@ Un souci lors de l'installation ? Consultez le [guide d'installation](../DISTRIB
 - Opérationnel dès le premier jour : les paliers antérieurs à l'installation de CiteBar sont datés à partir des totaux annuels de Google Scholar et marqués d'un ~, et chaque jour suivant est enregistré avec précision
 
 **Respectueux et fiable**
-- Une seule requête par profil, espacées de deux secondes
-- En cas de coupure réseau, nouvel essai automatique ; face aux limites de débit de Google Scholar, CiteBar espace progressivement ses tentatives (de 15 minutes à 4 heures) puis reprend de lui-même
+- Une seule requête par profil, espacées de quelques secondes, dix profils au plus par vérification automatique
+- En cas de coupure réseau, nouvel essai automatique ; face aux limites de débit de Google Scholar, CiteBar espace progressivement ses tentatives (de 15 minutes à 4 heures) puis reprend de lui-même, ou aussitôt après un changement de réseau
 - Refresh Now fonctionne à tout moment
 - Mises à jour automatiques via Sparkle
 
@@ -115,6 +115,7 @@ Un souci lors de l'installation ? Consultez le [guide d'installation](../DISTRIB
 
 **Une expérience macOS native**
 - Présence légère dans la barre des menus, modes clair et sombre
+- À votre goût : la couleur d'accentuation du Mac ou l'une de quatre autres, un grand chiffre serif, sans ou arrondi, et sept icônes de barre des menus ou votre propre image
 - Réglages natifs avec les onglets Profiles, General, Data et About
 - Lancement automatique à l'ouverture de session
 - Compatible Apple Silicon et Intel
@@ -122,6 +123,7 @@ Un souci lors de l'installation ? Consultez le [guide d'installation](../DISTRIB
 **Assez léger pour tourner en permanence**
 - Utilisation du processeur quasi nulle au repos
 - Activité réseau minimale, à des intervalles que vous choisissez
+- Vous préférez ne pas la garder ouverte ? Activez « Keep updating after quitting » dans Settings › General : CiteBar continue de vérifier à l'heure prévue et de vous prévenir ([fonctionnement](../TECHNICAL.md#updating-without-the-menu-bar-app), en anglais)
 - Plus de détails d'implémentation dans les [notes techniques](../TECHNICAL.md) (en anglais)
 
 ## Confidentialité

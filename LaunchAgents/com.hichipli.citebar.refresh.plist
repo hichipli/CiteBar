@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  "Keep updating after quitting" in Settings › General registers this with SMAppService (#44).
+  launchd runs `CiteBar --refresh` hourly. Most runs exit at once, because nothing is due or
+  the menu bar app is open; the hourly beat just keeps the daily fetch on time after sleep.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.hichipli.citebar.refresh</string>
+	<key>BundleProgram</key>
+	<string>Contents/MacOS/CiteBar</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>Contents/MacOS/CiteBar</string>
+		<string>--refresh</string>
+	</array>
+	<key>AssociatedBundleIdentifiers</key>
+	<array>
+		<string>com.hichipli.citebar</string>
+	</array>
+	<key>StartInterval</key>
+	<integer>3600</integer>
+	<key>ProcessType</key>
+	<string>Background</string>
+	<key>LowPriorityIO</key>
+	<true/>
+</dict>
+</plist>

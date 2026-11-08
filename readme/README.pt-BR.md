@@ -96,8 +96,8 @@ Problemas na instalação? Veja o [Guia de instalação](../DISTRIBUTION.md) (em
 - Funciona desde o primeiro dia: marcos anteriores à instalação do CiteBar são datados a partir das contagens anuais do Google Scholar e marcados com ~, e cada dia desde então é registrado com exatidão
 
 **Respeitoso e confiável**
-- Uma requisição por perfil, com dois segundos de intervalo entre elas
-- Falhas de rede são repetidas automaticamente; diante dos limites de requisição do Google Scholar, o app espera cada vez mais (de 15 minutos até 4 horas) e retoma sozinho
+- Uma requisição por perfil, com alguns segundos de intervalo e no máximo dez perfis por verificação automática
+- Falhas de rede são repetidas automaticamente; diante dos limites de requisição do Google Scholar, o app espera cada vez mais (de 15 minutos até 4 horas) e retoma sozinho, ou na hora se a rede mudar
 - Refresh Now funciona a qualquer momento
 - Atualizações automáticas via Sparkle
 
@@ -115,6 +115,7 @@ Problemas na instalação? Veja o [Guia de instalação](../DISTRIBUTION.md) (em
 
 **Experiência nativa do macOS**
 - Presença leve na barra de menus, com modo claro e escuro
+- Do seu jeito: a cor de destaque do Mac ou uma de outras quatro, o número grande em serifa, sem serifa ou arredondado, e sete ícones para a barra de menus ou uma imagem sua
 - Ajustes nativos com as abas Profiles, General, Data e About
 - Opção de abrir ao iniciar a sessão
 - Compatível com Apple Silicon e Intel
@@ -122,6 +123,7 @@ Problemas na instalação? Veja o [Guia de instalação](../DISTRIBUTION.md) (em
 **Leve o bastante para ficar sempre aberto**
 - Uso de CPU praticamente nulo quando ocioso
 - Atividade de rede mínima, nos intervalos que você definir
+- Prefere não deixar aberto? Ative “Keep updating after quitting” em Settings › General e o CiteBar continua verificando no horário de sempre e avisando você ([como funciona](../TECHNICAL.md#updating-without-the-menu-bar-app), em inglês)
 - Mais detalhes de implementação nas [Notas técnicas](../TECHNICAL.md) (em inglês)
 
 ## Privacidade

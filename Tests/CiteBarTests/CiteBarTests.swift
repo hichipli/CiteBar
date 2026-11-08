@@ -37,54 +37,25 @@ final class CiteBarTests: XCTestCase {
         XCTAssertNotEqual(profile1, profile3)
     }
 
-    func testShouldRefreshOnStartup_WhenAnyProfileHasNoHistory_ReturnsTrue() {
+    func testDueProfiles() {
         let now = Date()
-        let shouldRefresh = CitationManager.shouldRefreshOnStartup(
-            latestRecordDates: [now.addingTimeInterval(-60), nil],
-            now: now,
-            refreshInterval: 3600
+        func due(_ lastFetched: [(id: String, date: Date?)], limit: Int = 10) -> [String] {
+            CitationManager.dueProfileIDs(lastFetched: lastFetched, now: now, interval: 3600, limit: limit)
+        }
+        XCTAssertEqual(due([("fresh", now.addingTimeInterval(-60)), ("new", nil)]), ["new"])
+        XCTAssertEqual(due([("a", now.addingTimeInterval(-600)), ("b", now.addingTimeInterval(-1800))]), [])
+        XCTAssertEqual(due([]), [])
+        XCTAssertEqual(
+            due([("old", now.addingTimeInterval(-4000)), ("fresh", now.addingTimeInterval(-600)),
+                 ("oldest", now.addingTimeInterval(-9000)), ("new", nil)]),
+            ["new", "oldest", "old"],
+            "Stalest first, fresh ones left out"
         )
-
-        XCTAssertTrue(shouldRefresh)
-    }
-
-    func testShouldRefreshOnStartup_WhenOldestRecordIsWithinInterval_ReturnsFalse() {
-        let now = Date()
-        let shouldRefresh = CitationManager.shouldRefreshOnStartup(
-            latestRecordDates: [
-                now.addingTimeInterval(-600),
-                now.addingTimeInterval(-1200),
-                now.addingTimeInterval(-1800)
-            ],
-            now: now,
-            refreshInterval: 3600
+        XCTAssertEqual(
+            due([("a", now.addingTimeInterval(-5000)), ("b", now.addingTimeInterval(-7000)), ("c", nil)], limit: 2),
+            ["c", "b"],
+            "A long list goes out in batches"
         )
-
-        XCTAssertFalse(shouldRefresh)
-    }
-
-    func testShouldRefreshOnStartup_WhenOldestRecordExceedsInterval_ReturnsTrue() {
-        let now = Date()
-        let shouldRefresh = CitationManager.shouldRefreshOnStartup(
-            latestRecordDates: [
-                now.addingTimeInterval(-600),
-                now.addingTimeInterval(-7200),
-                now.addingTimeInterval(-1800)
-            ],
-            now: now,
-            refreshInterval: 3600
-        )
-
-        XCTAssertTrue(shouldRefresh)
-    }
-
-    func testShouldRefreshOnStartup_WithNoProfiles_ReturnsFalse() {
-        let shouldRefresh = CitationManager.shouldRefreshOnStartup(
-            latestRecordDates: [],
-            refreshInterval: 3600
-        )
-
-        XCTAssertFalse(shouldRefresh)
     }
     
     func testRefreshIntervalSeconds() {
@@ -635,6 +606,72 @@ final class CiteBarTests: XCTestCase {
         XCTAssertEqual(CitationManager.retryDelay(afterFailedCycles: 10, rateLimited: false), 60 * 60)
         XCTAssertEqual(CitationManager.retryDelay(afterFailedCycles: 1, rateLimited: true), 15 * 60)
         XCTAssertEqual(CitationManager.retryDelay(afterFailedCycles: 10, rateLimited: true), 4 * 60 * 60)
+    }
+
+    func testBugReportURLPrefillsTheForm() throws {
+        let url = try XCTUnwrap(AppVersion.bugReportURL(title: "Menu bar icon is delayed"))
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        let values = Dictionary(uniqueKeysWithValues: items.map { ($0.name, $0.value ?? "") })
+        XCTAssertEqual(values["template"], "bug_report.yml")
+        XCTAssertEqual(values["title"], "Menu bar icon is delayed")
+        XCTAssertFalse(values["version", default: ""].isEmpty)
+        XCTAssertFalse(values["macos", default: ""].isEmpty)
+
+        // The query names have to match the form's field ids, or GitHub ignores them.
+        let template = try String(contentsOf: URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("../../.github/ISSUE_TEMPLATE/bug_report.yml"), encoding: .utf8)
+        for id in ["version", "macos"] {
+            XCTAssertTrue(template.contains("id: \(id)\n"), "bug_report.yml has no field \(id)")
+        }
+    }
+
+    func testAppearanceSettingsDefaultAndFallBack() throws {
+        let older = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
+        XCTAssertEqual(older.panelAccent, .system)
+        XCTAssertEqual(older.numberStyle, .serif)
+        XCTAssertEqual(older.menuBarIcon, .quote)
+
+        let unknown = try JSONDecoder().decode(
+            AppSettings.self,
+            from: Data(#"{"panelAccent":"neon","numberStyle":"rounded"}"#.utf8)
+        )
+        XCTAssertEqual(unknown.panelAccent, .system, "An accent from a newer version falls back to the default")
+        XCTAssertEqual(unknown.numberStyle, .rounded)
+    }
+
+    func testCustomMenuBarIconTintsOnlyGrayShapes() throws {
+        func bitmap(_ draw: (NSRect) -> Void) throws -> NSBitmapImageRep {
+            let rep = try XCTUnwrap(NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: 36, pixelsHigh: 36, bitsPerSample: 8, samplesPerPixel: 4,
+                hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+            ))
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+            draw(NSRect(x: 0, y: 0, width: 36, height: 36))
+            NSGraphicsContext.restoreGraphicsState()
+            return rep
+        }
+        let glyph = try bitmap { NSColor.black.setFill(); NSBezierPath(ovalIn: $0.insetBy(dx: 8, dy: 8)).fill() }
+        let photo = try bitmap { NSColor.systemRed.setFill(); $0.fill() }
+        let grayCard = try bitmap { NSColor.gray.setFill(); $0.fill() }
+
+        XCTAssertTrue(CustomMenuBarIcon.shouldTint(glyph), "A gray shape follows the menu bar's look")
+        XCTAssertFalse(CustomMenuBarIcon.shouldTint(photo), "A colorful picture keeps its colors")
+        XCTAssertFalse(CustomMenuBarIcon.shouldTint(grayCard), "An opaque picture would tint into a solid block")
+    }
+
+    func testManualRetryKeepsRunningPause() {
+        let now = Date()
+        let pause = now.addingTimeInterval(600)
+        func kept(until: Date?, userInitiated: Bool = true, rateLimited: Bool = true) -> Date? {
+            CitationManager.pauseToKeep(pausedUntil: until, userInitiated: userInitiated, rateLimited: rateLimited, now: now)
+        }
+        XCTAssertEqual(kept(until: pause), pause, "Clicking Refresh must not lengthen the wait")
+        XCTAssertNil(kept(until: pause, userInitiated: false), "Automatic retries still back off")
+        XCTAssertNil(kept(until: pause, rateLimited: false), "A network failure isn't a Scholar block")
+        XCTAssertNil(kept(until: now.addingTimeInterval(-1)), "An expired pause starts a new one")
+        XCTAssertNil(kept(until: nil))
     }
 
     func testIsTransient() {

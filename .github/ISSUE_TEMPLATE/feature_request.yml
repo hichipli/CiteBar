@@ -1,0 +1,11 @@
+name: Suggest an idea
+description: Something that would make CiteBar more useful to you
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like CiteBar to do?
+      description: A sentence or two is plenty. If you can, say what it would help you with.
+    validations:
+      required: true
